@@ -3,8 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
 
 export function PageHeader({
-  title, description, action,
-}: { title: string; description?: string; action?: ReactNode | string }) {
+  title, description, action, onAction
+}: { title: string; description?: string; action?: ReactNode | string; onAction?: () => void }) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
       <div>
@@ -13,7 +13,7 @@ export function PageHeader({
       </div>
       {action && (
         typeof action === "string"
-          ? <Button><Plus className="h-4 w-4 mr-1" />{action}</Button>
+          ? <Button onClick={onAction}><Plus className="h-4 w-4 mr-1" />{action}</Button>
           : action
       )}
     </div>

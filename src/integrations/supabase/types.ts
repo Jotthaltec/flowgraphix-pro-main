@@ -220,6 +220,17 @@ export type Database = {
           quantity_prices: Json
           extra_services: Json
           template_links: Json
+          // Colunas unificadas da nova migração:
+          commercial_name: string | null
+          type: string | null
+          origin: string | null
+          supplier_name: string | null
+          internal_sku: string | null
+          technical_description: string | null
+          image_url: string | null
+          minimum_quantity: number | null
+          quantity_price_table: Json
+          production_deadline: string | null
         }
         Insert: {
           id?: string
@@ -257,6 +268,17 @@ export type Database = {
           quantity_prices?: Json
           extra_services?: Json
           template_links?: Json
+          // Colunas unificadas da nova migração:
+          commercial_name?: string | null
+          type?: string | null
+          origin?: string | null
+          supplier_name?: string | null
+          internal_sku?: string | null
+          technical_description?: string | null
+          image_url?: string | null
+          minimum_quantity?: number | null
+          quantity_price_table?: Json
+          production_deadline?: string | null
         }
         Update: {
           id?: string
@@ -294,6 +316,17 @@ export type Database = {
           quantity_prices?: Json
           extra_services?: Json
           template_links?: Json
+          // Colunas unificadas da nova migração:
+          commercial_name?: string | null
+          type?: string | null
+          origin?: string | null
+          supplier_name?: string | null
+          internal_sku?: string | null
+          technical_description?: string | null
+          image_url?: string | null
+          minimum_quantity?: number | null
+          quantity_price_table?: Json
+          production_deadline?: string | null
         }
         Relationships: [
           {
@@ -767,6 +800,79 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      quote_items: {
+        Row: {
+          id: string
+          quote_id: string
+          product_service_id: string | null
+          item_name: string
+          description: string | null
+          quantity: number
+          unit_price: number
+          total_price: number
+          cost_price: number
+          margin_percent: number
+          supplier_id: string | null
+          source_origin: string
+          notes: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          quote_id: string
+          product_service_id?: string | null
+          item_name: string
+          description?: string | null
+          quantity?: number
+          unit_price?: number
+          total_price?: number
+          cost_price?: number
+          margin_percent?: number
+          supplier_id?: string | null
+          source_origin?: string
+          notes?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          quote_id?: string
+          product_service_id?: string | null
+          item_name?: string
+          description?: string | null
+          quantity?: number
+          unit_price?: number
+          total_price?: number
+          cost_price?: number
+          margin_percent?: number
+          supplier_id?: string | null
+          source_origin?: string
+          notes?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quote_items_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_items_product_service_id_fkey"
+            columns: ["product_service_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quote_items_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
             referencedColumns: ["id"]
           }
         ]

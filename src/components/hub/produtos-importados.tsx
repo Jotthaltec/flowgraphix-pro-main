@@ -171,8 +171,11 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
       const margin = product.margin_percent || product.target_margin || 50;
       const suggestedPrice = parseFloat((baseCost * (1 + margin / 100)).toFixed(2));
 
-      const updatedFields = {
+       const updatedFields = {
         name: extracted.product_name || product.name,
+        commercial_name: extracted.product_name || product.name,
+        type: 'product',
+        origin: 'supplier_import',
         description: extracted.specifications["Descrição"] || product.description || extracted.product_name || product.name,
         base_cost: baseCost,
         cost_price: baseCost,
@@ -180,12 +183,15 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
         sale_price: suggestedPrice,
         min_price: suggestedPrice * 0.9,
         avg_production_time: extracted.production_deadline !== "5 dias úteis" ? extracted.production_deadline : (product.avg_production_time || "5 dias úteis"),
+        production_deadline: extracted.production_deadline !== "5 dias úteis" ? extracted.production_deadline : (product.avg_production_time || "5 dias úteis"),
         supplier_sku: extracted.supplier_sku || product.supplier_sku,
         main_image_url: extracted.main_image_url || product.main_image_url,
+        image_url: extracted.main_image_url || product.main_image_url,
         gallery_images: extracted.gallery_images.length > 0 ? extracted.gallery_images : product.gallery_images,
         specifications: { ...product.specifications, ...extracted.specifications },
         variations: extracted.variations.length > 0 ? extracted.variations : product.variations,
         quantity_prices: extracted.quantity_prices.length > 0 ? extracted.quantity_prices : product.quantity_prices,
+        quantity_price_table: extracted.quantity_prices.length > 0 ? extracted.quantity_prices : product.quantity_prices,
         extra_services: extracted.extra_services.length > 0 ? extracted.extra_services : product.extra_services,
         template_links: extracted.template_links.length > 0 ? extracted.template_links : product.template_links,
         updated_at: new Date().toISOString()
@@ -224,6 +230,9 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
         .from("products")
         .update({
           name: editName,
+          commercial_name: editName,
+          type: 'product',
+          origin: 'supplier_import',
           description: editDescription,
           supplier_sku: editSku,
           category: editCategory,
@@ -236,11 +245,14 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
           sale_price: suggestedPrice,
           min_price: suggestedPrice * 0.9,
           avg_production_time: editDeadline,
+          production_deadline: editDeadline,
           main_image_url: editMainImageUrl,
+          image_url: editMainImageUrl,
           gallery_images: editGalleryImages,
           specifications: editSpecifications,
           variations: editVariations,
           quantity_prices: editQuantityPrices,
+          quantity_price_table: editQuantityPrices,
           extra_services: editExtraServices,
           template_links: editTemplateLinks,
           updated_at: new Date().toISOString()

@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Search, MoreVertical, Loader2, Edit, Trash2 } from "lucide-react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Search, MoreVertical, Loader2, Edit, Trash2, Copy, FilePlus2, ShoppingCart, Tag, Image as ImageIcon, Package, ArrowUpDown, Store, Truck, Hand, Layers, Globe, Plus } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,43 +9,90 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { MarketplaceVariationsModal } from "@/components/hub/marketplace-variations-modal";
+import { DialogDescription } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/_app/produtos")({ component: ProdutosPage });
 
 const CATEGORIAS = ["DTF Têxtil", "DTF UV", "Sublimação", "Offset", "Comunicação visual", "Design", "Acabamento"];
 
+const FILTER_OPTIONS = [
+  { value: "all", label: "Todos", icon: Layers },
+  { value: "manual", label: "Cadastrados", icon: Hand },
+  { value: "supplier", label: "Importados", icon: Truck },
+  { value: "services", label: "Serviços", icon: Tag },
+  { value: "products", label: "Produtos", icon: Package },
+  { value: "marketplace", label: "Marketplace", icon: Store },
+];
+
 type Product = {
   id: string;
   name: string;
+  commercial_name: string | null;
+  type: string | null;
+  origin: string | null;
+  supplier_id: string | null;
+  supplier_name: string | null;
+  source_url: string | null;
+  supplier_sku: string | null;
+  internal_sku: string | null;
   category: string;
-  unit: string | null;
-  base_cost: number;
-  suggested_price: number;
-  desired_margin: number;
-  active: boolean;
+  subcategory: string | null;
+  description: string | null;
+  technical_description: string | null;
+  image_url: string | null;
+  main_image_url: string | null;
+  cost_price: number | null;
+  base_cost: number | null;
+  margin_percent: number | null;
+  target_margin: number | null;
+  sale_price: number | null;
+  suggested_price: number | null;
+  unit_measure: string | null;
+  status: string | null;
+  marketplace_title: string | null;
+  imported_from_supplier: boolean | null;
 };
+
+const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+
+function getOriginBadge(origin: string | null, type: string | null, imported_from_supplier?: boolean | null) {
+  if (type === "service") return <StatusBadge variant="accent">Serviço</StatusBadge>;
+  if (origin === "supplier_import" || imported_from_supplier) return <StatusBadge variant="info">Fornecedor</StatusBadge>;
+  return <StatusBadge variant="muted">Manual</StatusBadge>;
+}
 
 function ProdutosPage() {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCat, setSelectedCat] = useState("Todos");
+  const [filterType, setFilterType] = useState("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [marketplaceProduct, setMarketplaceProduct] = useState<Product | null>(null);
 
   const [formData, setFormData] = useState({
     name: "",
-    category: "",
+    commercial_name: "",
+    type: "product",
+    internal_sku: "",
+    category: "Comunicação visual",
     unit: "Unidade",
     base_cost: 0,
-    desired_margin: 0,
+    desired_margin: 45,
     suggested_price: 0,
+    technical_description: "",
+    image_url: "",
     active: true
   });
 
@@ -68,7 +115,13 @@ function ProdutosPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
-        .select("id, name, category, unit, base_cost, suggested_price, desired_margin, active")
+        .select(`
+          id, name, commercial_name, type, origin, supplier_id, supplier_name,
+          source_url, supplier_sku, internal_sku, category, subcategory,
+          description, technical_description, image_url, main_image_url, cost_price, base_cost,
+          margin_percent, target_margin, sale_price, suggested_price, unit_measure, status,
+          marketplace_title, imported_from_supplier
+        `)
         .order("created_at", { ascending: false });
       
       if (error) throw error;
@@ -77,21 +130,137 @@ function ProdutosPage() {
     enabled: !!profile,
   });
 
-  const filteredData = dbProducts?.filter(item => {
-    const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCat = selectedCat === "Todos" ? true : item.category === selectedCat;
-    return matchesSearch && matchesCat;
+  // Busca itens do catálogo do hub
+  const { data: hubCatalogItems, isLoading: isHubLoading } = useQuery({
+    queryKey: ["hub_catalog_items"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("supplier_catalog_items")
+        .select(`*, suppliers:supplier_id (name)`)
+        .eq("active", true)
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+    enabled: isImportModalOpen,
   });
+
+  const importFromHubMutation = useMutation({
+    mutationFn: async (item: any) => {
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single();
+      const margin = 50; // Margem padrão
+      const suggested = item.cost_price * (1 + (margin/100));
+
+      const payload = {
+        company_id: profileData?.company_id,
+        name: item.name,
+        commercial_name: item.name,
+        type: "product",
+        origin: "supplier_import",
+        supplier_id: item.supplier_id,
+        supplier_name: item.suppliers?.name,
+        supplier_sku: item.sku,
+        internal_sku: `HUB-${item.sku || Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+        category: item.category || "Geral",
+        unit_measure: "Unidade",
+        base_cost: item.cost_price,
+        cost_price: item.cost_price,
+        target_margin: margin,
+        margin_percent: margin,
+        suggested_price: suggested,
+        sale_price: suggested,
+        min_price: suggested * 0.9,
+        description: item.description,
+        imported_from_supplier: true,
+        status: "Ativo"
+      };
+
+      const { error } = await supabase.from("products").insert([payload]);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      toast.success("Produto importado com sucesso para o seu catálogo!");
+    },
+    onError: (err) => {
+      toast.error("Erro ao importar produto: " + err.message);
+    }
+  });
+
+  const filteredData = useMemo(() => {
+    return dbProducts?.filter(item => {
+      const matchesSearch = 
+        item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        (item.commercial_name && item.commercial_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (item.internal_sku && item.internal_sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (item.supplier_sku && item.supplier_sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (item.supplier_name && item.supplier_name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+      const matchesCat = selectedCat === "Todos" ? true : item.category === selectedCat;
+
+      let matchesFilter = true;
+      if (filterType === "manual") {
+        matchesFilter = (item.origin === "manual" || item.origin === null) && !item.imported_from_supplier;
+      } else if (filterType === "supplier") {
+        matchesFilter = item.origin === "supplier_import" || item.imported_from_supplier === true;
+      } else if (filterType === "services") {
+        matchesFilter = item.type === "service";
+      } else if (filterType === "products") {
+        matchesFilter = item.type === "product" || item.type === null;
+      } else if (filterType === "marketplace") {
+        matchesFilter = !!item.marketplace_title;
+      }
+
+      return matchesSearch && matchesCat && matchesFilter;
+    });
+  }, [dbProducts, searchTerm, selectedCat, filterType]);
+
+  // Contadores para os filtros
+  const filterCounts = useMemo(() => {
+    if (!dbProducts) return {};
+    return {
+      all: dbProducts.length,
+      manual: dbProducts.filter(p => (p.origin === "manual" || p.origin === null) && !p.imported_from_supplier).length,
+      supplier: dbProducts.filter(p => p.origin === "supplier_import" || p.imported_from_supplier === true).length,
+      services: dbProducts.filter(p => p.type === "service").length,
+      products: dbProducts.filter(p => p.type === "product" || p.type === null).length,
+      marketplace: dbProducts.filter(p => !!p.marketplace_title).length,
+    };
+  }, [dbProducts]);
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single();
       
+      const payload = {
+        company_id: profileData?.company_id,
+        name: data.name,
+        commercial_name: data.commercial_name || data.name,
+        type: data.type,
+        origin: editingProduct?.origin || "manual",
+        internal_sku: data.internal_sku || `PRD-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+        category: data.category,
+        unit: data.unit,
+        unit_measure: data.unit,
+        base_cost: data.base_cost,
+        cost_price: data.base_cost,
+        desired_margin: data.desired_margin,
+        margin_percent: data.desired_margin,
+        suggested_price: data.suggested_price,
+        sale_price: data.suggested_price,
+        min_price: data.suggested_price * 0.9,
+        description: data.name,
+        technical_description: data.technical_description || null,
+        image_url: data.image_url || null,
+        main_image_url: data.image_url || null,
+        active: data.active
+      };
+
       if (editingProduct) {
-        const { error } = await supabase.from("products").update(data).eq("id", editingProduct.id);
+        const { error } = await supabase.from("products").update(payload).eq("id", editingProduct.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("products").insert([{ ...data, company_id: profileData?.company_id }]);
+        const { error } = await supabase.from("products").insert([payload]);
         if (error) throw error;
       }
     },
@@ -103,6 +272,46 @@ function ProdutosPage() {
     },
     onError: (err) => {
       toast.error("Erro ao salvar produto: " + err.message);
+    }
+  });
+
+  const duplicateMutation = useMutation({
+    mutationFn: async (product: Product) => {
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single();
+      
+      const payload = {
+        company_id: profileData?.company_id,
+        name: `${product.name} (Cópia)`,
+        commercial_name: product.commercial_name ? `${product.commercial_name} (Cópia)` : `${product.name} (Cópia)`,
+        type: product.type || "product",
+        origin: "manual",
+        internal_sku: `PRD-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+        category: product.category,
+        unit: product.unit || "unidade",
+        unit_measure: product.unit || "Unidade",
+        base_cost: product.cost_price || product.base_cost || 0,
+        cost_price: product.cost_price || product.base_cost || 0,
+        desired_margin: product.margin_percent || product.desired_margin || 45,
+        margin_percent: product.margin_percent || product.desired_margin || 45,
+        suggested_price: product.sale_price || product.suggested_price || 0,
+        sale_price: product.sale_price || product.suggested_price || 0,
+        min_price: (product.sale_price || product.suggested_price || 0) * 0.9,
+        description: product.description,
+        technical_description: product.technical_description,
+        image_url: product.image_url,
+        main_image_url: product.image_url,
+        active: product.active
+      };
+
+      const { error } = await supabase.from("products").insert([payload]);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      toast.success("Produto duplicado com sucesso!");
+    },
+    onError: (err) => {
+      toast.error("Erro ao duplicar produto: " + err.message);
     }
   });
 
@@ -122,44 +331,94 @@ function ProdutosPage() {
 
   function resetForm() {
     setEditingProduct(null);
-    setFormData({ name: "", category: "", unit: "Unidade", base_cost: 0, desired_margin: 0, suggested_price: 0, active: true });
+    setFormData({
+      name: "",
+      commercial_name: "",
+      type: "product",
+      internal_sku: "",
+      category: "Comunicação visual",
+      unit: "Unidade",
+      base_cost: 0,
+      desired_margin: 45,
+      suggested_price: 0,
+      technical_description: "",
+      image_url: "",
+      active: true
+    });
   }
 
   function handleEdit(product: Product) {
     setEditingProduct(product);
     setFormData({
       name: product.name,
+      commercial_name: product.commercial_name || product.name,
+      type: product.type || "product",
+      internal_sku: product.internal_sku || "",
       category: product.category,
       unit: product.unit || "Unidade",
-      base_cost: product.base_cost || 0,
-      desired_margin: product.desired_margin || 0,
-      suggested_price: product.suggested_price || 0,
+      base_cost: product.cost_price || product.base_cost || 0,
+      desired_margin: product.margin_percent || product.desired_margin || 0,
+      suggested_price: product.sale_price || product.suggested_price || 0,
+      technical_description: product.technical_description || "",
+      image_url: product.image_url || "",
       active: product.active
     });
     setIsModalOpen(true);
+  }
+
+  function handleGenerateQuote(product: Product) {
+    navigate({ to: "/orcamentos", search: { selectProductId: product.id } });
   }
 
   return (
     <>
       <PageHeader 
         title="Produtos & Serviços" 
-        description="Catálogo de produtos e cálculo de preços" 
-        action="Novo produto" 
-        onAction={() => { resetForm(); setIsModalOpen(true); }}
+        description="Catálogo unificado — manuais e importados de fornecedores" 
+        action={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
+              <Truck className="h-4 w-4 mr-2" /> Importar do Hub
+            </Button>
+            <Button onClick={() => { resetForm(); setIsModalOpen(true); }}>
+              <Plus className="h-4 w-4 mr-2" /> Novo Produto
+            </Button>
+          </div>
+        }
       />
       
+      {/* Filtros superiores */}
       <Card className="p-4 mb-4">
         <div className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input 
-              placeholder="Buscar produto..." 
+              placeholder="Buscar por nome, SKU ou fornecedor..." 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9" 
             />
           </div>
+          <Select value={filterType} onValueChange={setFilterType}>
+            <SelectTrigger className="w-full md:w-52">
+              <SelectValue placeholder="Filtrar por tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              {FILTER_OPTIONS.map(opt => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  <span className="flex items-center gap-2">
+                    <opt.icon className="h-3.5 w-3.5" />
+                    {opt.label}
+                    {filterCounts[opt.value as keyof typeof filterCounts] !== undefined && (
+                      <span className="text-muted-foreground text-[10px] ml-1">({filterCounts[opt.value as keyof typeof filterCounts]})</span>
+                    )}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+        {/* Chips de categoria */}
         <div className="flex flex-wrap gap-2 mt-4">
           <button 
             onClick={() => setSelectedCat("Todos")}
@@ -179,15 +438,19 @@ function ProdutosPage() {
         </div>
       </Card>
 
+      {/* Tabela */}
       <Card>
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-12"></TableHead>
               <TableHead>Produto</TableHead>
+              <TableHead className="hidden md:table-cell">Origem</TableHead>
+              <TableHead className="hidden lg:table-cell">SKU</TableHead>
               <TableHead>Categoria</TableHead>
               <TableHead className="hidden md:table-cell">Unidade</TableHead>
-              <TableHead>Custo base</TableHead>
-              <TableHead>Preço sugerido</TableHead>
+              <TableHead>Custo</TableHead>
+              <TableHead>Preço Venda</TableHead>
               <TableHead className="hidden lg:table-cell">Margem</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-12"></TableHead>
@@ -196,70 +459,161 @@ function ProdutosPage() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
+                <TableCell colSpan={11} className="text-center py-6 text-muted-foreground">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                 </TableCell>
               </TableRow>
             ) : filteredData?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
-                  Nenhum produto cadastrado.
+                <TableCell colSpan={11} className="text-center py-6 text-muted-foreground">
+                  Nenhum produto encontrado.
                 </TableCell>
               </TableRow>
-            ) : filteredData?.map((p) => (
-              <TableRow key={p.id}>
-                <TableCell className="font-semibold">{p.name}</TableCell>
-                <TableCell><StatusBadge variant="muted">{p.category}</StatusBadge></TableCell>
-                <TableCell className="hidden md:table-cell text-muted-foreground">{p.unit}</TableCell>
-                <TableCell>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(p.base_cost || 0)}</TableCell>
-                <TableCell className="font-bold text-foreground">
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(p.suggested_price || 0)}
-                </TableCell>
-                <TableCell className="hidden lg:table-cell text-success font-semibold">{p.desired_margin || 0}%</TableCell>
-                <TableCell><StatusBadge variant={p.active ? 'success' : 'muted'}>{p.active ? "Ativo" : "Inativo"}</StatusBadge></TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button size="icon" variant="ghost"><MoreVertical className="h-4 w-4" /></Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleEdit(p)}>
-                        <Edit className="h-4 w-4 mr-2" /> Editar
-                      </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        className="text-destructive focus:text-destructive"
-                        onClick={() => {
-                          if(confirm("Tem certeza que deseja remover este produto?")) {
-                            deleteMutation.mutate(p.id);
-                          }
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4 mr-2" /> Remover
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
+            ) : filteredData?.map((p) => {
+              const imgSrc = p.image_url || p.main_image_url;
+              const costVal = p.cost_price || p.base_cost || 0;
+              const saleVal = p.sale_price || p.suggested_price || 0;
+              const marginVal = p.margin_percent || p.target_margin || 0;
+              const skuDisplay = p.internal_sku || p.supplier_sku || "—";
+
+              return (
+                <TableRow key={p.id}>
+                  {/* Imagem */}
+                  <TableCell>
+                    {imgSrc ? (
+                      <img src={imgSrc} alt={p.name} className="h-10 w-10 rounded-md object-cover border" />
+                    ) : (
+                      <div className="h-10 w-10 rounded-md bg-secondary flex items-center justify-center">
+                        <Package className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    )}
+                  </TableCell>
+                  {/* Nome + nome comercial + fornecedor */}
+                  <TableCell>
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-sm leading-tight">{p.name}</span>
+                      {p.commercial_name && p.commercial_name !== p.name && (
+                        <span className="text-xs text-muted-foreground">{p.commercial_name}</span>
+                      )}
+                      {p.supplier_name && (
+                        <span className="text-[10px] text-info flex items-center gap-1 mt-0.5">
+                          <Truck className="h-2.5 w-2.5" /> {p.supplier_name}
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
+                  {/* Origem */}
+                  <TableCell className="hidden md:table-cell">
+                    {getOriginBadge(p.origin, p.type, p.imported_from_supplier)}
+                  </TableCell>
+                  {/* SKU */}
+                  <TableCell className="hidden lg:table-cell">
+                    <span className="font-mono text-xs text-muted-foreground">{skuDisplay}</span>
+                  </TableCell>
+                  {/* Categoria */}
+                  <TableCell><StatusBadge variant="muted">{p.category}</StatusBadge></TableCell>
+                  {/* Unidade */}
+                  <TableCell className="hidden md:table-cell text-muted-foreground">{p.unit_measure || "—"}</TableCell>
+                  {/* Custo */}
+                  <TableCell className="text-sm">{fmt.format(costVal)}</TableCell>
+                  {/* Preço venda */}
+                  <TableCell className="font-bold text-foreground text-sm">{fmt.format(saleVal)}</TableCell>
+                  {/* Margem */}
+                  <TableCell className="hidden lg:table-cell">
+                    <span className={`font-semibold text-sm ${marginVal >= 30 ? "text-success" : marginVal >= 15 ? "text-warning" : "text-destructive"}`}>
+                      {marginVal.toFixed(0)}%
+                    </span>
+                  </TableCell>
+                  {/* Status */}
+                  <TableCell><StatusBadge variant={p.status === 'Ativo' ? 'success' : 'muted'}>{p.status || "Ativo"}</StatusBadge></TableCell>
+                  {/* Ações */}
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="icon" variant="ghost"><MoreVertical className="h-4 w-4" /></Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleEdit(p)}>
+                          <Edit className="h-4 w-4 mr-2" /> Editar
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => duplicateMutation.mutate(p)}>
+                          <Copy className="h-4 w-4 mr-2" /> Duplicar
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => handleGenerateQuote(p)}>
+                          <FilePlus2 className="h-4 w-4 mr-2" /> Gerar Orçamento
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setMarketplaceProduct(p)}>
+                          <Store className="h-4 w-4 mr-2" /> Rascunho Marketplace
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem 
+                          className="text-destructive focus:text-destructive"
+                          onClick={() => {
+                            if(confirm("Tem certeza que deseja remover este produto?")) {
+                              deleteMutation.mutate(p.id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" /> Remover
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </Card>
 
+      {/* Modal de edição/criação */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[520px]">
           <DialogHeader>
             <DialogTitle>{editingProduct ? "Editar Produto" : "Novo Produto"}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label htmlFor="name">Nome do produto *</Label>
-              <Input 
-                id="name" 
-                value={formData.name} 
-                onChange={(e) => setFormData({...formData, name: e.target.value})} 
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2 col-span-2">
+                <Label htmlFor="name">Nome do produto *</Label>
+                <Input 
+                  id="name" 
+                  value={formData.name} 
+                  onChange={(e) => setFormData({...formData, name: e.target.value})} 
+                />
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="commercial_name">Nome Comercial</Label>
+                <Input 
+                  id="commercial_name" 
+                  value={formData.commercial_name} 
+                  onChange={(e) => setFormData({...formData, commercial_name: e.target.value})} 
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="internal_sku">SKU Interno</Label>
+                <Input 
+                  id="internal_sku" 
+                  placeholder="Auto-gerado se vazio"
+                  value={formData.internal_sku} 
+                  onChange={(e) => setFormData({...formData, internal_sku: e.target.value})} 
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="grid gap-2">
+                <Label htmlFor="type">Tipo</Label>
+                <Select value={formData.type} onValueChange={(val) => setFormData({...formData, type: val})}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="product">Produto</SelectItem>
+                    <SelectItem value="service">Serviço</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="category">Categoria</Label>
                 <Select value={formData.category} onValueChange={(val) => setFormData({...formData, category: val})}>
@@ -305,8 +659,26 @@ function ProdutosPage() {
             <div className="p-3 bg-secondary/50 rounded-md">
               <p className="text-sm text-muted-foreground">Preço Sugerido (Calculado)</p>
               <p className="text-xl font-bold mt-1">
-                {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(formData.suggested_price || 0)}
+                {fmt.format(formData.suggested_price || 0)}
               </p>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="technical_description">Descrição Técnica</Label>
+              <Textarea 
+                id="technical_description"
+                rows={3}
+                value={formData.technical_description}
+                onChange={(e) => setFormData({...formData, technical_description: e.target.value})}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="image_url">URL da Imagem</Label>
+              <Input 
+                id="image_url"
+                placeholder="https://..."
+                value={formData.image_url}
+                onChange={(e) => setFormData({...formData, image_url: e.target.value})}
+              />
             </div>
             <div className="flex items-center gap-2">
               <input 
@@ -330,6 +702,97 @@ function ProdutosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Modal de Importação do Hub */}
+      <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>
+        <DialogContent className="sm:max-w-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Truck className="h-5 w-5 text-info" />
+              Importar do Hub de Fornecedores
+            </DialogTitle>
+            <DialogDescription>
+              Selecione produtos do Catálogo Oficial de APIs para trazer direto ao seu CRM.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto mt-2 pr-2">
+            {isHubLoading ? (
+              <div className="h-32 flex items-center justify-center">
+                <Loader2 className="h-6 w-6 text-primary animate-spin" />
+              </div>
+            ) : hubCatalogItems && hubCatalogItems.length > 0 ? (
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Fornecedor</TableHead>
+                      <TableHead>SKU</TableHead>
+                      <TableHead>Produto</TableHead>
+                      <TableHead>Custo</TableHead>
+                      <TableHead className="text-right">Ação</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {hubCatalogItems.map((item: any) => (
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <StatusBadge variant="info">{item.suppliers?.name || "Parceiro"}</StatusBadge>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{item.sku}</TableCell>
+                        <TableCell className="font-semibold text-sm">{item.name}</TableCell>
+                        <TableCell className="text-sm font-medium">
+                          {fmt.format(item.cost_price || 0)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={() => importFromHubMutation.mutate(item)}
+                            disabled={importFromHubMutation.isPending}
+                          >
+                            <Plus className="h-3 w-3 mr-1" /> Importar
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            ) : (
+              <div className="text-center p-8 border border-dashed rounded-lg">
+                <p className="text-muted-foreground mb-4">Nenhum produto encontrado no catálogo oficial.</p>
+                <Button onClick={() => navigate({ to: "/hub-fornecedores" })}>
+                  <Globe className="h-4 w-4 mr-2" />
+                  Ir para Hub e Importar via Link
+                </Button>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="mt-4 pt-4 border-t">
+            <Button variant="ghost" onClick={() => navigate({ to: "/hub-fornecedores" })} className="mr-auto text-muted-foreground">
+              Não achou o que procurava? Importar via Link Web
+            </Button>
+            <Button onClick={() => setIsImportModalOpen(false)}>Concluir</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Marketplace (do Hub) */}
+      {marketplaceProduct && (
+        <MarketplaceVariationsModal
+          isOpen={!!marketplaceProduct}
+          onClose={() => setMarketplaceProduct(null)}
+          productName={marketplaceProduct.name}
+          currentPrice={marketplaceProduct.cost_price || marketplaceProduct.base_cost || 0}
+          specifications={
+            typeof (marketplaceProduct as any).specifications === "object" 
+              ? (marketplaceProduct as any).specifications 
+              : {}
+          }
+          productionDeadline={(marketplaceProduct as any).production_deadline || "5 dias úteis"}
+          productId={marketplaceProduct.id}
+        />
+      )}
     </>
   );
 }

@@ -241,6 +241,75 @@ export function MarketplaceVariationsModal({
     }
   });
 
+  // Mutation para importar as variações diretamente para Produtos & Serviços (CRM)
+  const importToCatalogMutation = useMutation({
+    mutationFn: async () => {
+      if (!user?.id) throw new Error("Usuário não autenticado.");
+      if (!product) throw new Error("Produto não selecionado.");
+
+      const combosToPublish = combos.filter(c =>
+        selectedCombos.size === 0 ? true : selectedCombos.has(c.label)
+      );
+
+      if (combosToPublish.length === 0) throw new Error("Nenhuma variação selecionada para importar.");
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!profile?.company_id) throw new Error("Empresa do usuário não identificada.");
+
+      const insertedProducts = [];
+
+      for (const combo of combosToPublish) {
+        const payload: any = {
+          company_id: profile.company_id,
+          name: `${product.name} - ${combo.label}`,
+          commercial_name: `${product.name} - ${combo.label}`,
+          type: "product",
+          origin: "supplier_import",
+          supplier_id: product.supplier_id,
+          supplier_name: product.supplier_name,
+          supplier_sku: product.supplier_sku,
+          internal_sku: `HUB-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+          category: (product.specifications || {})["Categoria"] || product.category || "Geral",
+          unit_measure: "Unidade",
+          base_cost: combo.price,
+          cost_price: combo.price,
+          target_margin: margin,
+          margin_percent: margin,
+          suggested_price: combo.sellPrice,
+          sale_price: combo.sellPrice,
+          min_price: combo.sellPrice * 0.9,
+          description: `Variação importada do Hub.\nOriginal: ${product.name}\nCombo: ${combo.label}`,
+          imported_from_supplier: true,
+          status: "Ativo"
+        };
+
+        const { data, error } = await supabase
+          .from("products")
+          .insert([payload])
+          .select()
+          .single();
+
+        if (error) throw error;
+        insertedProducts.push(data);
+      }
+
+      return insertedProducts;
+    },
+    onSuccess: (data) => {
+      toast.success(`${data.length} produtos gerados no catálogo (Produtos & Serviços) com sucesso!`);
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      onClose();
+    },
+    onError: (err: any) => {
+      toast.error(`Erro ao gerar produtos: ${err.message}`);
+    }
+  });
+
   if (!product) return null;
 
   const combosToPublish = combos.filter(c =>
@@ -560,6 +629,19 @@ export function MarketplaceVariationsModal({
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={onClose}>
               Cancelar
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={importToCatalogMutation.isPending || combos.length === 0}
+              onClick={() => importToCatalogMutation.mutate()}
+              className="border-primary text-primary hover:bg-primary/10 gap-2"
+            >
+              {importToCatalogMutation.isPending ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> Importando {combosToPublish.length} Itens...</>
+              ) : (
+                <><Package className="h-4 w-4" /> Importar p/ Produtos & Serviços</>
+              )}
             </Button>
             <Button
               size="sm"

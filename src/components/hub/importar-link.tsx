@@ -17,11 +17,24 @@ import {
   Trash2, Plus, Check, Play, Settings2, Image as ImageIcon, Eye, ExternalLink
 } from "lucide-react";
 import { toast } from "sonner";
-import { fetchProductHtml } from "@/integrations/supabase/hub-actions";
+import { fetchProductHtml, extractProductWithAI } from "@/integrations/supabase/hub-actions";
 import { extractProductFromHtml } from "@/lib/supplier-extractor";
 import type { ExtractedProductData } from "@/lib/supplier-extractor";
 import { generateMarketplaceCopy } from "@/lib/marketplace-copy-generator";
 import { MarketplaceVariationsModal } from "@/components/hub/marketplace-variations-modal";
+import { saveImportedProductToCatalog, findSimilarProducts } from "@/lib/products-service";
+import { useNavigate } from "@tanstack/react-router";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { AlertCircle, CheckCircle2 } from "lucide-react";
 
 interface ImportarLinkProps {
   onNavigateToProducts: () => void;
@@ -64,6 +77,15 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
   const [enrichingProductId, setEnrichingProductId] = useState<string | null>(null);
   // Produto salvo no CRM após importação — usado para abrir o modal de marketplace
   const [savedCrmProduct, setSavedCrmProduct] = useState<any>(null);
+
+  const navigate = useNavigate();
+  const [similarProducts, setSimilarProducts] = useState<any[]>([]);
+  const [showSimilarityAlert, setShowSimilarityAlert] = useState(false);
+  const [similarProductToUpdate, setSimilarProductToUpdate] = useState<any>(null);
+  const [openMarketplaceAfterSave, setOpenMarketplaceAfterSave] = useState(false);
+  const [isSuccessSave, setIsSuccessSave] = useState(false);
+  const [savedProductId, setSavedProductId] = useState<string | null>(null);
+  const [usedAIFallback, setUsedAIFallback] = useState(false);
 
   // Busca fornecedores ativos do banco
   const { data: suppliers = [], isLoading: isLoadingSuppliers } = useQuery({
@@ -147,8 +169,33 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
         .eq("company_id", profile.company_id)
         .eq("supplier_domain", domain);
 
-      // 3. Executa extrator
+      // 3. Executa extrator principal (CSS/regex/regras)
       const extracted = extractProductFromHtml(htmlRes.html, rules || []);
+
+      // 3.1 Fallback de IA: se campos essenciais estiverem vazios, chama Claude Haiku
+      const needsAI = !extracted.product_name || extracted.current_price === 0;
+      if (needsAI) {
+        const aiRes = await extractProductWithAI({ data: { html: htmlRes.html, url } });
+        if (aiRes.success && aiRes.data) {
+          const ai = aiRes.data;
+          if (!extracted.product_name && ai.product_name) extracted.product_name = ai.product_name;
+          if (!extracted.supplier_sku && ai.supplier_sku) extracted.supplier_sku = ai.supplier_sku;
+          if (extracted.category === "Impressos" && ai.category) extracted.category = ai.category;
+          if (!extracted.subcategory && ai.subcategory) extracted.subcategory = ai.subcategory;
+          if (extracted.current_price === 0 && ai.current_price > 0) extracted.current_price = ai.current_price;
+          if (extracted.original_price === 0 && ai.original_price > 0) extracted.original_price = ai.original_price;
+          if (extracted.production_deadline === "5 dias úteis" && ai.production_deadline) extracted.production_deadline = ai.production_deadline;
+          if (Object.keys(extracted.specifications).length === 0 && ai.specifications) extracted.specifications = ai.specifications;
+          if (extracted.quantity_prices.length === 0 && Array.isArray(ai.quantity_prices) && ai.quantity_prices.length > 0) {
+            extracted.quantity_prices = ai.quantity_prices.map((qp: any) => ({
+              quantity: Number(qp.quantity),
+              price: Number(qp.price),
+              unitPrice: parseFloat((Number(qp.price) / Number(qp.quantity)).toFixed(4))
+            })).filter((qp: any) => qp.quantity > 0 && qp.price > 0);
+            extracted.quantity_prices.sort((a, b) => a.quantity - b.quantity);
+          }
+        }
+      }
 
       // 4. Salva snapshot da página
       await supabase.from("supplier_page_snapshots").insert({
@@ -185,11 +232,18 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
         extracted,
         domain,
         importId: importRec.id,
-        html: htmlRes.html
+        html: htmlRes.html,
+        usedAI: needsAI
       };
     },
     onSuccess: (res) => {
-      toast.success("Produto analisado com sucesso!");
+      if (res.usedAI) {
+        toast.success("Produto analisado com IA!", { description: "Campos em branco foram preenchidos automaticamente pelo Claude." });
+        setUsedAIFallback(true);
+      } else {
+        toast.success("Produto analisado com sucesso!");
+        setUsedAIFallback(false);
+      }
       setAnalysisResult(res.extracted);
       setEditedProduct(res.extracted);
       setDomain(res.domain);
@@ -203,9 +257,10 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
 
   // Mutação para Salvar no CRM
   const saveCrmMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ duplicateChoice, updateId }: { duplicateChoice: 'create_new' | 'update_existing', updateId?: string }) => {
       if (!user?.id) throw new Error("Usuário não autenticado.");
       if (!editedProduct) return;
+      
       const { data: profile } = await supabase
         .from("profiles")
         .select("company_id")
@@ -214,49 +269,30 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
       
       if (!profile?.company_id) throw new Error("Empresa do usuário não identificada.");
 
-      // Calcula custos e preços sugeridos
-      const baseCost = editedProduct.current_price || 0;
-      const suggestedPrice = parseFloat((baseCost * (1 + margin / 100)).toFixed(2));
+      const productIdToUse = duplicateChoice === 'update_existing' ? updateId : undefined;
+      const supplierName = suppliers.find(s => s.id === selectedSupplierId)?.name || null;
 
-      const productData = {
-        company_id: profile.company_id,
-        name: editedProduct.product_name,
-        category: editedProduct.category,
-        subcategory: editedProduct.subcategory,
-        description: editedProduct.specifications["Descrição"] || editedProduct.product_name,
-        unit_measure: "Unidade",
-        base_cost: baseCost,
-        min_price: suggestedPrice * 0.9,
-        suggested_price: suggestedPrice,
-        target_margin: margin,
-        avg_production_time: editedProduct.production_deadline,
-        notes: `Importado de: ${url}`,
-        status: "Ativo",
-        // Campos de fornecedor
-        supplier_id: selectedSupplierId || null,
-        source_url: url,
-        supplier_sku: editedProduct.supplier_sku,
-        cost_price: baseCost,
-        sale_price: suggestedPrice,
-        margin_percent: margin,
-        main_image_url: editedProduct.main_image_url,
-        gallery_images: editedProduct.gallery_images,
-        specifications: editedProduct.specifications,
-        variations: editedProduct.variations,
-        quantity_prices: editedProduct.quantity_prices,
-        extra_services: editedProduct.extra_services,
-        template_links: editedProduct.template_links,
-        imported_from_supplier: true,
-        import_status: "imported"
-      };
+      // Executa a função unificada de salvamento
+      const savedId = await saveImportedProductToCatalog(
+        {
+          ...editedProduct,
+          id: productIdToUse,
+          supplier_id: selectedSupplierId || null,
+          supplier_name: supplierName,
+          source_url: url
+        },
+        margin,
+        profile.company_id
+      );
 
-      const { data, error } = await supabase
+      // Busca o produto recém-criado/atualizado para manter compatibilidade com o modal de marketplace
+      const { data: updatedProduct, error: getError } = await supabase
         .from("products")
-        .insert(productData)
-        .select()
+        .select("*")
+        .eq("id", savedId)
         .single();
-
-      if (error) throw error;
+      
+      if (getError) throw getError;
 
       // Atualiza o registro em supplier_imports com status de concluído
       if (importId) {
@@ -266,17 +302,115 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
           .eq("id", importId);
       }
 
-      return data;
+      return updatedProduct;
     },
     onSuccess: (data) => {
-      toast.success("Produto cadastrado com sucesso no catálogo do CRM!");
+      toast.success("Produto integrado com Produtos & Serviços e já disponível para orçamento.");
       queryClient.invalidateQueries({ queryKey: ["products"] });
-      onNavigateToProducts();
+      queryClient.invalidateQueries({ queryKey: ["imported-products"] });
+      
+      if (data?.id) {
+        setSavedProductId(data.id);
+      }
+      setIsSuccessSave(true);
+      setShowSimilarityAlert(false);
     },
     onError: (err: any) => {
       toast.error(`Erro ao salvar no CRM: ${err.message}`);
     }
   });
+
+  const handleSaveClick = async () => {
+    if (!user?.id) {
+      toast.error("Usuário não autenticado.");
+      return;
+    }
+    if (!editedProduct) return;
+
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!profile?.company_id) {
+        toast.error("Empresa do usuário não identificada.");
+        return;
+      }
+
+      setOpenMarketplaceAfterSave(false);
+      const similars = await findSimilarProducts(editedProduct.product_name, profile.company_id);
+      if (similars.length > 0) {
+        setSimilarProducts(similars);
+        setSimilarProductToUpdate(similars[0]);
+        setShowSimilarityAlert(true);
+      } else {
+        saveCrmMutation.mutate({ duplicateChoice: 'create_new' });
+      }
+    } catch (e: any) {
+      toast.error("Erro ao validar similaridade: " + e.message);
+    }
+  };
+
+  const handleSaveAndOpenMarketplaceClick = async () => {
+    if (!user?.id) {
+      toast.error("Usuário não autenticado.");
+      return;
+    }
+    if (!editedProduct) return;
+
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!profile?.company_id) {
+        toast.error("Empresa do usuário não identificada.");
+        return;
+      }
+
+      const similars = await findSimilarProducts(editedProduct.product_name, profile.company_id);
+      if (similars.length > 0) {
+        setSimilarProducts(similars);
+        setSimilarProductToUpdate(similars[0]);
+        setOpenMarketplaceAfterSave(true);
+        setShowSimilarityAlert(true);
+      } else {
+        const product = await saveCrmMutation.mutateAsync({ duplicateChoice: 'create_new' });
+        if (product?.id) {
+          setSavedCrmProduct(product);
+        }
+      }
+    } catch (e: any) {
+      toast.error("Erro ao validar similaridade: " + e.message);
+    }
+  };
+
+  const handleConfirmSave = async (choice: 'create_new' | 'update_existing') => {
+    setShowSimilarityAlert(false);
+    const updateId = choice === 'update_existing' ? similarProductToUpdate?.id : undefined;
+    
+    if (openMarketplaceAfterSave) {
+      try {
+        const product = await saveCrmMutation.mutateAsync({
+          duplicateChoice: choice,
+          updateId
+        });
+        if (product?.id) {
+          setSavedCrmProduct(product);
+        }
+      } catch (e) {}
+      setOpenMarketplaceAfterSave(false);
+    } else {
+      saveCrmMutation.mutate({
+        duplicateChoice: choice,
+        updateId
+      });
+    }
+  };
 
   // Geração de rascunhos agora é feita pelo MarketplaceVariationsModal
   // (acessado após salvar o produto no CRM)
@@ -630,7 +764,51 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
 
       {/* PAINEL DE REVIEW & PREVIEW */}
       <Card className="lg:col-span-2">
-        {editedProduct ? (
+        {isSuccessSave ? (
+          <div className="h-full flex flex-col items-center justify-center p-12 text-center space-y-6">
+            <div className="h-16 w-16 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto">
+              <CheckCircle2 className="h-10 w-10 text-emerald-500" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="font-bold text-xl text-foreground">Produto Integrado com Sucesso!</h3>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                Produto integrado com Produtos & Serviços e já disponível para orçamento.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 pt-2 justify-center">
+              <Button
+                onClick={() => {
+                  navigate({
+                    to: "/orcamentos",
+                    search: { selectProductId: savedProductId } as any
+                  });
+                }}
+                className="bg-primary text-primary-foreground flex items-center gap-2"
+              >
+                <Play className="h-4 w-4" /> Criar orçamento com este produto
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => onNavigateToProducts()}
+              >
+                Ir para Produtos & Serviços
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setIsSuccessSave(false);
+                  setSavedProductId(null);
+                  setAnalysisResult(null);
+                  setEditedProduct(null);
+                  setUrl("");
+                  setUsedAIFallback(false);
+                }}
+              >
+                Importar Outro
+              </Button>
+            </div>
+          </div>
+        ) : editedProduct ? (
           <>
             <CardHeader className="flex flex-row items-center justify-between gap-4 border-b pb-4">
               <div>
@@ -639,7 +817,14 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
                   Verifique e edite os dados extraídos antes de aprovar e salvar.
                 </CardDescription>
               </div>
-              <StatusBadge variant="success">Análise Concluída</StatusBadge>
+              <div className="flex items-center gap-2">
+                {usedAIFallback && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-violet-500/10 border border-violet-500/20 px-2.5 py-1 text-xs font-semibold text-violet-500">
+                    <Sparkles className="h-3 w-3" /> Preenchido por IA
+                  </span>
+                )}
+                <StatusBadge variant="success">Análise Concluída</StatusBadge>
+              </div>
             </CardHeader>
             <CardContent className="p-0">
               <Tabs defaultValue="geral" className="w-full">
@@ -1376,7 +1561,7 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
                 <Button 
                   variant="outline" 
                   disabled={saveCrmMutation.isPending}
-                  onClick={() => saveCrmMutation.mutate()}
+                  onClick={handleSaveClick}
                   className="flex items-center gap-2"
                 >
                   {saveCrmMutation.isPending ? (
@@ -1384,12 +1569,12 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
                   ) : (
                     <Save className="h-4 w-4" />
                   )}
-                  Apenas Salvar no CRM
+                  Salvar em Produtos & Serviços
                 </Button>
                 <Button 
                   className="bg-emerald-500 hover:bg-emerald-600 text-white flex items-center gap-2"
                   disabled={saveCrmMutation.isPending}
-                  onClick={handleSaveAndOpenMarketplace}
+                  onClick={handleSaveAndOpenMarketplaceClick}
                 >
                   {saveCrmMutation.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -1418,6 +1603,49 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
         product={savedCrmProduct}
         onNavigateToDrafts={onNavigateToDrafts}
       />
+
+      {/* ALERTA DE DETECÇÃO DE SIMILARIDADE */}
+      <AlertDialog open={showSimilarityAlert} onOpenChange={setShowSimilarityAlert}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-amber-500">
+              <AlertCircle className="h-5 w-5" />
+              Produto Parecido Encontrado
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <p>
+                Encontramos um produto parecido já cadastrado no catálogo:
+              </p>
+              <div className="bg-muted/50 p-3 rounded border text-sm space-y-1">
+                <p><strong>Nome:</strong> {similarProductToUpdate?.name || similarProductToUpdate?.commercial_name}</p>
+                {similarProductToUpdate?.supplier_sku && (
+                  <p><strong>SKU Fornecedor:</strong> {similarProductToUpdate?.supplier_sku}</p>
+                )}
+              </div>
+              <p className="font-semibold text-foreground text-xs">
+                Deseja atualizar o existente ou criar um novo registro?
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex flex-col sm:flex-row gap-2">
+            <AlertDialogCancel onClick={() => setShowSimilarityAlert(false)}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => handleConfirmSave('update_existing')}
+              className="bg-amber-500 hover:bg-amber-600 text-white"
+            >
+              Atualizar Existente
+            </AlertDialogAction>
+            <AlertDialogAction
+              onClick={() => handleConfirmSave('create_new')}
+              className="bg-primary text-primary-foreground"
+            >
+              Criar Novo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
