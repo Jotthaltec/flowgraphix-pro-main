@@ -59,6 +59,7 @@ type Product = {
   status: string | null;
   marketplace_title: string | null;
   imported_from_supplier: boolean | null;
+  active: boolean | null;
 };
 
 const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -125,7 +126,11 @@ function ProdutosPage() {
         .order("created_at", { ascending: false });
       
       if (error) throw error;
-      return data as Product[];
+      
+      return (data || []).map(p => ({
+        ...p,
+        active: p.status === 'Ativo' || p.status === null
+      })) as Product[];
     },
     enabled: !!profile,
   });
@@ -146,7 +151,7 @@ function ProdutosPage() {
 
   const importFromHubMutation = useMutation({
     mutationFn: async (item: any) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single();
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id || "").single();
       if (!profileData?.company_id) throw new Error("Empresa não identificada.");
 
       // Verifica se já foi importado (evita duplicar)
@@ -262,22 +267,23 @@ function ProdutosPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single();
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id || "").single();
+      
+      if (!profileData?.company_id) throw new Error("Empresa não identificada.");
       
       const payload = {
-        company_id: profileData?.company_id,
+        company_id: profileData.company_id,
         name: data.name,
         commercial_name: data.commercial_name || data.name,
         type: data.type,
         origin: editingProduct?.origin || "manual",
         internal_sku: data.internal_sku || `PRD-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
         category: data.category,
-        unit: data.unit,
         unit_measure: data.unit,
         base_cost: data.base_cost,
         cost_price: data.base_cost,
-        desired_margin: data.desired_margin,
         margin_percent: data.desired_margin,
+        target_margin: data.desired_margin,
         suggested_price: data.suggested_price,
         sale_price: data.suggested_price,
         min_price: data.suggested_price * 0.9,
@@ -285,7 +291,7 @@ function ProdutosPage() {
         technical_description: data.technical_description || null,
         image_url: data.image_url || null,
         main_image_url: data.image_url || null,
-        active: data.active
+        status: data.active ? "Ativo" : "Inativo"
       };
 
       if (editingProduct) {
@@ -309,22 +315,23 @@ function ProdutosPage() {
 
   const duplicateMutation = useMutation({
     mutationFn: async (product: Product) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single();
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id || "").single();
+      
+      if (!profileData?.company_id) throw new Error("Empresa não identificada.");
       
       const payload = {
-        company_id: profileData?.company_id,
+        company_id: profileData.company_id,
         name: `${product.name} (Cópia)`,
         commercial_name: product.commercial_name ? `${product.commercial_name} (Cópia)` : `${product.name} (Cópia)`,
         type: product.type || "product",
         origin: "manual",
         internal_sku: `PRD-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
         category: product.category,
-        unit: product.unit || "unidade",
-        unit_measure: product.unit || "Unidade",
+        unit_measure: product.unit_measure || "Unidade",
         base_cost: product.cost_price || product.base_cost || 0,
         cost_price: product.cost_price || product.base_cost || 0,
-        desired_margin: product.margin_percent || product.desired_margin || 45,
-        margin_percent: product.margin_percent || product.desired_margin || 45,
+        margin_percent: product.margin_percent || product.target_margin || 45,
+        target_margin: product.margin_percent || product.target_margin || 45,
         suggested_price: product.sale_price || product.suggested_price || 0,
         sale_price: product.sale_price || product.suggested_price || 0,
         min_price: (product.sale_price || product.suggested_price || 0) * 0.9,
@@ -332,7 +339,7 @@ function ProdutosPage() {
         technical_description: product.technical_description,
         image_url: product.image_url,
         main_image_url: product.image_url,
-        active: product.active
+        status: product.status || "Ativo"
       };
 
       const { error } = await supabase.from("products").insert([payload]);
@@ -387,13 +394,13 @@ function ProdutosPage() {
       type: product.type || "product",
       internal_sku: product.internal_sku || "",
       category: product.category,
-      unit: product.unit || "Unidade",
+      unit: product.unit_measure || "Unidade",
       base_cost: product.cost_price || product.base_cost || 0,
-      desired_margin: product.margin_percent || product.desired_margin || 0,
+      desired_margin: product.margin_percent || product.target_margin || 0,
       suggested_price: product.sale_price || product.suggested_price || 0,
       technical_description: product.technical_description || "",
       image_url: product.image_url || "",
-      active: product.active
+      active: product.status === "Ativo" || product.status === null
     });
     setIsModalOpen(true);
   }

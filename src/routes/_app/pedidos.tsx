@@ -70,49 +70,30 @@ function PedidosPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single();
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id || "").single();
+      
+      if (!profileData?.company_id) throw new Error("Empresa não identificada.");
       
       const { count } = await supabase.from("orders").select("*", { count: "exact", head: true });
       const oNum = `PED-${String((count || 0) + 1).padStart(6, '0')}`;
 
       const { data: newOrder, error: orderError } = await supabase.from("orders").insert([{ 
-        ...data, 
-        company_id: profileData?.company_id,
+        company_id: profileData.company_id,
+        client_id: data.client_id,
         order_number: oNum,
-        financial_status: 'nao_pago',
+        product_desc: `${data.product_name} (x${data.quantity})`,
+        total_value: data.total_value,
+        deadline: data.deadline,
+        priority: data.priority,
+        machine_section: data.machine,
+        payment_status: 'nao_pago',
         production_status: 'pedido_criado'
       }]).select().single();
       
       if (orderError) throw orderError;
-
-      if(newOrder) {
-        // Criar pagamento atrelado
-        await supabase.from("payments").insert([{
-          company_id: newOrder.company_id,
-          order_id: newOrder.id,
-          client_id: newOrder.client_id,
-          total_value: newOrder.total_value,
-          pending_value: newOrder.total_value,
-          status: 'nao_pago',
-          due_date: newOrder.deadline || null
-        }]);
-
-        // Criar tarefa na produção atrelada
-        await supabase.from("production_tasks").insert([{
-          company_id: newOrder.company_id,
-          order_id: newOrder.id,
-          title: `Produção: ${newOrder.product_name}`,
-          sector: newOrder.machine,
-          priority: newOrder.priority,
-          deadline: newOrder.deadline || null,
-          status: 'pendente'
-        }]);
-      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders"] });
-      queryClient.invalidateQueries({ queryKey: ["payments"] });
-      queryClient.invalidateQueries({ queryKey: ["production_tasks"] });
       toast.success("Pedido gerado com sucesso! Produção e Financeiro atualizados.");
       setIsModalOpen(false);
       resetForm();
@@ -207,12 +188,12 @@ function PedidosPage() {
               <TableRow key={p.id}>
                 <TableCell className="font-mono font-semibold text-primary">{p.order_number}</TableCell>
                 <TableCell className="font-medium">{p.clients?.name}</TableCell>
-                <TableCell className="hidden md:table-cell text-muted-foreground">{p.product_name} (x{p.quantity})</TableCell>
+                <TableCell className="hidden md:table-cell text-muted-foreground">{p.product_desc}</TableCell>
                 <TableCell className="font-semibold">
                   {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(p.total_value)}
                 </TableCell>
-                <TableCell><StatusBadge variant={getFinVariant(p.financial_status) as any}>{p.financial_status.replace("_", " ")}</StatusBadge></TableCell>
-                <TableCell><StatusBadge variant={getProdVariant(p.production_status) as any}>{p.production_status.replace("_", " ")}</StatusBadge></TableCell>
+                <TableCell><StatusBadge variant={getFinVariant(p.payment_status || "") as any}>{(p.payment_status || "").replace("_", " ")}</StatusBadge></TableCell>
+                <TableCell><StatusBadge variant={getProdVariant(p.production_status || "") as any}>{(p.production_status || "").replace("_", " ")}</StatusBadge></TableCell>
                 <TableCell className="hidden md:table-cell text-sm">{p.deadline ? new Date(p.deadline).toLocaleDateString('pt-BR') : '-'}</TableCell>
                 <TableCell>
                   <DropdownMenu>

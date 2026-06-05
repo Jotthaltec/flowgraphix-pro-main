@@ -32,7 +32,7 @@ function ProducaoPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select(`id, order_number, product_name, quantity, machine, deadline, priority, production_status, clients(name)`)
+        .select(`id, order_number, product_desc, machine_section, deadline, priority, production_status, clients(name)`)
         .order("priority", { ascending: false })
         .order("deadline", { ascending: true });
       if (error) throw error;
@@ -130,19 +130,19 @@ function ProducaoPage() {
                       >
                         <div className="flex justify-between items-start mb-2">
                           <span className="font-mono text-xs font-bold text-primary">{order.order_number}</span>
-                          {priorityBadge(order.priority, order.deadline)}
+                          {priorityBadge(order.priority || "normal", order.deadline)}
                         </div>
                         <p className="font-semibold text-sm leading-tight">{order.clients?.name}</p>
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{order.product_name}</p>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{order.product_desc}</p>
                         
                         <div className="flex justify-between items-center mt-3 pt-3 border-t text-xs">
-                          <span className="text-muted-foreground">Qtd: <strong className="text-foreground">{order.quantity}</strong></span>
+                          <span className="text-muted-foreground">Prazo:</span>
                           <span className="text-muted-foreground font-medium">
                             {order.deadline ? new Date(order.deadline).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'Sem prazo'}
                           </span>
                         </div>
                         <div className="mt-2 flex gap-1 flex-wrap">
-                          <StatusBadge variant="muted">{order.machine || 'Sem setor'}</StatusBadge>
+                          <StatusBadge variant="muted">{order.machine_section || 'Sem setor'}</StatusBadge>
                         </div>
                       </Card>
                     ))}

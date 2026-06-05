@@ -26,15 +26,15 @@ function RelatoriosPage() {
       let headers: string[] = [];
 
       if (id === "vendas") {
-        const { data: d } = await supabase.from("payments").select("*, orders(order_number), clients(name)");
+        const { data: d } = await supabase.from("orders").select("id, order_number, total_value, payment_status, production_status, created_at, clients(name)");
         data = d || [];
-        headers = ["ID", "Pedido", "Cliente", "Valor Total", "Valor Pago", "Pendente", "Status", "Forma Pagamento", "Vencimento", "Data Pagamento"];
-        data = data.map(r => [r.id, r.orders?.order_number, r.clients?.name, r.total_value, r.paid_value, r.pending_value, r.status, r.payment_method, r.due_date, r.paid_at]);
+        headers = ["ID", "Pedido", "Cliente", "Valor Total", "Status Pagamento", "Status Produção", "Data de Criação"];
+        data = data.map((r: any) => [r.id, r.order_number, r.clients?.name, r.total_value, r.payment_status, r.production_status, r.created_at]);
       } else if (id === "produtos") {
-        const { data: d } = await supabase.from("orders").select("*, clients(name)");
+        const { data: d } = await supabase.from("orders").select("order_number, product_desc, total_value, production_status, deadline, clients(name)");
         data = d || [];
-        headers = ["Pedido", "Cliente", "Produto", "Qtd", "Valor Total", "Custo", "Lucro", "Status Produção", "Prazo"];
-        data = data.map(r => [r.order_number, r.clients?.name, r.product_name, r.quantity, r.total_value, r.cost_value, r.profit_value, r.production_status, r.deadline]);
+        headers = ["Pedido", "Cliente", "Produto", "Valor Total", "Status Produção", "Prazo"];
+        data = data.map((r: any) => [r.order_number, r.clients?.name, r.product_desc, r.total_value, r.production_status, r.deadline]);
       } else if (id === "clientes") {
         const { data: d } = await supabase.from("clients").select("*");
         data = d || [];
@@ -44,7 +44,18 @@ function RelatoriosPage() {
         const { data: d } = await supabase.from("quotes").select("*, clients(name)");
         data = d || [];
         headers = ["Orçamento", "Cliente", "Serviço", "Custo", "Venda", "Desconto", "Final", "Lucro", "Margem %", "Status"];
-        data = data.map(r => [r.quote_number, r.clients?.name, r.service_name, r.cost_value, r.sale_value, r.discount_value, r.final_value, r.estimated_profit, r.margin_percent, r.status]);
+        data = data.map((r: any) => [
+          r.quote_number, 
+          r.clients?.name, 
+          r.service_desc, 
+          r.cost_value, 
+          r.sale_price, 
+          r.discount, 
+          r.final_value, 
+          (r.final_value || 0) - (r.cost_value || 0), 
+          r.margin_percentage, 
+          r.status
+        ]);
       }
 
       if (data.length === 0) {

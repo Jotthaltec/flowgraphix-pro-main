@@ -134,7 +134,7 @@ function OrcamentosPage() {
           main_image_url, description, technical_description, supplier_id,
           production_deadline, imported_from_supplier
         `)
-        .eq("active", true)
+        .eq("status", "Ativo")
         .order("name");
       if (error) throw error;
       return data as CatalogProduct[];
@@ -249,15 +249,17 @@ function OrcamentosPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single();
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id || "").single();
       
+      if (!profileData?.company_id) throw new Error("Empresa não identificada.");
+
       // Gerar número do orçamento
       const { count } = await supabase.from("quotes").select("*", { count: "exact", head: true });
       const qNum = `ORC-${String((count || 0) + 1).padStart(6, '0')}`;
 
       // 1. Insere o orçamento na tabela quotes
       const { data: insertedQuote, error: quoteError } = await supabase.from("quotes").insert([{ 
-        company_id: profileData?.company_id,
+        company_id: profileData.company_id,
         client_id: data.client_id || null,
         quote_number: qNum,
         service_desc: data.service_desc,
@@ -303,7 +305,7 @@ function OrcamentosPage() {
       setIsModalOpen(false);
       resetForm();
       // Limpa o query param
-      navigate({ to: "/orcamentos", search: {} });
+      navigate({ to: "/orcamentos", search: { selectProductId: undefined } });
     },
     onError: (err) => {
       toast.error("Erro ao gerar: " + err.message);
@@ -423,7 +425,7 @@ function OrcamentosPage() {
                 <TableCell className="hidden lg:table-cell text-success font-medium">
                   {fmt.format((q.final_value || 0) - (q.cost_value || 0))}
                 </TableCell>
-                <TableCell><StatusBadge variant={getStatusVariant(q.status) as any}>{q.status?.replace("_", " ")}</StatusBadge></TableCell>
+                <TableCell><StatusBadge variant={getStatusVariant(q.status || "") as any}>{(q.status || "").replace("_", " ")}</StatusBadge></TableCell>
                 <TableCell>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -462,7 +464,7 @@ function OrcamentosPage() {
         setIsModalOpen(open);
         if (!open) {
           resetForm();
-          navigate({ to: "/orcamentos", search: {} });
+          navigate({ to: "/orcamentos", search: { selectProductId: undefined } });
         }
       }}>
         <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">

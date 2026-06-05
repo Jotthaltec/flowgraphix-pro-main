@@ -257,7 +257,7 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
 
   // Mutação para Salvar no CRM
   const saveCrmMutation = useMutation({
-    mutationFn: async ({ duplicateChoice, updateId }: { duplicateChoice: 'create_new' | 'update_existing', updateId?: string }) => {
+    mutationFn: async ({ duplicateChoice = 'create_new', updateId }: { duplicateChoice?: 'create_new' | 'update_existing', updateId?: string } = {}) => {
       if (!user?.id) throw new Error("Usuário não autenticado.");
       if (!editedProduct) return;
       

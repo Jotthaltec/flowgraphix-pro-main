@@ -46,13 +46,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq("id", userId)
       .maybeSingle();
     if (data) {
-      const companies = (data as { companies?: { name?: string | null } | null }).companies;
+      const pData = data as any;
+      const companies = pData.companies;
       setProfile({
-        id: data.id,
-        full_name: data.full_name,
+        id: pData.id,
+        full_name: pData.full_name,
         company_name: companies?.name ?? null,
-        company_id: data.company_id ?? null,
-        role: (data as any).role ?? null,
+        company_id: pData.company_id ?? null,
+        role: pData.role ?? null,
       });
     }
   }

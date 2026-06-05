@@ -58,13 +58,17 @@ function LeadsPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single();
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id || "").single();
       
+      if (!profileData?.company_id) throw new Error("Empresa não identificada.");
+
+      const { source, ...payloadData } = data;
+
       if (editingLead) {
-        const { error } = await supabase.from("leads").update(data).eq("id", editingLead.id);
+        const { error } = await supabase.from("leads").update(payloadData).eq("id", editingLead.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("leads").insert([{ ...data, company_id: profileData?.company_id }]);
+        const { error } = await supabase.from("leads").insert([{ ...payloadData, company_id: profileData.company_id }]);
         if (error) throw error;
       }
     },
@@ -93,11 +97,13 @@ function LeadsPage() {
 
   const convertToClientMutation = useMutation({
     mutationFn: async (lead: any) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single();
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id || "").single();
       
+      if (!profileData?.company_id) throw new Error("Empresa não identificada.");
+
       // Insert into clients
       const { error: clientErr } = await supabase.from("clients").insert([{
-        company_id: profileData?.company_id,
+        company_id: profileData.company_id,
         name: lead.company_name,
         company_name: lead.company_name,
         whatsapp: lead.phone,
@@ -230,10 +236,10 @@ function LeadsPage() {
                 <TableCell className="hidden md:table-cell text-sm"><Phone className="inline h-3 w-3 mr-1 text-muted-foreground" />{l.phone || '-'}</TableCell>
                 <TableCell>
                   <span className="inline-flex items-center gap-1 text-sm">
-                    {l.rating > 0 ? <><Star className="h-3.5 w-3.5 fill-warning text-warning" />{l.rating}</> : '-'}
+                    {(l.rating || 0) > 0 ? <><Star className="h-3.5 w-3.5 fill-warning text-warning" />{l.rating}</> : '-'}
                   </span>
                 </TableCell>
-                <TableCell><StatusBadge variant={getStatusVariant(l.status) as any}>{l.status.replace("_", " ")}</StatusBadge></TableCell>
+                <TableCell><StatusBadge variant={getStatusVariant(l.status || "") as any}>{(l.status || "").replace("_", " ")}</StatusBadge></TableCell>
                 <TableCell>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
