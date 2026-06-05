@@ -106,7 +106,6 @@ export async function saveImportedProductToCatalog(
     sale_price: salePrice,
     suggested_price: suggestedPrice,
     min_price: minPrice,
-    unit: importedProduct.unit || "unidade",
     unit_measure: importedProduct.unit || "Unidade",
     minimum_quantity: importedProduct.minimum_quantity || 1,
     quantity_price_table: quantityPriceTable,
@@ -116,8 +115,10 @@ export async function saveImportedProductToCatalog(
     template_links: templateLinks,
     production_deadline: importedProduct.production_deadline || "5 dias úteis",
     avg_production_time: importedProduct.production_deadline || "5 dias úteis",
-    active: true,
-    imported_from_supplier: true,
+    status: "Ativo",
+    // false: produto importado vai direto para Produtos & Serviços (não fica no staging
+    // "Produtos Importados"). origin "supplier_import" mantém o selo "Fornecedor".
+    imported_from_supplier: false,
     import_status: "imported",
     updated_at: new Date().toISOString()
   };

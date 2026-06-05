@@ -20,6 +20,7 @@ import { fetchProductHtml } from "@/integrations/supabase/hub-actions";
 import { extractProductFromHtml } from "@/lib/supplier-extractor";
 import { toast } from "sonner";
 import { MarketplaceVariationsModal } from "@/components/hub/marketplace-variations-modal";
+import { useNavigate } from "@tanstack/react-router";
 
 interface ProdutosImportadosProps {
   onNavigateToDrafts: () => void;
@@ -28,6 +29,7 @@ interface ProdutosImportadosProps {
 export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSupplier, setSelectedSupplier] = useState("");
 
@@ -1206,6 +1208,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
         onClose={() => setMarketplaceModalProduct(null)}
         product={marketplaceModalProduct}
         onNavigateToDrafts={onNavigateToDrafts}
+        onNavigateToProducts={() => navigate({ to: "/produtos" })}
       />
     </Card>
   );

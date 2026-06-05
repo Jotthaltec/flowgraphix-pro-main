@@ -42,7 +42,7 @@ function ConfigPage() {
       if (!profile?.company_id) return [];
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, full_name, role, created_at")
+        .select("id, full_name, created_at")
         .eq("company_id", profile.company_id);
       if (error) throw error;
       return data;
@@ -52,10 +52,9 @@ function ConfigPage() {
 
   const updateCompanyMutation = useMutation({
     mutationFn: async (name: string) => {
-      const { error } = await supabase.from("companies").update({ name }).eq("id", profile?.company_id);
+      if (!profile?.company_id) throw new Error("Empresa não identificada.");
+      const { error } = await supabase.from("companies").update({ name }).eq("id", profile.company_id);
       if (error) throw error;
-      const { error: profileErr } = await supabase.from("profiles").update({ company_name: name }).eq("id", profile?.id);
-      if (profileErr) throw profileErr;
     },
     onSuccess: () => toast.success("Dados da gráfica atualizados!"),
     onError: (err) => toast.error("Erro ao atualizar: " + err.message)
@@ -131,7 +130,7 @@ function ConfigPage() {
                   ) : team?.map((u) => (
                     <TableRow key={u.id}>
                       <TableCell className="font-medium">{u.full_name || 'Sem nome'}</TableCell>
-                      <TableCell><StatusBadge variant="info">{u.role}</StatusBadge></TableCell>
+                      <TableCell><StatusBadge variant="info">Membro</StatusBadge></TableCell>
                       <TableCell className="text-muted-foreground text-sm">{new Date(u.created_at).toLocaleDateString('pt-BR')}</TableCell>
                     </TableRow>
                   ))}

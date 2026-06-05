@@ -81,6 +81,7 @@ function ProdutosPage() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [marketplaceProduct, setMarketplaceProduct] = useState<Product | null>(null);
+  const [deleteConfirmProduct, setDeleteConfirmProduct] = useState<Product | null>(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -150,8 +151,8 @@ function ProdutosPage() {
   });
 
   const importFromHubMutation = useMutation({
-    mutationFn: async (item: any) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id || "").single();
+    mutationFn: async ({ item, type }: { item: any; type: "product" | "service" }) => {
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
       if (!profileData?.company_id) throw new Error("Empresa não identificada.");
 
       // Verifica se já foi importado (evita duplicar)
@@ -160,7 +161,7 @@ function ProdutosPage() {
         .select("id")
         .eq("company_id", profileData.company_id)
         .eq("supplier_sku", item.supplier_sku)
-        .eq("imported_from_supplier", true)
+        .eq("origin", "supplier_import")
         .maybeSingle();
 
       if (existing?.id) throw new Error("Este produto já foi importado anteriormente.");
@@ -173,7 +174,7 @@ function ProdutosPage() {
         company_id: profileData.company_id,
         name: item.product_name,
         commercial_name: item.product_name,
-        type: "product",
+        type: type,
         origin: "supplier_import",
         supplier_id: item.supplier_id,
         supplier_name: item.suppliers?.name,
@@ -200,7 +201,8 @@ function ProdutosPage() {
         extra_services: item.extra_services || null,
         template_links: item.template_links || null,
         production_deadline: item.production_deadline || null,
-        imported_from_supplier: true,
+        // false: vai direto para Produtos & Serviços. origin "supplier_import" mantém o selo "Fornecedor".
+        imported_from_supplier: false,
         status: "Ativo"
       };
 
@@ -252,6 +254,21 @@ function ProdutosPage() {
     });
   }, [dbProducts, searchTerm, selectedCat, filterType]);
 
+  // Identificadores dos produtos que JÁ existem de fato no catálogo (vindos de fornecedor).
+  // Usamos a tabela real `products` em vez do flag `extraction_status` do supplier_imports,
+  // que pode dessincronizar (ex.: produto excluído mas registro do Hub ainda marcado como "imported").
+  const importedKeys = useMemo(() => {
+    const urls = new Set<string>();
+    const skus = new Set<string>();
+    (dbProducts || []).forEach(p => {
+      if (p.origin === "supplier_import") {
+        if (p.source_url) urls.add(p.source_url);
+        if (p.supplier_sku) skus.add(p.supplier_sku);
+      }
+    });
+    return { urls, skus };
+  }, [dbProducts]);
+
   // Contadores para os filtros
   const filterCounts = useMemo(() => {
     if (!dbProducts) return {};
@@ -267,7 +284,7 @@ function ProdutosPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id || "").single();
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
       
       if (!profileData?.company_id) throw new Error("Empresa não identificada.");
       
@@ -315,7 +332,7 @@ function ProdutosPage() {
 
   const duplicateMutation = useMutation({
     mutationFn: async (product: Product) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id || "").single();
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
       
       if (!profileData?.company_id) throw new Error("Empresa não identificada.");
       
@@ -588,11 +605,7 @@ function ProdutosPage() {
                         <DropdownMenuSeparator />
                         <DropdownMenuItem 
                           className="text-destructive focus:text-destructive"
-                          onClick={() => {
-                            if(confirm("Tem certeza que deseja remover este produto?")) {
-                              deleteMutation.mutate(p.id);
-                            }
-                          }}
+                          onClick={() => setDeleteConfirmProduct(p)}
                         >
                           <Trash2 className="h-4 w-4 mr-2" /> Remover
                         </DropdownMenuItem>
@@ -775,7 +788,11 @@ function ProdutosPage() {
                   </TableHeader>
                   <TableBody>
                     {hubCatalogItems.map((item: any) => {
-                      const isAlreadyImported = item.extraction_status === "imported";
+                      // "Já no catálogo" é decidido pela existência real em `products`,
+                      // não pelo flag extraction_status (que pode estar dessincronizado).
+                      const isAlreadyImported =
+                        (!!item.source_url && importedKeys.urls.has(item.source_url)) ||
+                        (!!item.supplier_sku && importedKeys.skus.has(item.supplier_sku));
                       const cost = Number(item.current_price) || 0;
                       return (
                         <TableRow key={item.id} className={isAlreadyImported ? "opacity-60" : ""}>
@@ -807,19 +824,30 @@ function ProdutosPage() {
                             {isAlreadyImported ? (
                               <span className="text-xs text-muted-foreground">Já no catálogo</span>
                             ) : (
-                              <Button 
-                                size="sm" 
-                                variant="outline" 
-                                onClick={() => importFromHubMutation.mutate(item)}
-                                disabled={importFromHubMutation.isPending}
-                              >
-                                {importFromHubMutation.isPending ? (
-                                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
-                                ) : (
-                                  <Plus className="h-3 w-3 mr-1" />
-                                )}
-                                Importar
-                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    disabled={importFromHubMutation.isPending}
+                                  >
+                                    {importFromHubMutation.isPending ? (
+                                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                    ) : (
+                                      <Plus className="h-3 w-3 mr-1" />
+                                    )}
+                                    Importar...
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => importFromHubMutation.mutate({ item, type: 'product' })}>
+                                    <Package className="h-4 w-4 mr-2" /> Como Produto
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => importFromHubMutation.mutate({ item, type: 'service' })}>
+                                    <Tag className="h-4 w-4 mr-2" /> Como Serviço
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             )}
                           </TableCell>
                         </TableRow>
@@ -845,6 +873,35 @@ function ProdutosPage() {
               Não achou o que procurava? Importar via Link Web
             </Button>
             <Button onClick={() => setIsImportModalOpen(false)}>Concluir</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de confirmação de exclusão */}
+      <Dialog open={!!deleteConfirmProduct} onOpenChange={(open) => !open && setDeleteConfirmProduct(null)}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Confirmar exclusão</DialogTitle>
+          </DialogHeader>
+          <p className="text-muted-foreground text-sm">
+            Tem certeza que deseja remover o produto <strong>{deleteConfirmProduct?.name}</strong>? Esta ação não pode ser desfeita.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteConfirmProduct(null)}>Cancelar</Button>
+            <Button 
+              variant="destructive" 
+              disabled={deleteMutation.isPending}
+              onClick={() => {
+                if (deleteConfirmProduct) {
+                  deleteMutation.mutate(deleteConfirmProduct.id, {
+                    onSuccess: () => setDeleteConfirmProduct(null)
+                  });
+                }
+              }}
+            >
+              {deleteMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Remover
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

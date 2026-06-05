@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Plus, Search, Filter, MoreVertical, Loader2, Edit, Trash2 } from "lucide-react";
+import { Plus, Search, MoreVertical, Loader2, Edit, Trash2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -48,39 +48,52 @@ function ClientesPage() {
     name: "",
     company_name: "",
     whatsapp: "",
-    email: "",
-    status: "novo"
+    email: ""
   });
 
   const { data: clients, isLoading } = useQuery({
-    queryKey: ["clients", statusFilter],
+    queryKey: ["clients"],
     queryFn: async () => {
-      let q = supabase
+      const { data, error } = await supabase
         .from("clients")
-        .select("id, name, company_name, whatsapp, email, status, total_spent, last_purchase_at")
+        .select("id, name, company_name, whatsapp, email, total_spent, last_purchase_at")
         .order("created_at", { ascending: false });
 
-      if (statusFilter !== "all") {
-        q = q.eq("status", statusFilter);
-      }
-
-      const { data, error } = await q;
       if (error) throw error;
-      return data as Client[];
+
+      return (data || []).map((c: any) => {
+        let computedStatus = "novo";
+        const spent = Number(c.total_spent) || 0;
+        if (spent >= 1000) {
+          computedStatus = "vip";
+        } else if (spent > 0) {
+          computedStatus = "recorrente";
+        }
+        return {
+          ...c,
+          status: computedStatus
+        };
+      }) as Client[];
     },
     enabled: !!profile,
   });
 
-  const filteredClients = clients?.filter(c => 
-    c.name.toLowerCase().includes(search.toLowerCase()) || 
-    (c.company_name?.toLowerCase().includes(search.toLowerCase())) ||
-    (c.email?.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filteredClients = clients?.filter(c => {
+    const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase()) || 
+                          (c.company_name?.toLowerCase().includes(search.toLowerCase())) ||
+                          (c.email?.toLowerCase().includes(search.toLowerCase()));
+    
+    const matchesStatus = statusFilter === "all" ? true : c.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
+  });
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single();
-      const companyId = profileData?.company_id;
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
+      
+      if (!profileData?.company_id) throw new Error("Empresa não identificada.");
+      const companyId = profileData.company_id;
 
       if (editingClient) {
         const { error } = await supabase.from("clients").update(data).eq("id", editingClient.id);
@@ -117,7 +130,7 @@ function ClientesPage() {
 
   function resetForm() {
     setEditingClient(null);
-    setFormData({ name: "", company_name: "", whatsapp: "", email: "", status: "novo" });
+    setFormData({ name: "", company_name: "", whatsapp: "", email: "" });
   }
 
   function handleEdit(client: Client) {
@@ -126,8 +139,7 @@ function ClientesPage() {
       name: client.name,
       company_name: client.company_name || "",
       whatsapp: client.whatsapp || "",
-      email: client.email || "",
-      status: client.status
+      email: client.email || ""
     });
     setIsModalOpen(true);
   }
@@ -168,7 +180,6 @@ function ClientesPage() {
               <SelectItem value="vip">VIP</SelectItem>
               <SelectItem value="recorrente">Recorrente</SelectItem>
               <SelectItem value="novo">Novo</SelectItem>
-              <SelectItem value="inativo">Inativo</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -279,23 +290,6 @@ function ClientesPage() {
                 value={formData.email} 
                 onChange={(e) => setFormData({...formData, email: e.target.value})} 
               />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="status">Status</Label>
-              <Select 
-                value={formData.status} 
-                onValueChange={(val) => setFormData({...formData, status: val})}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="novo">Novo</SelectItem>
-                  <SelectItem value="recorrente">Recorrente</SelectItem>
-                  <SelectItem value="vip">VIP</SelectItem>
-                  <SelectItem value="inativo">Inativo</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
           <DialogFooter>

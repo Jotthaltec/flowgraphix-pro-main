@@ -58,7 +58,7 @@ function LeadsPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id || "").single();
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
       
       if (!profileData?.company_id) throw new Error("Empresa não identificada.");
 
@@ -97,7 +97,7 @@ function LeadsPage() {
 
   const convertToClientMutation = useMutation({
     mutationFn: async (lead: any) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id || "").single();
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
       
       if (!profileData?.company_id) throw new Error("Empresa não identificada.");
 
@@ -108,8 +108,7 @@ function LeadsPage() {
         company_name: lead.company_name,
         whatsapp: lead.phone,
         address: lead.address,
-        client_type: 'pessoa_juridica',
-        status: 'novo'
+        client_type: 'pessoa_juridica'
       }]);
       if (clientErr) throw clientErr;
 

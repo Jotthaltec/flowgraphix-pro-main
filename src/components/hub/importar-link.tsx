@@ -543,7 +543,7 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
   // Salva no CRM e depois abre o modal de variações de marketplace
   const handleSaveAndOpenMarketplace = async () => {
     try {
-      const product = await saveCrmMutation.mutateAsync();
+      const product = await saveCrmMutation.mutateAsync({ duplicateChoice: 'create_new' });
       if (product?.id) {
         setSavedCrmProduct(product);
       }
@@ -1602,6 +1602,7 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
         onClose={() => setSavedCrmProduct(null)}
         product={savedCrmProduct}
         onNavigateToDrafts={onNavigateToDrafts}
+        onNavigateToProducts={onNavigateToProducts}
       />
 
       {/* ALERTA DE DETECÇÃO DE SIMILARIDADE */}

@@ -40,16 +40,22 @@ function CustosPage() {
 
   const saveProductMutation = useMutation({
     mutationFn: async () => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single();
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
+      
+      if (!profileData?.company_id) throw new Error("Empresa não identificada.");
+
       const { error } = await supabase.from("products").insert([{
-        company_id: profileData?.company_id,
+        company_id: profileData.company_id,
         name: productName || "Produto Simulado",
         category: "Simulação",
-        unit: "Unidade",
+        unit_measure: "Unidade",
         base_cost: unit,
+        cost_price: unit,
         suggested_price: sugerido,
-        desired_margin: 50, // Default 50%
-        active: true
+        sale_price: sugerido,
+        margin_percent: 50, // Default 50%
+        target_margin: 50,
+        status: "Ativo"
       }]);
       if (error) throw error;
     },

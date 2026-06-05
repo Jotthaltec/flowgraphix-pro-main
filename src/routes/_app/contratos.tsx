@@ -71,16 +71,24 @@ function ContratosPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single();
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
+      
+      if (!profileData?.company_id) throw new Error("Empresa não identificada.");
       
       const { count } = await supabase.from("contracts").select("*", { count: "exact", head: true });
       const cNum = `CTR-${String((count || 0) + 1).padStart(6, '0')}`;
 
       const { error } = await supabase.from("contracts").insert([{ 
-        ...data, 
-        company_id: profileData?.company_id,
+        company_id: profileData.company_id,
+        client_id: data.client_id,
         contract_number: cNum,
-        general_terms: "1. O contratante concorda com as artes enviadas. \n2. Cancelamentos terão multa de 20%.\n3. O prazo inicia após a aprovação da arte final e pagamento da entrada."
+        total_value: data.total_value,
+        down_payment: data.upfront_value,
+        payment_method: data.payment_method,
+        delivery_date: data.delivery_date,
+        status: data.status,
+        notes: data.service_description,
+        approval_terms: "1. O contratante concorda com as artes enviadas. \n2. Cancelamentos terão multa de 20%.\n3. O prazo inicia após a aprovação da arte final e pagamento da entrada."
       }]);
       if (error) throw error;
     },
@@ -187,12 +195,12 @@ function ContratosPage() {
                   <TableRow key={c.id} className="cursor-pointer" onClick={() => setSelectedContract(c)}>
                     <TableCell className="font-mono font-semibold text-primary">{c.contract_number}</TableCell>
                     <TableCell className="font-medium">{c.clients?.name}</TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground">{c.service_description}</TableCell>
+                    <TableCell className="hidden md:table-cell text-muted-foreground">{c.notes}</TableCell>
                     <TableCell className="font-semibold">
                       {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c.total_value)}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">{c.delivery_date}</TableCell>
-                    <TableCell><StatusBadge variant={getStatusVariant(c.status) as any}>{c.status.replace("_", " ")}</StatusBadge></TableCell>
+                    <TableCell><StatusBadge variant={getStatusVariant(c.status || "") as any}>{(c.status || "").replace("_", " ")}</StatusBadge></TableCell>
                     <TableCell>
                       <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); handlePrint(c); }}>
                         <Download className="h-4 w-4" />
@@ -214,11 +222,11 @@ function ContratosPage() {
                     <p className="font-bold text-center text-sm mb-2">CONTRATO DE PRESTAÇÃO DE SERVIÇOS GRÁFICOS</p>
                     <p className="text-muted-foreground"><strong>Contratante:</strong> {selectedContract.clients?.name}</p>
                     <p className="text-muted-foreground"><strong>Documento:</strong> {selectedContract.clients?.document || 'Não informado'}</p>
-                    <p className="text-muted-foreground"><strong>Objeto:</strong> {selectedContract.service_description}</p>
+                    <p className="text-muted-foreground"><strong>Objeto:</strong> {selectedContract.notes}</p>
                     <p className="text-muted-foreground"><strong>Valor Total:</strong> {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedContract.total_value)}</p>
                     <p className="text-muted-foreground"><strong>Data de Entrega:</strong> {selectedContract.delivery_date}</p>
                     <p className="text-muted-foreground pt-2"><strong>Termos:</strong></p>
-                    <p className="text-muted-foreground line-clamp-4">{selectedContract.general_terms}</p>
+                    <p className="text-muted-foreground line-clamp-4">{selectedContract.approval_terms}</p>
                   </div>
                 </>
               ) : (
@@ -298,17 +306,17 @@ function ContratosPage() {
             <p><strong>Endereço:</strong> {selectedContract.clients?.address || 'Não informado'}</p>
 
             <h3 style={{ marginTop: '30px', borderBottom: '1px solid #ccc' }}>2. DO OBJETO</h3>
-            <p>A Contratada se obriga a prestar os seguintes serviços gráficos: <strong>{selectedContract.service_description}</strong>.</p>
+            <p>A Contratada se obriga a prestar os seguintes serviços gráficos: <strong>{selectedContract.notes}</strong>.</p>
 
             <h3 style={{ marginTop: '30px', borderBottom: '1px solid #ccc' }}>3. DO VALOR E FORMA DE PAGAMENTO</h3>
             <p>Pelo serviço descrito, o Contratante pagará o valor total de <strong>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedContract.total_value)}</strong>.</p>
-            <p>Sendo um valor de entrada de <strong>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedContract.upfront_value)}</strong> acordado entre as partes.</p>
+            <p>Sendo um valor de entrada de <strong>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedContract.down_payment || 0)}</strong> acordado entre as partes.</p>
 
             <h3 style={{ marginTop: '30px', borderBottom: '1px solid #ccc' }}>4. DO PRAZO</h3>
             <p>O prazo acordado para entrega é: <strong>{selectedContract.delivery_date || 'A combinar'}</strong>.</p>
 
             <h3 style={{ marginTop: '30px', borderBottom: '1px solid #ccc' }}>5. TERMOS GERAIS</h3>
-            <p style={{ whiteSpace: 'pre-wrap' }}>{selectedContract.general_terms}</p>
+            <p style={{ whiteSpace: 'pre-wrap' }}>{selectedContract.approval_terms}</p>
 
             <div style={{ marginTop: '80px', display: 'flex', justifyContent: 'space-between' }}>
               <div style={{ width: '45%', textAlign: 'center', borderTop: '1px solid black', paddingTop: '10px' }}>

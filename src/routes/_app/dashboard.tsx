@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import {
-  TrendingUp, DollarSign, FileText, Workflow, AlertTriangle, UserPlus, FileSignature, MapPin, Loader2
+  DollarSign, FileText, Workflow, AlertTriangle, UserPlus, FileSignature, MapPin, Loader2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
@@ -27,53 +27,65 @@ function DashboardPage() {
       // Current date info
       const now = new Date();
       const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-      const firstDayOfYear = new Date(now.getFullYear(), 0, 1).toISOString();
 
       // Fetch core tables
       const [
-        { data: payments },
         { data: orders },
         { data: quotes },
         { count: newClientsCount },
         { count: pendingContractsCount },
         { count: leadsCount }
       ] = await Promise.all([
-        supabase.from("payments").select("paid_value, paid_at, status").gte("created_at", firstDayOfYear),
-        supabase.from("orders").select("id, created_at, product_name, quantity, total_value, production_status, deadline, clients(name)").order("created_at", { ascending: false }),
+        supabase.from("orders").select("id, created_at, product_desc, total_value, payment_status, production_status, deadline, clients(name)").order("created_at", { ascending: false }),
         supabase.from("quotes").select("status"),
         supabase.from("clients").select("id", { count: "exact", head: true }).gte("created_at", firstDayOfMonth),
         supabase.from("contracts").select("id", { count: "exact", head: true }).eq("status", "aguardando_assinatura"),
         supabase.from("leads").select("id", { count: "exact", head: true })
       ]);
 
-      // Calculate Cards
+      // Calculate Revenue
       let faturamentoMes = 0;
-      payments?.forEach(p => {
-        if (p.status === 'pago' || p.status === 'entrada_paga') {
-          // Simplification: if created this month, add to revenue
-          faturamentoMes += Number(p.paid_value) || 0;
+      let faturamentoAno = 0;
+
+      orders?.forEach(o => {
+        const val = Number(o.total_value) || 0;
+        const createdDate = new Date(o.created_at);
+
+        // Revenue calculation (100% for paid, 50% for upfront paid)
+        let revenueContribution = 0;
+        if (o.payment_status === 'pago') {
+          revenueContribution = val;
+        } else if (o.payment_status === 'entrada_paga') {
+          revenueContribution = val * 0.5;
+        }
+
+        faturamentoAno += revenueContribution;
+
+        if (createdDate.getMonth() === now.getMonth() && createdDate.getFullYear() === now.getFullYear()) {
+          faturamentoMes += revenueContribution;
         }
       });
 
-      let orcamentosAbertos = quotes?.filter(q => !['aprovado', 'recusado', 'convertido_pedido'].includes(q.status)).length || 0;
+      let orcamentosAbertos = quotes?.filter(q => !['aprovado', 'recusado', 'convertido_pedido'].includes(q.status || '')).length || 0;
       let pedidosProducao = orders?.filter(o => !['entregue', 'cancelado'].includes(o.production_status || '')).length || 0;
       let pedidosAtrasados = orders?.filter(o => o.deadline && new Date(o.deadline) < now && !['entregue'].includes(o.production_status || '')).length || 0;
 
       // Calculate Sales Chart (Monthly)
       const salesByMonth = Array(12).fill(0);
-      payments?.forEach(p => {
-        if (p.paid_at || (p.status === 'pago' || p.status === 'entrada_paga')) {
-          const m = new Date(p.paid_at || new Date()).getMonth();
-          salesByMonth[m] += Number(p.paid_value) || 0;
+      orders?.forEach(o => {
+        if (o.payment_status === 'pago' || o.payment_status === 'entrada_paga') {
+          const m = new Date(o.created_at).getMonth();
+          const val = Number(o.total_value) || 0;
+          salesByMonth[m] += o.payment_status === 'pago' ? val : val * 0.5;
         }
       });
       const monthNames = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-      const salesChart = salesByMonth.map((v, i) => ({ m: monthNames[i], v })).slice(0, now.getMonth() + 1); // Only show up to current month
+      const salesChart = salesByMonth.map((v, i) => ({ m: monthNames[i], v })).slice(0, now.getMonth() + 1);
 
       // Calculate Pie Chart (Production Status)
       const statusCounts: Record<string, number> = {};
       orders?.forEach(o => {
-        const s = o.production_status || 'desconhecido';
+        const s = o.production_status || 'pedido_criado';
         statusCounts[s] = (statusCounts[s] || 0) + 1;
       });
       const statusMap: Record<string, {name: string, color: string}> = {
@@ -96,8 +108,8 @@ function DashboardPage() {
       // Calculate Bar Chart (Products)
       const productCounts: Record<string, number> = {};
       orders?.forEach(o => {
-        const name = o.product_name || 'Diversos';
-        productCounts[name] = (productCounts[name] || 0) + Number(o.quantity || 1);
+        const name = o.product_desc?.split(" (x")[0] || 'Diversos';
+        productCounts[name] = (productCounts[name] || 0) + 1;
       });
       const productsChart = Object.keys(productCounts)
         .map(k => ({ name: k, v: productCounts[k] }))
@@ -108,14 +120,14 @@ function DashboardPage() {
       const activities = orders?.slice(0, 5).map(o => ({
         date: new Date(o.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
         client: o.clients?.name || 'Cliente',
-        action: `Novo pedido de ${o.product_name}`,
-        status: o.production_status?.replace('_', ' '),
+        action: `Novo pedido de ${o.product_desc}`,
+        status: o.production_status?.replace('_', ' ') || 'Criado',
         v: 'info' as const
       })) || [];
 
       return {
         cards: [
-          { title: "Faturamento Anual", value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(faturamentoMes), trend: "Ano atual", icon: DollarSign, color: "text-success" },
+          { title: "Faturamento Anual", value: new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(faturamentoAno), trend: "Ano atual", icon: DollarSign, color: "text-success" },
           { title: "Orçamentos em aberto", value: orcamentosAbertos.toString(), trend: "pendentes", icon: FileText, color: "text-info" },
           { title: "Pedidos na fila", value: pedidosProducao.toString(), trend: "ativos", icon: Workflow, color: "text-accent" },
           { title: "Pedidos atrasados", value: pedidosAtrasados.toString(), trend: "atenção", icon: AlertTriangle, color: "text-destructive" },
@@ -150,7 +162,7 @@ function DashboardPage() {
       />
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        {cards.map((c) => (
+        {cards.slice(0, 4).map((c) => (
           <Card key={c.title} className="overflow-hidden">
             <CardContent className="p-4">
               <div className="flex items-start justify-between">

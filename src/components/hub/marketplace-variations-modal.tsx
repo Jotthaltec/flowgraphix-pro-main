@@ -25,6 +25,8 @@ interface MarketplaceVariationsModalProps {
   onClose: () => void;
   product: any;
   onNavigateToDrafts: () => void;
+  /** Chamado após importar as variações para o catálogo (Produtos & Serviços). Opcional: quando já se está na página de produtos, basta atualizar a lista. */
+  onNavigateToProducts?: () => void;
 }
 
 const PLATFORMS = [
@@ -56,7 +58,8 @@ export function MarketplaceVariationsModal({
   open,
   onClose,
   product,
-  onNavigateToDrafts
+  onNavigateToDrafts,
+  onNavigateToProducts
 }: MarketplaceVariationsModalProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -284,7 +287,9 @@ export function MarketplaceVariationsModal({
           sale_price: combo.sellPrice,
           min_price: combo.sellPrice * 0.9,
           description: `Variação importada do Hub.\nOriginal: ${product.name}\nCombo: ${combo.label}`,
-          imported_from_supplier: true,
+          // false: vai direto para Produtos & Serviços (não fica no staging "Produtos Importados").
+          // origin "supplier_import" mantém o selo "Fornecedor" e a rastreabilidade.
+          imported_from_supplier: false,
           status: "Ativo"
         };
 
@@ -303,7 +308,9 @@ export function MarketplaceVariationsModal({
     onSuccess: (data) => {
       toast.success(`${data.length} produtos gerados no catálogo (Produtos & Serviços) com sucesso!`);
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["imported-products"] });
       onClose();
+      onNavigateToProducts?.();
     },
     onError: (err: any) => {
       toast.error(`Erro ao gerar produtos: ${err.message}`);

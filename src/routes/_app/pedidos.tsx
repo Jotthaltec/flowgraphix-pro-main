@@ -30,7 +30,7 @@ function PedidosPage() {
     product_name: "",
     quantity: 1,
     total_value: 0,
-    deadline: "",
+    deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     priority: "normal",
     machine: "offset",
   });
@@ -70,7 +70,7 @@ function PedidosPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id || "").single();
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
       
       if (!profileData?.company_id) throw new Error("Empresa não identificada.");
       
@@ -106,7 +106,9 @@ function PedidosPage() {
   function resetForm() {
     setFormData({ 
       client_id: "", product_name: "", quantity: 1, 
-      total_value: 0, deadline: "", priority: "normal", machine: "offset"
+      total_value: 0, 
+      deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      priority: "normal", machine: "offset"
     });
   }
 
@@ -276,7 +278,7 @@ function PedidosPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
             <Button 
-              disabled={!formData.client_id || !formData.product_name || saveMutation.isPending} 
+              disabled={!formData.client_id || !formData.product_name || !formData.deadline || saveMutation.isPending} 
               onClick={() => saveMutation.mutate(formData)}
             >
               {saveMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Criar Pedido

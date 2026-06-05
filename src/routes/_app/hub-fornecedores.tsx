@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,6 +17,7 @@ export const Route = createFileRoute("/_app/hub-fornecedores")({
 
 function HubFornecedoresPage() {
   const [activeTab, setActiveTab] = useState("importar");
+  const navigate = useNavigate();
 
   return (
     <div className="flex flex-col space-y-6">
@@ -56,7 +57,7 @@ function HubFornecedoresPage() {
         </div>
 
         <TabsContent value="importar" className="space-y-4 outline-none">
-          <ImportarLink onNavigateToProducts={() => setActiveTab("produtos")} onNavigateToDrafts={() => setActiveTab("rascunhos")} />
+          <ImportarLink onNavigateToProducts={() => navigate({ to: "/produtos" })} onNavigateToDrafts={() => setActiveTab("rascunhos")} />
         </TabsContent>
 
         <TabsContent value="produtos" className="space-y-4 outline-none">
