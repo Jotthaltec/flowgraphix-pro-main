@@ -130,15 +130,14 @@ function ProdutosPage() {
     enabled: !!profile,
   });
 
-  // Busca itens do catálogo do hub
+  // Busca itens do Hub de Fornecedores (supplier_imports)
   const { data: hubCatalogItems, isLoading: isHubLoading } = useQuery({
-    queryKey: ["hub_catalog_items"],
+    queryKey: ["hub_supplier_imports"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("supplier_catalog_items")
+        .from("supplier_imports")
         .select(`*, suppliers:supplier_id (name)`)
-        .eq("active", true)
-        .order("name", { ascending: true });
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
@@ -148,39 +147,72 @@ function ProdutosPage() {
   const importFromHubMutation = useMutation({
     mutationFn: async (item: any) => {
       const { data: profileData } = await supabase.from('profiles').select('company_id').eq('id', (await supabase.auth.getUser()).data.user?.id).single();
-      const margin = 50; // Margem padrão
-      const suggested = item.cost_price * (1 + (margin/100));
+      if (!profileData?.company_id) throw new Error("Empresa não identificada.");
+
+      // Verifica se já foi importado (evita duplicar)
+      const { data: existing } = await supabase
+        .from("products")
+        .select("id")
+        .eq("company_id", profileData.company_id)
+        .eq("supplier_sku", item.supplier_sku)
+        .eq("imported_from_supplier", true)
+        .maybeSingle();
+
+      if (existing?.id) throw new Error("Este produto já foi importado anteriormente.");
+
+      const margin = 50;
+      const cost = Number(item.current_price) || 0;
+      const suggested = parseFloat((cost * (1 + (margin/100))).toFixed(2));
 
       const payload = {
-        company_id: profileData?.company_id,
-        name: item.name,
-        commercial_name: item.name,
+        company_id: profileData.company_id,
+        name: item.product_name,
+        commercial_name: item.product_name,
         type: "product",
         origin: "supplier_import",
         supplier_id: item.supplier_id,
         supplier_name: item.suppliers?.name,
-        supplier_sku: item.sku,
-        internal_sku: `HUB-${item.sku || Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-        category: item.category || "Geral",
+        supplier_sku: item.supplier_sku,
+        source_url: item.source_url,
+        internal_sku: `HUB-${item.supplier_sku || Math.random().toString(36).substring(2, 8).toUpperCase()}`,
+        category: item.category || "Impressos",
+        subcategory: item.subcategory || "Geral",
         unit_measure: "Unidade",
-        base_cost: item.cost_price,
-        cost_price: item.cost_price,
+        base_cost: cost,
+        cost_price: cost,
         target_margin: margin,
         margin_percent: margin,
         suggested_price: suggested,
         sale_price: suggested,
-        min_price: suggested * 0.9,
-        description: item.description,
+        min_price: parseFloat((suggested * 0.9).toFixed(2)),
+        description: item.product_name,
+        main_image_url: item.main_image_url || null,
+        image_url: item.main_image_url || null,
+        gallery_images: item.gallery_images || null,
+        specifications: item.specifications || null,
+        variations: item.variations || null,
+        quantity_prices: item.quantity_prices || null,
+        extra_services: item.extra_services || null,
+        template_links: item.template_links || null,
+        production_deadline: item.production_deadline || null,
         imported_from_supplier: true,
         status: "Ativo"
       };
 
       const { error } = await supabase.from("products").insert([payload]);
       if (error) throw error;
+
+      // Marca o registro de supplier_imports como importado
+      await supabase
+        .from("supplier_imports")
+        .update({ extraction_status: "imported" })
+        .eq("id", item.id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
-      toast.success("Produto importado com sucesso para o seu catálogo!");
+      queryClient.invalidateQueries({ queryKey: ["hub_supplier_imports"] });
+      queryClient.invalidateQueries({ queryKey: ["imported-products"] });
+      toast.success("Produto importado com sucesso para Produtos & Serviços!");
     },
     onError: (err) => {
       toast.error("Erro ao importar produto: " + err.message);
@@ -712,7 +744,7 @@ function ProdutosPage() {
               Importar do Hub de Fornecedores
             </DialogTitle>
             <DialogDescription>
-              Selecione produtos do Catálogo Oficial de APIs para trazer direto ao seu CRM.
+              Selecione produtos capturados pelo Hub para incluí-los em Produtos & Serviços.
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto mt-2 pr-2">
@@ -725,42 +757,75 @@ function ProdutosPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12"></TableHead>
+                      <TableHead>Produto</TableHead>
                       <TableHead>Fornecedor</TableHead>
                       <TableHead>SKU</TableHead>
-                      <TableHead>Produto</TableHead>
                       <TableHead>Custo</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead className="text-right">Ação</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {hubCatalogItems.map((item: any) => (
-                      <TableRow key={item.id}>
-                        <TableCell>
-                          <StatusBadge variant="info">{item.suppliers?.name || "Parceiro"}</StatusBadge>
-                        </TableCell>
-                        <TableCell className="font-mono text-xs">{item.sku}</TableCell>
-                        <TableCell className="font-semibold text-sm">{item.name}</TableCell>
-                        <TableCell className="text-sm font-medium">
-                          {fmt.format(item.cost_price || 0)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            onClick={() => importFromHubMutation.mutate(item)}
-                            disabled={importFromHubMutation.isPending}
-                          >
-                            <Plus className="h-3 w-3 mr-1" /> Importar
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {hubCatalogItems.map((item: any) => {
+                      const isAlreadyImported = item.extraction_status === "imported";
+                      const cost = Number(item.current_price) || 0;
+                      return (
+                        <TableRow key={item.id} className={isAlreadyImported ? "opacity-60" : ""}>
+                          <TableCell>
+                            {item.main_image_url ? (
+                              <img src={item.main_image_url} alt={item.product_name} className="h-9 w-9 rounded-md object-cover border" />
+                            ) : (
+                              <div className="h-9 w-9 rounded-md bg-secondary flex items-center justify-center">
+                                <Package className="h-4 w-4 text-muted-foreground" />
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="font-semibold text-sm max-w-[200px] truncate">{item.product_name}</TableCell>
+                          <TableCell>
+                            <StatusBadge variant="info">{item.suppliers?.name || "Parceiro"}</StatusBadge>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs">{item.supplier_sku || "—"}</TableCell>
+                          <TableCell className="text-sm font-medium">
+                            {fmt.format(cost)}
+                          </TableCell>
+                          <TableCell>
+                            {isAlreadyImported ? (
+                              <StatusBadge variant="success">Importado</StatusBadge>
+                            ) : (
+                              <StatusBadge variant="warning">Pendente</StatusBadge>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {isAlreadyImported ? (
+                              <span className="text-xs text-muted-foreground">Já no catálogo</span>
+                            ) : (
+                              <Button 
+                                size="sm" 
+                                variant="outline" 
+                                onClick={() => importFromHubMutation.mutate(item)}
+                                disabled={importFromHubMutation.isPending}
+                              >
+                                {importFromHubMutation.isPending ? (
+                                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                ) : (
+                                  <Plus className="h-3 w-3 mr-1" />
+                                )}
+                                Importar
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
             ) : (
               <div className="text-center p-8 border border-dashed rounded-lg">
-                <p className="text-muted-foreground mb-4">Nenhum produto encontrado no catálogo oficial.</p>
+                <Package className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
+                <p className="text-muted-foreground mb-2 font-semibold">Nenhum produto capturado ainda.</p>
+                <p className="text-xs text-muted-foreground mb-4">Use o Hub de Fornecedores para importar produtos via link.</p>
                 <Button onClick={() => navigate({ to: "/hub-fornecedores" })}>
                   <Globe className="h-4 w-4 mr-2" />
                   Ir para Hub e Importar via Link
@@ -780,17 +845,10 @@ function ProdutosPage() {
       {/* Modal de Marketplace (do Hub) */}
       {marketplaceProduct && (
         <MarketplaceVariationsModal
-          isOpen={!!marketplaceProduct}
+          open={!!marketplaceProduct}
           onClose={() => setMarketplaceProduct(null)}
-          productName={marketplaceProduct.name}
-          currentPrice={marketplaceProduct.cost_price || marketplaceProduct.base_cost || 0}
-          specifications={
-            typeof (marketplaceProduct as any).specifications === "object" 
-              ? (marketplaceProduct as any).specifications 
-              : {}
-          }
-          productionDeadline={(marketplaceProduct as any).production_deadline || "5 dias úteis"}
-          productId={marketplaceProduct.id}
+          product={marketplaceProduct}
+          onNavigateToDrafts={() => navigate({ to: "/hub-fornecedores" })}
         />
       )}
     </>
