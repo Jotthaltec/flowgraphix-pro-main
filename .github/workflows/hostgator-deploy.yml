@@ -1,0 +1,37 @@
+name: Deploy to HostGator via FTP
+
+on:
+  push:
+    branches:
+      - main # ou master, dependendo da sua branch principal
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Instalar dependências
+        run: bun install
+
+      - name: Build do projeto
+        run: bun run build
+
+      - name: Deploy via FTP (HostGator)
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          # Mude para "dist/client" se você for servir os arquivos estáticos,
+          # ou "dist" se o HostGator for configurado para rodar o app Node.js (SSR)
+          local-dir: ./dist/
+          # Opcional: a pasta remota do HostGator (ex: public_html/)
+          server-dir: /public_html/
