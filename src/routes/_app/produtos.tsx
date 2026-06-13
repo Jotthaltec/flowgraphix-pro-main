@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Search, MoreVertical, Loader2, Edit, Trash2, Copy, FilePlus2, ShoppingCart, Tag, Image as ImageIcon, Package, ArrowUpDown, Store, Truck, Hand, Layers, Globe, Plus } from "lucide-react";
+import { Search, MoreVertical, Loader2, Edit, Trash2, Copy, FilePlus2, Tag, Package, Store, Truck, Hand, Layers, Globe, Plus } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,15 +9,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { MarketplaceVariationsModal } from "@/components/hub/marketplace-variations-modal";
 import { DialogDescription } from "@/components/ui/dialog";
+import { ProductEditor } from "@/components/products/product-editor";
 
 export const Route = createFileRoute("/_app/produtos")({ component: ProdutosPage });
 
@@ -83,55 +82,27 @@ function ProdutosPage() {
   const [marketplaceProduct, setMarketplaceProduct] = useState<Product | null>(null);
   const [deleteConfirmProduct, setDeleteConfirmProduct] = useState<Product | null>(null);
 
-  const [formData, setFormData] = useState({
-    name: "",
-    commercial_name: "",
-    type: "product",
-    internal_sku: "",
-    category: "Comunicação visual",
-    unit: "Unidade",
-    base_cost: 0,
-    desired_margin: 45,
-    suggested_price: 0,
-    technical_description: "",
-    image_url: "",
-    active: true
-  });
-
-  // Calculate suggested price dynamically when cost or margin changes
-  useEffect(() => {
-    const cost = Number(formData.base_cost) || 0;
-    const margin = Number(formData.desired_margin) || 0;
-    if (margin >= 100) return; // Prevent division by zero or negative prices
-    
-    if (cost > 0) {
-      const calculated = cost / (1 - (margin / 100));
-      setFormData(prev => ({ ...prev, suggested_price: Number(calculated.toFixed(2)) }));
-    } else {
-      setFormData(prev => ({ ...prev, suggested_price: 0 }));
-    }
-  }, [formData.base_cost, formData.desired_margin]);
-
-  const { data: dbProducts, isLoading } = useQuery({
+  const { data: dbProducts, isLoading, isError, error } = useQuery({
     queryKey: ["products"],
     queryFn: async () => {
+      console.log("Iniciando busca de produtos no Supabase...");
       const { data, error } = await supabase
         .from("products")
-        .select(`
-          id, name, commercial_name, type, origin, supplier_id, supplier_name,
-          source_url, supplier_sku, internal_sku, category, subcategory,
-          description, technical_description, image_url, main_image_url, cost_price, base_cost,
-          margin_percent, target_margin, sale_price, suggested_price, unit_measure, status,
-          marketplace_title, imported_from_supplier
-        `)
+        .select("*")
         .order("created_at", { ascending: false });
       
-      if (error) throw error;
+      if (error) {
+        console.error("Erro na busca de produtos no Supabase:", error);
+        throw error;
+      }
       
-      return (data || []).map(p => ({
+      console.log("Produtos recebidos do Supabase:", data);
+      const mapped = (data || []).map(p => ({
         ...p,
         active: p.status === 'Ativo' || p.status === null
       })) as Product[];
+      console.log("Produtos mapeados:", mapped);
+      return mapped;
     },
     enabled: !!profile,
   });
@@ -227,9 +198,11 @@ function ProdutosPage() {
   });
 
   const filteredData = useMemo(() => {
-    return dbProducts?.filter(item => {
+    console.log("Calculando filteredData. dbProducts:", dbProducts, "searchTerm:", searchTerm, "selectedCat:", selectedCat, "filterType:", filterType);
+    const result = dbProducts?.filter(item => {
+      const name = item.name || "";
       const matchesSearch = 
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        name.toLowerCase().includes(searchTerm.toLowerCase()) || 
         (item.commercial_name && item.commercial_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (item.internal_sku && item.internal_sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (item.supplier_sku && item.supplier_sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
@@ -250,8 +223,12 @@ function ProdutosPage() {
         matchesFilter = !!item.marketplace_title;
       }
 
-      return matchesSearch && matchesCat && matchesFilter;
+      const match = matchesSearch && matchesCat && matchesFilter;
+      console.log(`Produto "${item.name}": matchesSearch=${matchesSearch}, matchesCat=${matchesCat}, matchesFilter=${matchesFilter} -> match=${match}`);
+      return match;
     });
+    console.log("Resultado final filteredData:", result);
+    return result;
   }, [dbProducts, searchTerm, selectedCat, filterType]);
 
   // Identificadores dos produtos que JÁ existem de fato no catálogo (vindos de fornecedor).
@@ -282,52 +259,18 @@ function ProdutosPage() {
     };
   }, [dbProducts]);
 
-  const saveMutation = useMutation({
-    mutationFn: async (data: typeof formData) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
-      
-      if (!profileData?.company_id) throw new Error("Empresa não identificada.");
-      
-      const payload = {
-        company_id: profileData.company_id,
-        name: data.name,
-        commercial_name: data.commercial_name || data.name,
-        type: data.type,
-        origin: editingProduct?.origin || "manual",
-        internal_sku: data.internal_sku || `PRD-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-        category: data.category,
-        unit_measure: data.unit,
-        base_cost: data.base_cost,
-        cost_price: data.base_cost,
-        margin_percent: data.desired_margin,
-        target_margin: data.desired_margin,
-        suggested_price: data.suggested_price,
-        sale_price: data.suggested_price,
-        min_price: data.suggested_price * 0.9,
-        description: data.name,
-        technical_description: data.technical_description || null,
-        image_url: data.image_url || null,
-        main_image_url: data.image_url || null,
-        status: data.active ? "Ativo" : "Inativo"
-      };
-
-      if (editingProduct) {
-        const { error } = await supabase.from("products").update(payload).eq("id", editingProduct.id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("products").insert([payload]);
-        if (error) throw error;
-      }
+  // Lista de fornecedores ativos para o vínculo no editor
+  const { data: suppliers = [] } = useQuery({
+    queryKey: ["suppliers"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("suppliers")
+        .select("id, name")
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return data as { id: string; name: string }[];
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["products"] });
-      toast.success(editingProduct ? "Produto atualizado!" : "Produto criado!");
-      setIsModalOpen(false);
-      resetForm();
-    },
-    onError: (err) => {
-      toast.error("Erro ao salvar produto: " + err.message);
-    }
+    enabled: !!profile,
   });
 
   const duplicateMutation = useMutation({
@@ -385,40 +328,13 @@ function ProdutosPage() {
     }
   });
 
-  function resetForm() {
-    setEditingProduct(null);
-    setFormData({
-      name: "",
-      commercial_name: "",
-      type: "product",
-      internal_sku: "",
-      category: "Comunicação visual",
-      unit: "Unidade",
-      base_cost: 0,
-      desired_margin: 45,
-      suggested_price: 0,
-      technical_description: "",
-      image_url: "",
-      active: true
-    });
-  }
-
   function handleEdit(product: Product) {
     setEditingProduct(product);
-    setFormData({
-      name: product.name,
-      commercial_name: product.commercial_name || product.name,
-      type: product.type || "product",
-      internal_sku: product.internal_sku || "",
-      category: product.category,
-      unit: product.unit_measure || "Unidade",
-      base_cost: product.cost_price || product.base_cost || 0,
-      desired_margin: product.margin_percent || product.target_margin || 0,
-      suggested_price: product.sale_price || product.suggested_price || 0,
-      technical_description: product.technical_description || "",
-      image_url: product.image_url || "",
-      active: product.status === "Ativo" || product.status === null
-    });
+    setIsModalOpen(true);
+  }
+
+  function handleNew() {
+    setEditingProduct(null);
     setIsModalOpen(true);
   }
 
@@ -436,7 +352,7 @@ function ProdutosPage() {
             <Button variant="outline" onClick={() => setIsImportModalOpen(true)}>
               <Truck className="h-4 w-4 mr-2" /> Importar do Hub
             </Button>
-            <Button onClick={() => { resetForm(); setIsModalOpen(true); }}>
+            <Button onClick={handleNew}>
               <Plus className="h-4 w-4 mr-2" /> Novo Produto
             </Button>
           </div>
@@ -519,6 +435,12 @@ function ProdutosPage() {
                   <Loader2 className="h-6 w-6 animate-spin mx-auto" />
                 </TableCell>
               </TableRow>
+            ) : isError ? (
+              <TableRow>
+                <TableCell colSpan={11} className="text-center py-6 text-destructive font-semibold">
+                  Erro ao carregar produtos: {error instanceof Error ? error.message : String(error)}
+                </TableCell>
+              </TableRow>
             ) : filteredData?.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={11} className="text-center py-6 text-muted-foreground">
@@ -526,234 +448,135 @@ function ProdutosPage() {
                 </TableCell>
               </TableRow>
             ) : filteredData?.map((p) => {
-              const imgSrc = p.image_url || p.main_image_url;
-              const costVal = p.cost_price || p.base_cost || 0;
-              const saleVal = p.sale_price || p.suggested_price || 0;
-              const marginVal = p.margin_percent || p.target_margin || 0;
-              const skuDisplay = p.internal_sku || p.supplier_sku || "—";
+              try {
+                const imgSrc = p.image_url || p.main_image_url;
+                const costVal = Number(p.cost_price || p.base_cost || 0);
+                const saleVal = Number(p.sale_price || p.suggested_price || 0);
+                const marginVal = Number(p.margin_percent || p.target_margin || 0);
+                const skuDisplay = p.internal_sku || p.supplier_sku || "—";
+                const isMarginValid = !isNaN(marginVal);
 
-              return (
-                <TableRow key={p.id}>
-                  {/* Imagem */}
-                  <TableCell>
-                    {imgSrc ? (
-                      <img src={imgSrc} alt={p.name} className="h-10 w-10 rounded-md object-cover border" />
-                    ) : (
-                      <div className="h-10 w-10 rounded-md bg-secondary flex items-center justify-center">
-                        <Package className="h-4 w-4 text-muted-foreground" />
+                let formattedCost = "R$ 0,00";
+                try {
+                  formattedCost = fmt.format(costVal);
+                } catch (e) {
+                  console.error("Erro ao formatar custo:", e);
+                }
+
+                let formattedSale = "R$ 0,00";
+                try {
+                  formattedSale = fmt.format(saleVal);
+                } catch (e) {
+                  console.error("Erro ao formatar preço de venda:", e);
+                }
+
+                return (
+                  <TableRow key={p.id}>
+                    {/* Imagem */}
+                    <TableCell>
+                      {imgSrc ? (
+                        <img src={imgSrc} alt={p.name || "Sem nome"} className="h-10 w-10 rounded-md object-cover border" />
+                      ) : (
+                        <div className="h-10 w-10 rounded-md bg-secondary flex items-center justify-center">
+                          <Package className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      )}
+                    </TableCell>
+                    {/* Nome + nome comercial + fornecedor */}
+                    <TableCell>
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-sm leading-tight">{p.name || "Sem nome"}</span>
+                        {p.commercial_name && p.commercial_name !== p.name && (
+                          <span className="text-xs text-muted-foreground">{p.commercial_name}</span>
+                        )}
+                        {p.supplier_name && (
+                          <span className="text-[10px] text-info flex items-center gap-1 mt-0.5">
+                            <Truck className="h-2.5 w-2.5" /> {p.supplier_name}
+                          </span>
+                        )}
                       </div>
-                    )}
-                  </TableCell>
-                  {/* Nome + nome comercial + fornecedor */}
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-sm leading-tight">{p.name}</span>
-                      {p.commercial_name && p.commercial_name !== p.name && (
-                        <span className="text-xs text-muted-foreground">{p.commercial_name}</span>
-                      )}
-                      {p.supplier_name && (
-                        <span className="text-[10px] text-info flex items-center gap-1 mt-0.5">
-                          <Truck className="h-2.5 w-2.5" /> {p.supplier_name}
-                        </span>
-                      )}
-                    </div>
-                  </TableCell>
-                  {/* Origem */}
-                  <TableCell className="hidden md:table-cell">
-                    {getOriginBadge(p.origin, p.type, p.imported_from_supplier)}
-                  </TableCell>
-                  {/* SKU */}
-                  <TableCell className="hidden lg:table-cell">
-                    <span className="font-mono text-xs text-muted-foreground">{skuDisplay}</span>
-                  </TableCell>
-                  {/* Categoria */}
-                  <TableCell><StatusBadge variant="muted">{p.category}</StatusBadge></TableCell>
-                  {/* Unidade */}
-                  <TableCell className="hidden md:table-cell text-muted-foreground">{p.unit_measure || "—"}</TableCell>
-                  {/* Custo */}
-                  <TableCell className="text-sm">{fmt.format(costVal)}</TableCell>
-                  {/* Preço venda */}
-                  <TableCell className="font-bold text-foreground text-sm">{fmt.format(saleVal)}</TableCell>
-                  {/* Margem */}
-                  <TableCell className="hidden lg:table-cell">
-                    <span className={`font-semibold text-sm ${marginVal >= 30 ? "text-success" : marginVal >= 15 ? "text-warning" : "text-destructive"}`}>
-                      {marginVal.toFixed(0)}%
-                    </span>
-                  </TableCell>
-                  {/* Status */}
-                  <TableCell><StatusBadge variant={p.status === 'Ativo' ? 'success' : 'muted'}>{p.status || "Ativo"}</StatusBadge></TableCell>
-                  {/* Ações */}
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button size="icon" variant="ghost"><MoreVertical className="h-4 w-4" /></Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleEdit(p)}>
-                          <Edit className="h-4 w-4 mr-2" /> Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => duplicateMutation.mutate(p)}>
-                          <Copy className="h-4 w-4 mr-2" /> Duplicar
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => handleGenerateQuote(p)}>
-                          <FilePlus2 className="h-4 w-4 mr-2" /> Gerar Orçamento
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setMarketplaceProduct(p)}>
-                          <Store className="h-4 w-4 mr-2" /> Rascunho Marketplace
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                          className="text-destructive focus:text-destructive"
-                          onClick={() => setDeleteConfirmProduct(p)}
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" /> Remover
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              );
+                    </TableCell>
+                    {/* Origem */}
+                    <TableCell className="hidden md:table-cell">
+                      {getOriginBadge(p.origin, p.type, p.imported_from_supplier)}
+                    </TableCell>
+                    {/* SKU */}
+                    <TableCell className="hidden lg:table-cell">
+                      <span className="font-mono text-xs text-muted-foreground">{skuDisplay}</span>
+                    </TableCell>
+                    {/* Categoria */}
+                    <TableCell><StatusBadge variant="muted">{p.category || "Geral"}</StatusBadge></TableCell>
+                    {/* Unidade */}
+                    <TableCell className="hidden md:table-cell text-muted-foreground">{p.unit_measure || "—"}</TableCell>
+                    {/* Custo */}
+                    <TableCell className="text-sm">{formattedCost}</TableCell>
+                    {/* Preço venda */}
+                    <TableCell className="font-bold text-foreground text-sm">{formattedSale}</TableCell>
+                    {/* Margem */}
+                    <TableCell className="hidden lg:table-cell">
+                      <span className={`font-semibold text-sm ${marginVal >= 30 ? "text-success" : marginVal >= 15 ? "text-warning" : "text-destructive"}`}>
+                        {isMarginValid ? `${marginVal.toFixed(0)}%` : "—%"}
+                      </span>
+                    </TableCell>
+                    {/* Status */}
+                    <TableCell><StatusBadge variant={p.status === 'Ativo' ? 'success' : 'muted'}>{p.status || "Ativo"}</StatusBadge></TableCell>
+                    {/* Ações */}
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button size="icon" variant="ghost"><MoreVertical className="h-4 w-4" /></Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleEdit(p)}>
+                            <Edit className="h-4 w-4 mr-2" /> Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => duplicateMutation.mutate(p)}>
+                            <Copy className="h-4 w-4 mr-2" /> Duplicar
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => handleGenerateQuote(p)}>
+                            <FilePlus2 className="h-4 w-4 mr-2" /> Gerar Orçamento
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setMarketplaceProduct(p)}>
+                            <Store className="h-4 w-4 mr-2" /> Rascunho Marketplace
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem 
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => setDeleteConfirmProduct(p)}
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" /> Remover
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );
+              } catch (err) {
+                console.error("Erro renderizando produto na tabela:", p, err);
+                return (
+                  <TableRow key={p?.id || Math.random().toString()}>
+                    <TableCell colSpan={11} className="text-destructive text-xs py-2 text-center">
+                      Erro ao exibir produto "{p?.name || 'Sem nome'}". Verifique o console de desenvolvedor.
+                    </TableCell>
+                  </TableRow>
+                );
+              }
             })}
           </TableBody>
         </Table>
       </Card>
 
-      {/* Modal de edição/criação */}
-      <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-[520px]">
-          <DialogHeader>
-            <DialogTitle>{editingProduct ? "Editar Produto" : "Novo Produto"}</DialogTitle>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2 col-span-2">
-                <Label htmlFor="name">Nome do produto *</Label>
-                <Input 
-                  id="name" 
-                  value={formData.name} 
-                  onChange={(e) => setFormData({...formData, name: e.target.value})} 
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="commercial_name">Nome Comercial</Label>
-                <Input 
-                  id="commercial_name" 
-                  value={formData.commercial_name} 
-                  onChange={(e) => setFormData({...formData, commercial_name: e.target.value})} 
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="internal_sku">SKU Interno</Label>
-                <Input 
-                  id="internal_sku" 
-                  placeholder="Auto-gerado se vazio"
-                  value={formData.internal_sku} 
-                  onChange={(e) => setFormData({...formData, internal_sku: e.target.value})} 
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="type">Tipo</Label>
-                <Select value={formData.type} onValueChange={(val) => setFormData({...formData, type: val})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="product">Produto</SelectItem>
-                    <SelectItem value="service">Serviço</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="category">Categoria</Label>
-                <Select value={formData.category} onValueChange={(val) => setFormData({...formData, category: val})}>
-                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                  <SelectContent>
-                    {CATEGORIAS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="unit">Unidade</Label>
-                <Input 
-                  id="unit" 
-                  value={formData.unit} 
-                  onChange={(e) => setFormData({...formData, unit: e.target.value})} 
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="base_cost">Custo Base (R$)</Label>
-                <Input 
-                  id="base_cost" 
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={formData.base_cost} 
-                  onChange={(e) => setFormData({...formData, base_cost: parseFloat(e.target.value)})} 
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="desired_margin">Margem Desejada (%)</Label>
-                <Input 
-                  id="desired_margin" 
-                  type="number"
-                  min="0"
-                  max="99"
-                  value={formData.desired_margin} 
-                  onChange={(e) => setFormData({...formData, desired_margin: parseFloat(e.target.value)})} 
-                />
-              </div>
-            </div>
-            <div className="p-3 bg-secondary/50 rounded-md">
-              <p className="text-sm text-muted-foreground">Preço Sugerido (Calculado)</p>
-              <p className="text-xl font-bold mt-1">
-                {fmt.format(formData.suggested_price || 0)}
-              </p>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="technical_description">Descrição Técnica</Label>
-              <Textarea 
-                id="technical_description"
-                rows={3}
-                value={formData.technical_description}
-                onChange={(e) => setFormData({...formData, technical_description: e.target.value})}
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="image_url">URL da Imagem</Label>
-              <Input 
-                id="image_url"
-                placeholder="https://..."
-                value={formData.image_url}
-                onChange={(e) => setFormData({...formData, image_url: e.target.value})}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <input 
-                type="checkbox" 
-                id="active" 
-                checked={formData.active}
-                onChange={(e) => setFormData({...formData, active: e.target.checked})} 
-              />
-              <Label htmlFor="active">Produto ativo</Label>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-            <Button 
-              disabled={!formData.name || !formData.category || saveMutation.isPending} 
-              onClick={() => saveMutation.mutate(formData)}
-            >
-              {saveMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Editor Avançado de Produto (drawer) */}
+      <ProductEditor
+        open={isModalOpen}
+        onOpenChange={(open) => { setIsModalOpen(open); if (!open) setEditingProduct(null); }}
+        product={editingProduct}
+        suppliers={suppliers}
+        onRequestQuote={(id) => navigate({ to: "/orcamentos", search: { selectProductId: id } })}
+        onRequestMarketplace={(p) => { setIsModalOpen(false); setMarketplaceProduct(p); }}
+        onRequestDuplicate={(p) => duplicateMutation.mutate(p)}
+      />
 
       {/* Modal de Importação do Hub */}
       <Dialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen}>

@@ -231,6 +231,7 @@ export type Database = {
           minimum_quantity: number | null
           quantity_price_table: Json
           production_deadline: string | null
+          editor_meta: Json
         }
         Insert: {
           id?: string
@@ -279,6 +280,7 @@ export type Database = {
           minimum_quantity?: number | null
           quantity_price_table?: Json
           production_deadline?: string | null
+          editor_meta?: Json
         }
         Update: {
           id?: string
@@ -327,6 +329,7 @@ export type Database = {
           minimum_quantity?: number | null
           quantity_price_table?: Json
           production_deadline?: string | null
+          editor_meta?: Json
         }
         Relationships: [
           {

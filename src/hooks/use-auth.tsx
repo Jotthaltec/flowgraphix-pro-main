@@ -40,11 +40,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function loadProfile(userId: string) {
-    const { data } = await supabase
+    const { data, error: profileError } = await supabase
       .from("profiles")
-      .select("id, full_name, company_id, role, companies(name)")
+      .select("id, full_name, company_id, companies(name)")
       .eq("user_id", userId)
       .maybeSingle();
+
+    if (profileError) {
+      console.error("Erro ao carregar perfil:", profileError);
+      return;
+    }
+
     if (data) {
       const pData = data as any;
       const companies = pData.companies;
@@ -53,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         full_name: pData.full_name,
         company_name: companies?.name ?? null,
         company_id: pData.company_id ?? null,
-        role: pData.role ?? null,
+        role: null,
       });
     }
   }
