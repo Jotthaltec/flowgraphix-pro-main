@@ -112,6 +112,21 @@ Colunas novas em `products`: `subcategory`, `review_required`, `classification_c
 4. **Não foi possível testar, neste ambiente, persistência/dedup/atualização contra um Supabase ao vivo** (sem credenciais/instância). Os testes cobrem parsing/normalização/classificação/validação com dados reais; a persistência foi validada por tipos/build, não por execução em banco.
 5. Prazo de produção depende de JS na FuturaIM (ver §6).
 
+## 14b. Tela dedicada e fila persistente (fases 2 e 3 — entregues)
+
+**Tela `/produtos/importar`** (`src/routes/_app/produtos.importar.tsx` + `src/components/products/importador-produtos.tsx`): 3 modos (individual, lote, catálogo), opções (atualizar existentes, imagens, tabelas de preço, gabaritos, descrição, descrição só interna, fornecedor externo), margem, barra de progresso, painéis de erros/avisos, prévia editável (nome/categoria/subcategoria) com tiragens/variações/extras, aprovação manual e aba **Histórico**. Botão "Importar por link" no cabeçalho de Produtos aponta para a rota.
+
+**Paginação de catálogo** (`discoverCatalogLinks`): BFS limitado (máx. 25 páginas, intervalo 600ms) que segue `rel=next`/anchors `?pagina=|page=|p=` e **para quando não surgem links novos**. Verificado: a FuturaIM é **página única** (todos-os-produtos = 492 produtos num fetch; `?pagina=2` retorna os mesmos links), então uma requisição já traz tudo; a lógica de seguir páginas cobre catálogos paginados de outros sites.
+
+**Fila persistente + retomada** (seção 30) — `src/lib/importer-jobs.ts` + tabelas `product_import_jobs`/`product_import_items`:
+- Ao importar um catálogo, cria-se um **job** e um **item por link** (deduplicados por id externo) no banco.
+- Processamento sequencial com intervalo; cada item grava status + `normalized_data` (o produto estruturado) no banco.
+- Recarregar a página mostra um banner **"Importações em andamento → Retomar"**; a retomada recarrega os itens, re-hidrata as prévias e processa **apenas os pendentes** (não reprocessa o que já foi feito).
+- Contadores do job (`total_processed/success/error`) são sincronizados; ao salvar, o item recebe `product_id` e o job é finalizado.
+- Tudo **tolerante a falha**: se a persistência falhar (RLS/tabela ausente), o fluxo segue em memória.
+
+> Acesso às novas tabelas é feito por handle sem tipagem estrita (`supabase as any`) porque `types.ts` ainda não foi regenerado (precisa de DB ao vivo). `npx tsc --noEmit` = **0 erros**; `npm run build` OK; **34 testes** passam.
+
 ## 15. Melhorias futuras
 
 - Ligar `buildProductRow` + novas tabelas (variants/tiers/images/extras) com upsert por `computeDedupKeys`.
