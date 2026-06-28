@@ -447,22 +447,9 @@ export function extractProductFromHtml(html: string, rules: any[] = []): Extract
     // Ordena por quantidade crescente
     result.quantity_prices.sort((a, b) => a.quantity - b.quantity);
 
-    // Se nenhuma tabela de quantidade foi capturada por Regex, gera uma simulação baseada no preço unitário padrão
-    if (result.quantity_prices.length === 0 && result.current_price > 0) {
-      const basePrice = result.current_price;
-      const defaultTiragens = [100, 250, 500, 1000, 2500];
-      result.quantity_prices = defaultTiragens.map(qty => {
-        // Aplica um desconto de escala de tiragem realista (de 0% a 35% de desconto unitário)
-        const discountFactor = qty === 100 ? 1 : qty === 250 ? 0.92 : qty === 500 ? 0.85 : qty === 1000 ? 0.78 : 0.70;
-        const unitPrice = parseFloat((basePrice * discountFactor).toFixed(4));
-        const totalPrice = parseFloat((unitPrice * qty).toFixed(2));
-        return {
-          quantity: qty,
-          price: totalPrice,
-          unitPrice: unitPrice
-        };
-      });
-    }
+    // IMPORTANTE: não fabricamos faixas de preço. Se a página não expõe uma
+    // tabela de tiragens, `quantity_prices` fica vazio e o usuário pode
+    // adicioná-las manualmente na revisão (seção 11 / "não usar dados fake").
   }
 
   // H. VARIAÇÕES DE PRODUTO

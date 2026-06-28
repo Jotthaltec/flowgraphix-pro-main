@@ -351,14 +351,14 @@ function ProdutosPage() {
         description="Catálogo unificado — manuais e importados de fornecedores" 
         action={
           <div className="flex gap-3 items-center">
-            <Button 
-              onClick={() => setIsLinkImportModalOpen(true)}
+            <Button
+              onClick={() => navigate({ to: "/produtos/importar" })}
               className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white border-0 shadow-lg shadow-indigo-500/20 transition-all hover:scale-105"
             >
-              <Sparkles className="h-4 w-4 mr-2 animate-pulse" /> 
-              Importar via Link
+              <Sparkles className="h-4 w-4 mr-2 animate-pulse" />
+              Importar por link
             </Button>
-            
+
             <div className="h-6 w-[1px] bg-border mx-1 hidden sm:block"></div>
             
             <Button variant="outline" onClick={() => setIsImportModalOpen(true)} className="border-dashed border-2 hover:bg-secondary/80 transition-all">

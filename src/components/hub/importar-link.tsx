@@ -23,6 +23,9 @@ import type { ExtractedProductData } from "@/lib/supplier-extractor";
 import { generateMarketplaceCopy } from "@/lib/marketplace-copy-generator";
 import { MarketplaceVariationsModal } from "@/components/hub/marketplace-variations-modal";
 import { saveImportedProductToCatalog, findSimilarProducts } from "@/lib/products-service";
+import { analyzeSupplierLink } from "@/integrations/supabase/importer-actions";
+import { importedToExtracted } from "@/services/productImporterService";
+import { FUTURAIM_DOMAINS } from "@/services/futuraImParser";
 import { useNavigate } from "@tanstack/react-router";
 import {
   AlertDialog,
@@ -155,14 +158,55 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
       
       if (!profile?.company_id) throw new Error("Empresa do usuário não identificada.");
 
+      // Detecta FuturaIM para usar o importador dedicado (backend seguro + parser real).
+      let host = "";
+      try { host = new URL(url).hostname.toLowerCase(); } catch {}
+      const isFuturaIm = FUTURAIM_DOMAINS.includes(host);
+
+      // ===== Caminho dedicado FuturaIM: análise 100% server-side, dados reais =====
+      if (isFuturaIm) {
+        const res = await analyzeSupplierLink({ data: { url } });
+        if (!res.success) throw new Error(res.error);
+
+        const extracted = importedToExtracted(res.product);
+        const domain = res.product.supplier_domain;
+
+        const { data: importRec, error: importErr } = await supabase
+          .from("supplier_imports")
+          .insert({
+            company_id: profile.company_id,
+            supplier_id: selectedSupplierId || null,
+            source_url: url,
+            supplier_domain: domain,
+            extraction_status: res.product.classification.review_required ? "review_required" : "success",
+            product_name: extracted.product_name,
+            current_price: extracted.current_price,
+            original_price: extracted.original_price,
+            supplier_sku: extracted.supplier_sku,
+            main_image_url: extracted.main_image_url,
+            gallery_images: extracted.gallery_images,
+            specifications: extracted.specifications,
+            variations: extracted.variations,
+            quantity_prices: extracted.quantity_prices,
+            extra_services: extracted.extra_services,
+            production_deadline: extracted.production_deadline,
+          })
+          .select("id")
+          .single();
+        if (importErr) throw importErr;
+
+        return { extracted, domain, importId: importRec.id, html: "", usedAI: false };
+      }
+
+      // ===== Caminho genérico (demais fornecedores) =====
       // 1. Fetch do HTML
       const htmlRes = await fetchProductHtml({ data: { url } });
       if (!htmlRes.success || !htmlRes.html) {
         throw new Error(htmlRes.error || "Não foi possível obter o HTML da página.");
       }
-      
+
       const domain = htmlRes.domain || "";
-      
+
       // 2. Busca regras de mapeamento no Supabase
       const { data: rules } = await supabase
         .from("supplier_mapping_rules")

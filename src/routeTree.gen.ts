@@ -29,6 +29,7 @@ import { Route as AppContratosRouteImport } from './routes/_app/contratos'
 import { Route as AppConfiguracoesRouteImport } from './routes/_app/configuracoes'
 import { Route as AppClientesRouteImport } from './routes/_app/clientes'
 import { Route as AppArquivosRouteImport } from './routes/_app/arquivos'
+import { Route as AppProdutosImportarRouteImport } from './routes/_app/produtos.importar'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -129,6 +130,11 @@ const AppArquivosRoute = AppArquivosRouteImport.update({
   path: '/arquivos',
   getParentRoute: () => AppRoute,
 } as any)
+const AppProdutosImportarRoute = AppProdutosImportarRouteImport.update({
+  id: '/importar',
+  path: '/importar',
+  getParentRoute: () => AppProdutosRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -148,8 +154,9 @@ export interface FileRoutesByFullPath {
   '/orcamentos': typeof AppOrcamentosRoute
   '/pedidos': typeof AppPedidosRoute
   '/producao': typeof AppProducaoRoute
-  '/produtos': typeof AppProdutosRoute
+  '/produtos': typeof AppProdutosRouteWithChildren
   '/relatorios': typeof AppRelatoriosRoute
+  '/produtos/importar': typeof AppProdutosImportarRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -169,8 +176,9 @@ export interface FileRoutesByTo {
   '/orcamentos': typeof AppOrcamentosRoute
   '/pedidos': typeof AppPedidosRoute
   '/producao': typeof AppProducaoRoute
-  '/produtos': typeof AppProdutosRoute
+  '/produtos': typeof AppProdutosRouteWithChildren
   '/relatorios': typeof AppRelatoriosRoute
+  '/produtos/importar': typeof AppProdutosImportarRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -192,8 +200,9 @@ export interface FileRoutesById {
   '/_app/orcamentos': typeof AppOrcamentosRoute
   '/_app/pedidos': typeof AppPedidosRoute
   '/_app/producao': typeof AppProducaoRoute
-  '/_app/produtos': typeof AppProdutosRoute
+  '/_app/produtos': typeof AppProdutosRouteWithChildren
   '/_app/relatorios': typeof AppRelatoriosRoute
+  '/_app/produtos/importar': typeof AppProdutosImportarRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -217,6 +226,7 @@ export interface FileRouteTypes {
     | '/producao'
     | '/produtos'
     | '/relatorios'
+    | '/produtos/importar'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -238,6 +248,7 @@ export interface FileRouteTypes {
     | '/producao'
     | '/produtos'
     | '/relatorios'
+    | '/produtos/importar'
   id:
     | '__root__'
     | '/'
@@ -260,6 +271,7 @@ export interface FileRouteTypes {
     | '/_app/producao'
     | '/_app/produtos'
     | '/_app/relatorios'
+    | '/_app/produtos/importar'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -413,8 +425,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppArquivosRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/produtos/importar': {
+      id: '/_app/produtos/importar'
+      path: '/importar'
+      fullPath: '/produtos/importar'
+      preLoaderRoute: typeof AppProdutosImportarRouteImport
+      parentRoute: typeof AppProdutosRoute
+    }
   }
 }
+
+interface AppProdutosRouteChildren {
+  AppProdutosImportarRoute: typeof AppProdutosImportarRoute
+}
+
+const AppProdutosRouteChildren: AppProdutosRouteChildren = {
+  AppProdutosImportarRoute: AppProdutosImportarRoute,
+}
+
+const AppProdutosRouteWithChildren = AppProdutosRoute._addFileChildren(
+  AppProdutosRouteChildren,
+)
 
 interface AppRouteChildren {
   AppArquivosRoute: typeof AppArquivosRoute
@@ -429,7 +460,7 @@ interface AppRouteChildren {
   AppOrcamentosRoute: typeof AppOrcamentosRoute
   AppPedidosRoute: typeof AppPedidosRoute
   AppProducaoRoute: typeof AppProducaoRoute
-  AppProdutosRoute: typeof AppProdutosRoute
+  AppProdutosRoute: typeof AppProdutosRouteWithChildren
   AppRelatoriosRoute: typeof AppRelatoriosRoute
 }
 
@@ -446,7 +477,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppOrcamentosRoute: AppOrcamentosRoute,
   AppPedidosRoute: AppPedidosRoute,
   AppProducaoRoute: AppProducaoRoute,
-  AppProdutosRoute: AppProdutosRoute,
+  AppProdutosRoute: AppProdutosRouteWithChildren,
   AppRelatoriosRoute: AppRelatoriosRoute,
 }
 
