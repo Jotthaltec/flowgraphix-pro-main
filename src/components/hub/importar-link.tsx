@@ -45,6 +45,7 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [url, setUrl] = useState("");
+  const [activeStep, setActiveStep] = useState(1);
   const [selectedSupplierId, setSelectedSupplierId] = useState("");
   const [margin, setMargin] = useState(50); // Margem de lucro padrão (%)
   
@@ -249,6 +250,7 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
       setDomain(res.domain);
       setImportId(res.importId);
       setOriginalHtml(res.html);
+      setActiveStep(2); // Avança para o Passo 2 após análise
     },
     onError: (err: any) => {
       toast.error(`Erro na análise: ${err.message}`);
@@ -551,91 +553,155 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className="flex flex-col gap-6">
       
-      {/* PAINEL DE ENTRADA DO LINK */}
-      <Card className="lg:col-span-1 border-t-4 border-primary">
-        <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Link2 className="h-5 w-5 text-primary" />
-            Análise de Link do Fornecedor
-          </CardTitle>
-          <CardDescription>
-            Cole o link do produto público de qualquer fornecedor gráfico.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="product-url">Link do Produto</Label>
-            <Input 
-              id="product-url"
-              placeholder="https://www.printi.com.br/cartao-de-visita..."
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              className="bg-card"
-            />
-          </div>
+      {/* Stepper Header (Didático) */}
+      <div className="flex items-center justify-between w-full p-4 bg-card border rounded-xl shadow-sm">
+        <div className="flex flex-col items-center gap-2 flex-1 relative z-10">
+          <div className={`flex items-center justify-center h-10 w-10 rounded-full border-2 font-bold transition-colors ${activeStep >= 1 ? 'bg-primary border-primary text-primary-foreground' : 'bg-muted border-muted text-muted-foreground'}`}>1</div>
+          <span className={`text-xs font-semibold ${activeStep >= 1 ? 'text-foreground' : 'text-muted-foreground'}`}>Fornecedor & Link</span>
+        </div>
+        <div className={`flex-1 h-[2px] -mx-4 z-0 ${activeStep >= 2 ? 'bg-primary' : 'bg-muted'}`} />
+        <div className="flex flex-col items-center gap-2 flex-1 relative z-10">
+          <div className={`flex items-center justify-center h-10 w-10 rounded-full border-2 font-bold transition-colors ${activeStep >= 2 ? 'bg-primary border-primary text-primary-foreground' : 'bg-muted border-muted text-muted-foreground'}`}>2</div>
+          <span className={`text-xs font-semibold ${activeStep >= 2 ? 'text-foreground' : 'text-muted-foreground'}`}>Análise & Margem</span>
+        </div>
+        <div className={`flex-1 h-[2px] -mx-4 z-0 ${activeStep >= 3 ? 'bg-primary' : 'bg-muted'}`} />
+        <div className="flex flex-col items-center gap-2 flex-1 relative z-10">
+          <div className={`flex items-center justify-center h-10 w-10 rounded-full border-2 font-bold transition-colors ${activeStep >= 3 ? 'bg-primary border-primary text-primary-foreground' : 'bg-muted border-muted text-muted-foreground'}`}>3</div>
+          <span className={`text-xs font-semibold ${activeStep >= 3 ? 'text-foreground' : 'text-muted-foreground'}`}>Revisão & Confirmação</span>
+        </div>
+      </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="supplier-select">Fornecedor Vinculado</Label>
-            <select
-              id="supplier-select"
-              value={selectedSupplierId}
-              onChange={(e) => setSelectedSupplierId(e.target.value)}
-              className="w-full h-10 px-3 py-2 rounded-md border border-input bg-card text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <option value="">-- Selecione um Fornecedor (Opcional) --</option>
-              {suppliers.map(s => (
-                <option key={s.id} value={s.id}>{s.name} ({s.domain || "Sem domínio"})</option>
-              ))}
-            </select>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* PAINEL DE AÇÕES DA ESQUERDA */}
+        <Card className="lg:col-span-1 border-t-4 border-primary shadow-lg relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+            <Sparkles className="w-32 h-32" />
           </div>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              {activeStep === 1 && <><Link2 className="h-5 w-5 text-primary" /> Passo 1: Informar Produto</>}
+              {activeStep === 2 && <><Sparkles className="h-5 w-5 text-primary" /> Passo 2: Inteligência Artificial</>}
+              {activeStep === 3 && <><Save className="h-5 w-5 text-primary" /> Passo 3: Conclusão</>}
+            </CardTitle>
+            <CardDescription>
+              {activeStep === 1 && "Cole o link público de qualquer gráfica online. A IA fará a leitura."}
+              {activeStep === 2 && "Configure sua margem de lucro. O CRM calculará automaticamente o preço de venda."}
+              {activeStep === 3 && "Tudo pronto! Verifique o painel ao lado e salve no seu catálogo."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6 relative z-10">
+            
+            <div className={`space-y-4 transition-all duration-300 ${activeStep !== 1 ? 'opacity-50 grayscale pointer-events-none hidden' : ''}`}>
+              <div className="space-y-2">
+                <Label htmlFor="product-url">Link do Produto</Label>
+                <Input 
+                  id="product-url"
+                  placeholder="https://www.printi.com.br/cartao-de-visita..."
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  className="bg-card shadow-inner"
+                />
+              </div>
 
-          <div className="space-y-2">
-            <div className="flex justify-between">
-              <Label htmlFor="margin-slider">Margem de Lucro Interna</Label>
-              <span className="text-xs font-semibold text-primary">{margin}%</span>
+              <div className="space-y-2">
+                <Label htmlFor="supplier-select">Fornecedor Vinculado</Label>
+                <select
+                  id="supplier-select"
+                  value={selectedSupplierId}
+                  onChange={(e) => setSelectedSupplierId(e.target.value)}
+                  className="w-full h-10 px-3 py-2 rounded-md border border-input bg-card shadow-inner text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="">-- Autodetectar Fornecedor --</option>
+                  {suppliers.map(s => (
+                    <option key={s.id} value={s.id}>{s.name} ({s.domain || "Sem domínio"})</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                  <HelpCircle className="h-3 w-3" /> Deixe em branco para o sistema tentar identificar automaticamente pelo link.
+                </p>
+              </div>
+
+              <Button 
+                className="w-full mt-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white shadow-lg transition-all" 
+                disabled={!url || analyzeMutation.isPending}
+                onClick={() => analyzeMutation.mutate()}
+              >
+                {analyzeMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    A IA está escaneando a página...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    Iniciar Extração Automática
+                  </>
+                )}
+              </Button>
             </div>
-            <div className="flex items-center gap-3">
-              <Input 
-                id="margin-slider"
-                type="range" 
-                min="10" 
-                max="300"
-                step="5"
-                value={margin}
-                onChange={(e) => setMargin(parseInt(e.target.value))}
-                className="flex-1 accent-primary h-2 bg-secondary rounded-lg appearance-none cursor-pointer"
-              />
-              <Input 
-                type="number" 
-                value={margin} 
-                onChange={(e) => setMargin(parseInt(e.target.value) || 0)}
-                className="w-16 h-8 text-xs text-center"
-              />
-            </div>
-            <p className="text-[10px] text-muted-foreground">
-              O CRM recalculará automaticamente os preços de venda sugeridos com base no custo extraído e nesta margem.
-            </p>
-          </div>
 
-          <Button 
-            className="w-full mt-2" 
-            disabled={!url || analyzeMutation.isPending}
-            onClick={() => analyzeMutation.mutate()}
-          >
-            {analyzeMutation.isPending ? (
-              <>
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                Extraindo Dados Públicos...
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4 mr-2 text-warning-foreground" />
-                Analisar Produto
-              </>
-            )}
-          </Button>
+            <div className={`space-y-5 transition-all duration-300 ${activeStep !== 2 ? 'hidden' : ''}`}>
+              <div className="p-4 bg-muted/30 border rounded-lg space-y-3">
+                <div className="flex justify-between items-center">
+                  <Label htmlFor="margin-slider" className="font-bold">Margem de Lucro Desejada</Label>
+                  <span className="px-2 py-1 bg-primary text-primary-foreground text-xs rounded-md font-bold">{margin}%</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Input 
+                    id="margin-slider"
+                    type="range" 
+                    min="10" 
+                    max="300"
+                    step="5"
+                    value={margin}
+                    onChange={(e) => setMargin(parseInt(e.target.value))}
+                    className="flex-1 accent-primary h-2 bg-secondary rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+                
+                {editedProduct && (
+                  <div className="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-md">
+                    <h4 className="text-xs font-semibold text-emerald-600 uppercase mb-1">Simulação Rápida (1 un)</h4>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Custo:</span>
+                      <span className="line-through opacity-70">R$ {editedProduct.current_price.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm font-bold mt-1">
+                      <span className="text-foreground">Preço Final de Venda:</span>
+                      <span className="text-emerald-500">R$ {(editedProduct.current_price * (1 + margin / 100)).toFixed(2)}</span>
+                    </div>
+                    <div className="text-right mt-1">
+                      <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-500/20 px-1.5 py-0.5 rounded">
+                        Você lucra: R$ {((editedProduct.current_price * (1 + margin / 100)) - editedProduct.current_price).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={() => setActiveStep(1)}>
+                  Voltar
+                </Button>
+                <Button className="flex-1" onClick={() => setActiveStep(3)}>
+                  Avançar p/ Revisão <Check className="h-4 w-4 ml-2" />
+                </Button>
+              </div>
+            </div>
+
+            <div className={`space-y-5 transition-all duration-300 ${activeStep !== 3 ? 'hidden' : ''}`}>
+              <div className="p-4 bg-muted/30 border rounded-lg text-sm text-muted-foreground text-center space-y-2">
+                <CheckCircle2 className="h-10 w-10 text-emerald-500 mx-auto" />
+                <p>Os dados foram extraídos e a precificação gerada.</p>
+                <p>Revise o painel principal ao lado. Se tudo estiver correto, clique no botão de salvar no painel direito.</p>
+              </div>
+              <Button variant="outline" className="w-full" onClick={() => setActiveStep(2)}>
+                Voltar aos Ajustes
+              </Button>
+            </div>
 
           {analysisResult && (
             <div className="border-t pt-4 mt-2 flex justify-between items-center">
@@ -1647,6 +1713,7 @@ export function ImportarLink({ onNavigateToProducts, onNavigateToDrafts }: Impor
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </div>
     </div>
   );
 }
