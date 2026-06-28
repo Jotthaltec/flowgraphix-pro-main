@@ -127,6 +127,40 @@ Colunas novas em `products`: `subcategory`, `review_required`, `classification_c
 
 > Acesso às novas tabelas é feito por handle sem tipagem estrita (`supabase as any`) porque `types.ts` ainda não foi regenerado (precisa de DB ao vivo). `npx tsc --noEmit` = **0 erros**; `npm run build` OK; **34 testes** passam.
 
+## 14c. Gravação no grafo estruturado (entregue)
+
+Além de `products`, o salvamento agora grava o **grafo estruturado** (seção 25):
+- `src/services/structuredMappers.ts` — **mapeadores puros** (testados) que convertem o produto em linhas de `product_variants`, `product_price_tiers`, `product_attributes`/`product_attribute_values`, `product_images`, `product_templates`, `product_extras`. Atributos de specs e eixos de variação são **fundidos sem duplicar** (valores deduplicados; opções carregam o id externo real).
+- `src/lib/importer-structured-persistence.ts` — **writer idempotente**: ao reimportar, remove os filhos (cascatas cuidam de tiers/values) e regrava (re-sync, sem duplicar). Cria/reaproveita `product_categories` (categoria + subcategoria como filha), `product_segments` e grava `product_category_mappings` (uma linha por segmento, com confiança e motivo). Cada seção é isolada e **tolerante a falha**: acumula avisos sem derrubar o salvamento em `products`.
+- Integrado em `persistImportedProduct` (flag `writeStructured`, padrão on). A tela mostra um toast de aviso quando há falhas parciais na gravação estruturada.
+- Testes: `structuredMappers.test.ts` valida material/formato/cor separados, tiragens reais com id por faixa, fusão de atributos sem duplicar, 1 imagem principal e extras reais. **39 testes** no total; `tsc --noEmit` = 0 erros; build OK.
+
+## 14d. Atualizar preços do fornecedor (entregue)
+
+Aba **"Atualizar preços"** em `/produtos/importar` (`src/components/products/atualizar-precos.tsx`):
+- Lista os produtos importados (`origin=supplier_import` com `source_url`).
+- **Verificar preços**: reabre cada link original (server-side, anti-SSRF, em fila com intervalo) e compara as tiragens.
+- Mostra por produto: custo atual × custo novo, variação %, status (**alterado / igual / indisponível / erro**) e detalhamento por faixa (**alteradas / novas / removidas**).
+- **Aplicar custo** (por item ou em massa "todos alterados"): atualiza **somente o custo** (`cost_price`, `base_cost`, custo das faixas) e re-sincroniza o grafo estruturado. **Preserva o preço de venda e a margem** (seção 27) — faixas existentes mantêm o `sellPrice`; faixas novas recebem apenas uma sugestão de venda via margem. Registra histórico (`supplier_imports`, status `price_updated`).
+- Lógica de comparação isolada e pura em `src/services/priceComparison.ts` (testada: alterada/nova/removida/indisponível/epsilon de centavos).
+
+Custo do fornecedor, preço de venda e margem permanecem **separados**; o preço de venda nunca é sobrescrito automaticamente. **44 testes** no total; `tsc --noEmit` = 0; build OK.
+
+## 14e. Storage de imagens + varredura completa de variantes (entregue)
+
+**Varredura completa de variantes** (seção 10):
+- `src/services/variantScan.ts` (puro, testado): `collectVariantUrls` (ids reais a visitar, exceto o atual) e `consolidateVariants` (funde N produtos num produto-base com todas as variantes reais, eixos unidos, `variant_scan_status='complete'`).
+- Server fn `scanProductVariants` (`importer-actions.ts`): BFS limitado (máx. 40 variantes, intervalo 600ms) seguindo cada `?id=` real dos eixos — **nunca cartesiano**, só combinações que existem.
+- Opção "Varredura completa de variantes" na tela; quando ligada, a análise usa `scanProductVariants` e o salvamento grava todas as variantes (cada uma com suas tiragens) no grafo estruturado.
+
+**Storage de imagens** (seção 17):
+- Migration `20260628010000_imported_products_storage.sql`: bucket público `imported-products` + políticas de escrita por empresa (`{company_id}/imported-products/{product_id}/...`, via `user_owns_company`).
+- Server fn `fetchImageBytes` (allowlist do CDN `wbl.blob.core.windows.net` + FuturaIM, HTTPS, timeout, limite 8MB) baixa os bytes server-side.
+- `src/lib/importer-image-storage.ts`: `copyImagesToStorage` envia ao bucket e devolve URLs públicas (best-effort; mantém a externa em caso de falha).
+- Opção "Copiar imagens para o Storage" na tela; integrada em `persistImportedProduct` (copia antes do grafo estruturado e atualiza `products.image_url`/`gallery_images`). Padrão **desligado** (mantém URL externa, que já funciona).
+
+**46 testes** (2 novos de varredura); `tsc --noEmit` = 0; build OK.
+
 ## 15. Melhorias futuras
 
 - Ligar `buildProductRow` + novas tabelas (variants/tiers/images/extras) com upsert por `computeDedupKeys`.

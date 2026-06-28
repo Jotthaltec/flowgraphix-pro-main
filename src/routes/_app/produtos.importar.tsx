@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, History, Link2, Loader2, Package } from "lucide-react";
+import { ArrowLeft, History, Link2, Loader2, Package, RefreshCw } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { StatusBadge } from "@/components/status-badge";
 import { ImportadorProdutos } from "@/components/products/importador-produtos";
+import { AtualizarPrecos } from "@/components/products/atualizar-precos";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -54,6 +55,9 @@ function ImportarProdutosPage() {
           <TabsTrigger value="importar" className="flex items-center gap-2">
             <Link2 className="h-4 w-4 text-primary" /> Importar
           </TabsTrigger>
+          <TabsTrigger value="precos" className="flex items-center gap-2">
+            <RefreshCw className="h-4 w-4 text-amber-500" /> Atualizar preços
+          </TabsTrigger>
           <TabsTrigger value="historico" className="flex items-center gap-2">
             <History className="h-4 w-4 text-emerald-500" /> Histórico de importações
           </TabsTrigger>
@@ -61,6 +65,10 @@ function ImportarProdutosPage() {
 
         <TabsContent value="importar">
           <ImportadorProdutos />
+        </TabsContent>
+
+        <TabsContent value="precos">
+          <AtualizarPrecos />
         </TabsContent>
 
         <TabsContent value="historico">

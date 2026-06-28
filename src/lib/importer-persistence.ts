@@ -8,17 +8,24 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { ImportedProduct } from "@/types/importedProduct";
 import { buildProductRow, type BuildProductRowOptions } from "@/services/productImporterService";
+import { persistStructured } from "@/lib/importer-structured-persistence";
+import { copyImagesToStorage } from "@/lib/importer-image-storage";
 
 export interface PersistOptions extends Omit<BuildProductRowOptions, "companyId"> {
   companyId: string;
   /** Se false e o produto já existir, não sobrescreve (apenas reporta). */
   updateExisting?: boolean;
+  /** Grava também o grafo estruturado (variants/tiers/attributes/...). Padrão: true. */
+  writeStructured?: boolean;
+  /** Copia as imagens para o Supabase Storage (seção 17). Padrão: false (mantém URL externa). */
+  copyImages?: boolean;
 }
 
 export interface PersistResult {
   productId: string | null;
   action: "created" | "updated" | "skipped";
   message?: string;
+  structuredWarnings?: string[];
 }
 
 /** Localiza um produto existente por (source_url) ou (supplier_sku) dentro da empresa. */
@@ -56,6 +63,9 @@ export async function persistImportedProduct(
     return { productId: existingId, action: "skipped", message: "Produto já existe (atualização desativada)." };
   }
 
+  let productId: string;
+  let action: "created" | "updated";
+
   if (existingId) {
     const { error } = await supabase
       .from("products")
@@ -63,14 +73,43 @@ export async function persistImportedProduct(
       .update({ ...row, updated_at: new Date().toISOString() } as any)
       .eq("id", existingId);
     if (error) throw error;
-    return { productId: existingId, action: "updated" };
+    productId = existingId;
+    action = "updated";
+  } else {
+    const { data, error } = await supabase
+      .from("products")
+      .insert({ ...row, created_at: new Date().toISOString() } as any)
+      .select("id")
+      .single();
+    if (error) throw error;
+    productId = data.id;
+    action = "created";
   }
 
-  const { data, error } = await supabase
-    .from("products")
-    .insert({ ...row, created_at: new Date().toISOString() } as any)
-    .select("id")
-    .single();
-  if (error) throw error;
-  return { productId: data.id, action: "created" };
+  const structuredWarnings: string[] = [];
+
+  // Copia imagens para o Storage (opcional) ANTES do grafo estruturado, para
+  // que as URLs gravadas já sejam as do Storage.
+  if (opts.copyImages && product.images.length) {
+    try {
+      const res = await copyImagesToStorage(product.images, productId, opts.companyId);
+      product.images = res.images;
+      structuredWarnings.push(...res.warnings);
+      const main = res.images.find((i) => i.is_main)?.url ?? res.images[0]?.url ?? null;
+      await supabase
+        .from("products")
+        .update({ image_url: main, main_image_url: main, gallery_images: res.images.map((i) => i.url) } as any)
+        .eq("id", productId);
+    } catch (e: any) {
+      structuredWarnings.push(`cópia de imagens: ${e?.message || e}`);
+    }
+  }
+
+  // Grava o grafo estruturado (best-effort — não derruba o salvamento principal).
+  if (opts.writeStructured !== false) {
+    const structured = await persistStructured(productId, product, opts.companyId);
+    structuredWarnings.push(...structured.warnings);
+  }
+
+  return { productId, action, structuredWarnings: structuredWarnings.length ? structuredWarnings : undefined };
 }

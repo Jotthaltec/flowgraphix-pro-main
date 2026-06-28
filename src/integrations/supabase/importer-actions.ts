@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
-import { parseFuturaImProduct } from "@/services/futuraImParser";
+import { parseFuturaImProduct, externalIdFromUrl } from "@/services/futuraImParser";
+import { collectVariantUrls, consolidateVariants } from "@/services/variantScan";
 import { validateSupplierUrl } from "@/services/urlValidator";
 import type { ImportedProduct } from "@/types/importedProduct";
 
@@ -110,6 +111,117 @@ export const analyzeSupplierLink = createServerFn({ method: "POST" })
       return { success: false, error: `Erro ao interpretar a página: ${err?.message || err}` };
     }
   });
+
+// Hosts permitidos para baixar imagens de produto (CDN da FuturaIM).
+const IMAGE_ALLOWED_HOSTS = ["wbl.blob.core.windows.net", "futuraim.com.br", "www.futuraim.com.br"];
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Baixa os bytes de uma imagem de produto de forma segura (server-side) para
+ * cópia ao Supabase Storage (seção 17). Allowlist de hosts de imagem, HTTPS,
+ * timeout e limite de tamanho. Retorna base64 + content-type.
+ */
+export const fetchImageBytes = createServerFn({ method: "POST" })
+  .inputValidator((data: { url: string }) => data)
+  .handler(
+    async ({
+      data,
+    }): Promise<{ success: true; base64: string; contentType: string } | { success: false; error: string }> => {
+      let parsed: URL;
+      try {
+        parsed = new URL((data?.url || "").trim());
+      } catch {
+        return { success: false, error: "URL de imagem inválida." };
+      }
+      if (parsed.protocol !== "https:") return { success: false, error: "Imagem deve ser HTTPS." };
+      const host = parsed.hostname.toLowerCase();
+      if (!IMAGE_ALLOWED_HOSTS.includes(host)) {
+        return { success: false, error: `Host de imagem não permitido: ${host}.` };
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      try {
+        const resp = await fetch(parsed.toString(), { signal: controller.signal });
+        if (!resp.ok) return { success: false, error: `HTTP ${resp.status} ao baixar imagem.` };
+        const contentType = resp.headers.get("content-type") || "application/octet-stream";
+        if (!/^image\//i.test(contentType)) return { success: false, error: `Conteúdo não é imagem (${contentType}).` };
+        const buf = await resp.arrayBuffer();
+        if (buf.byteLength > MAX_IMAGE_BYTES) return { success: false, error: "Imagem excede o tamanho máximo." };
+        // Converte para base64 sem depender de Buffer (portável).
+        let binary = "";
+        const bytes = new Uint8Array(buf);
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+        const base64 = btoa(binary);
+        return { success: true, base64, contentType };
+      } catch (err: any) {
+        if (err?.name === "AbortError") return { success: false, error: "Timeout ao baixar imagem." };
+        return { success: false, error: err?.message || "Erro ao baixar imagem." };
+      } finally {
+        clearTimeout(timeout);
+      }
+    },
+  );
+
+const VARIANT_SCAN_MAX = 40;
+const VARIANT_SCAN_DELAY_MS = 600;
+
+/**
+ * Varredura completa de variantes (seção 10): segue, em largura, cada `?id=`
+ * real apontado pelos eixos de variação, coletando apenas combinações que de
+ * fato existem (nunca produto cartesiano). Limitado em nº de variantes e com
+ * intervalo entre requisições (raspagem responsável).
+ */
+export const scanProductVariants = createServerFn({ method: "POST" })
+  .inputValidator((data: { url: string }) => data)
+  .handler(
+    async ({
+      data,
+    }): Promise<{ success: true; product: ImportedProduct; scanned: number } | { success: false; error: string }> => {
+      const validation = validateSupplierUrl(data?.url);
+      if (!validation.ok || !validation.url) {
+        return { success: false, error: validation.reason || "URL não permitida." };
+      }
+
+      const collected: ImportedProduct[] = [];
+      const visited = new Set<string>();
+      const toVisit: string[] = [validation.url];
+
+      while (toVisit.length && collected.length < VARIANT_SCAN_MAX) {
+        const current = toVisit.shift()!;
+        const v = validateSupplierUrl(current);
+        if (!v.ok || !v.url) continue;
+        const id = externalIdFromUrl(v.url) || v.url;
+        if (visited.has(id)) continue;
+        visited.add(id);
+
+        const page = await fetchSupplierPage({ data: { url: v.url } });
+        if (!page.success || !page.html) continue;
+
+        let product: ImportedProduct;
+        try {
+          product = parseFuturaImProduct(page.html, v.url);
+        } catch {
+          continue;
+        }
+        collected.push(product);
+
+        for (const next of collectVariantUrls(product)) {
+          const nid = externalIdFromUrl(next);
+          if (nid && !visited.has(nid)) toVisit.push(next);
+        }
+
+        if (toVisit.length && collected.length < VARIANT_SCAN_MAX) await sleep(VARIANT_SCAN_DELAY_MS);
+      }
+
+      if (!collected.length) {
+        return { success: false, error: "Nenhuma variante pôde ser coletada." };
+      }
+
+      const product = consolidateVariants(collected);
+      return { success: true, product, scanned: collected.length };
+    },
+  );
 
 const CATALOG_MAX_PAGES = 25;
 const CATALOG_PAGE_DELAY_MS = 600;

@@ -37,7 +37,7 @@ import {
 } from "@/components/ui/accordion";
 
 import { supabase } from "@/integrations/supabase/client";
-import { analyzeSupplierLink, discoverCatalogLinks } from "@/integrations/supabase/importer-actions";
+import { analyzeSupplierLink, discoverCatalogLinks, scanProductVariants } from "@/integrations/supabase/importer-actions";
 import { validateImportUrl, parseBatchUrls } from "@/services/productImporterService";
 import { persistImportedProduct } from "@/lib/importer-persistence";
 import {
@@ -77,6 +77,8 @@ interface ImporterOptions {
   importDescription: boolean;
   descriptionInternalOnly: boolean;
   saveAsExternalSupplier: boolean;
+  scanVariants: boolean;
+  copyImagesToStorage: boolean;
 }
 
 const DEFAULT_OPTIONS: ImporterOptions = {
@@ -87,6 +89,8 @@ const DEFAULT_OPTIONS: ImporterOptions = {
   importDescription: true,
   descriptionInternalOnly: false,
   saveAsExternalSupplier: true,
+  scanVariants: false,
+  copyImagesToStorage: false,
 };
 
 const SLEEP = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -136,7 +140,9 @@ export function ImportadorProdutos() {
       if (item.dbId) await updateImportItem(item.dbId, { status: "bloqueado", errors: [v.reason || "URL inválida"] });
       return;
     }
-    const res = await analyzeSupplierLink({ data: { url: v.url! } });
+    const res = options.scanVariants
+      ? await scanProductVariants({ data: { url: v.url! } })
+      : await analyzeSupplierLink({ data: { url: v.url! } });
     if (!res.success) {
       patch(item.id, { status: "erro", error: res.error });
       if (item.dbId) await updateImportItem(item.dbId, { status: "erro", errors: [res.error] });
@@ -282,7 +288,8 @@ export function ImportadorProdutos() {
     let created = 0,
       updated = 0,
       skipped = 0,
-      failed = 0;
+      failed = 0,
+      structuredWarn = 0;
 
     for (const item of toSave) {
       try {
@@ -294,6 +301,7 @@ export function ImportadorProdutos() {
           supplierName: options.saveAsExternalSupplier ? product.supplier : null,
           updateExisting: options.updateExisting,
           descriptionInternalOnly: options.descriptionInternalOnly,
+          copyImages: options.copyImagesToStorage,
         });
         if (result.action === "created") created++;
         else if (result.action === "updated") updated++;
@@ -301,6 +309,7 @@ export function ImportadorProdutos() {
         const finalStatus: ImportItemStatus =
           result.action === "skipped" ? "ignorado" : result.action === "updated" ? "atualizado" : "importado";
         patch(item.id, { status: finalStatus, saved: result.action });
+        if (result.structuredWarnings?.length) structuredWarn += result.structuredWarnings.length;
         if (item.dbId) await updateImportItem(item.dbId, { status: finalStatus, product_id: result.productId });
 
         // Registra histórico (best-effort, não bloqueia a importação).
@@ -336,6 +345,9 @@ export function ImportadorProdutos() {
     toast.success(
       `Importação concluída: ${created} criados, ${updated} atualizados, ${skipped} ignorados${failed ? `, ${failed} com erro` : ""}.`,
     );
+    if (structuredWarn > 0) {
+      toast.warning(`${structuredWarn} aviso(s) ao gravar dados estruturados (variantes/atributos). Produto salvo mesmo assim.`);
+    }
   }
 
   // ---- Agregações para os painéis de avisos/erros --------------------------
@@ -472,6 +484,8 @@ export function ImportadorProdutos() {
                   ["importDescription", "Importar descrição"],
                   ["descriptionInternalOnly", "Descrição só como referência interna"],
                   ["saveAsExternalSupplier", "Salvar como fornecedor externo"],
+                  ["scanVariants", "Varredura completa de variantes (mais requisições)"],
+                  ["copyImagesToStorage", "Copiar imagens para o Storage"],
                 ] as Array<[keyof ImporterOptions, string]>
               ).map(([key, label]) => (
                 <div key={key} className="flex items-center justify-between">
