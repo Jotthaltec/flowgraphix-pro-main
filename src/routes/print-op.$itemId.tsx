@@ -4,6 +4,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Printer, Loader2, Factory, Package, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+const db = supabase as any;
+
 export const Route = createFileRoute("/print-op/$itemId")({
   component: PrintOpPage,
 });
@@ -16,7 +18,7 @@ function PrintOpPage() {
     queryKey: ["print_op", itemId],
     queryFn: async () => {
       // 1. Busca Item, OP, Cliente e Produto
-      const { data: itemData, error: itemErr } = await supabase
+      const { data: itemData, error: itemErr } = await (db)
         .from("production_order_items")
         .select(`
           id, quantity, status,
@@ -32,10 +34,10 @@ function PrintOpPage() {
       if (itemErr) throw itemErr;
 
       // 2. Busca Ficha Técnica Preenchida
-      const { data: attrData, error: attrErr } = await supabase
+      const { data: attrData, error: attrErr } = await (db)
         .from("production_item_attributes")
         .select(`
-          attribute_value,
+          value,
           technical_attributes (name, code, technical_attribute_groups(name))
         `)
         .eq("production_order_item_id", itemId);

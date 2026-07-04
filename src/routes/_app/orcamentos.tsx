@@ -496,7 +496,7 @@ function OrcamentosPage() {
         title="Orçamentos" 
         description="Crie, envie e acompanhe orçamentos integrados ao catálogo" 
         action="Novo orçamento" 
-        onAction={() => { resetForm(); setIsModalOpen(true); }}
+        onAction={() => navigate({ to: '/novo-orcamento' })}
       />
       
       <Card className="p-4 mb-4">
@@ -532,6 +532,7 @@ function OrcamentosPage() {
               <TableHead>Número</TableHead>
               <TableHead>Cliente</TableHead>
               <TableHead className="hidden md:table-cell">Produto/Serviço</TableHead>
+              <TableHead className="hidden md:table-cell">Itens</TableHead>
               <TableHead className="hidden md:table-cell">Origem</TableHead>
               <TableHead>Valor Final</TableHead>
               <TableHead className="hidden lg:table-cell">Lucro</TableHead>
@@ -549,6 +550,11 @@ function OrcamentosPage() {
                 <TableCell className="font-mono font-semibold text-primary">{q.quote_number}</TableCell>
                 <TableCell className="font-medium">{q.clients?.name || "—"}</TableCell>
                 <TableCell className="hidden md:table-cell text-muted-foreground text-sm">{q.service_desc}</TableCell>
+                <TableCell className="hidden md:table-cell">
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-secondary">
+                    {quoteItemsMap?.[q.id]?.length || 1} item(ns)
+                  </span>
+                </TableCell>
                 <TableCell className="hidden md:table-cell">{getQuoteOriginBadge(q.id)}</TableCell>
                 <TableCell className="font-semibold">
                   {fmt.format(q.final_value)}

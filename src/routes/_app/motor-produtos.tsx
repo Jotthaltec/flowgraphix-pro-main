@@ -71,10 +71,10 @@ function MotorProdutosPage() {
       const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
       
       if (payload.id) {
-        const { error } = await supabase.from("technical_attribute_groups").update({ name: payload.name }).eq("id", payload.id);
+        const { error } = await (supabase as any).from("technical_attribute_groups").update({ name: payload.name }).eq("id", payload.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("technical_attribute_groups").insert([{ name: payload.name, company_id: profileData?.company_id }]);
+        const { error } = await (supabase as any).from("technical_attribute_groups").insert([{ name: payload.name, company_id: profileData?.company_id }]);
         if (error) throw error;
       }
     },
@@ -101,10 +101,10 @@ function MotorProdutosPage() {
       };
 
       if (payload.id) {
-        const { error } = await supabase.from("technical_attributes").update(dbPayload).eq("id", payload.id);
+        const { error } = await (supabase as any).from("technical_attributes").update(dbPayload).eq("id", payload.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("technical_attributes").insert([dbPayload]);
+        const { error } = await (supabase as any).from("technical_attributes").insert([dbPayload]);
         if (error) throw error;
       }
     },
@@ -118,7 +118,7 @@ function MotorProdutosPage() {
 
   // Mutations - Models
   const saveModelMutation = useMutation({
-    mutationFn: async (payload: typeof modelForm) => {
+    mutationFn: async (payload: { id?: string; name: string; description: string }) => {
       const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
       
       const dbPayload = {
@@ -126,12 +126,12 @@ function MotorProdutosPage() {
         description: payload.description,
         company_id: profileData?.company_id
       };
-
+      
       if (payload.id) {
-        const { error } = await supabase.from("product_models").update(dbPayload).eq("id", payload.id);
+        const { error } = await (supabase as any).from("product_models").update(dbPayload).eq("id", payload.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("product_models").insert([dbPayload]);
+        const { error } = await (supabase as any).from("product_models").insert([dbPayload]);
         if (error) throw error;
       }
     },

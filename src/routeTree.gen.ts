@@ -22,6 +22,7 @@ import { Route as AppProducaoRouteImport } from './routes/_app/producao'
 import { Route as AppPedidosCompraRouteImport } from './routes/_app/pedidos-compra'
 import { Route as AppPedidosRouteImport } from './routes/_app/pedidos'
 import { Route as AppOrcamentosRouteImport } from './routes/_app/orcamentos'
+import { Route as AppNovoOrcamentoRouteImport } from './routes/_app/novo-orcamento'
 import { Route as AppMotorProdutosRouteImport } from './routes/_app/motor-produtos'
 import { Route as AppLeadsRouteImport } from './routes/_app/leads'
 import { Route as AppHubFornecedoresRouteImport } from './routes/_app/hub-fornecedores'
@@ -98,6 +99,11 @@ const AppOrcamentosRoute = AppOrcamentosRouteImport.update({
   path: '/orcamentos',
   getParentRoute: () => AppRoute,
 } as any)
+const AppNovoOrcamentoRoute = AppNovoOrcamentoRouteImport.update({
+  id: '/novo-orcamento',
+  path: '/novo-orcamento',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppMotorProdutosRoute = AppMotorProdutosRouteImport.update({
   id: '/motor-produtos',
   path: '/motor-produtos',
@@ -170,6 +176,7 @@ export interface FileRoutesByFullPath {
   '/hub-fornecedores': typeof AppHubFornecedoresRoute
   '/leads': typeof AppLeadsRoute
   '/motor-produtos': typeof AppMotorProdutosRoute
+  '/novo-orcamento': typeof AppNovoOrcamentoRoute
   '/orcamentos': typeof AppOrcamentosRoute
   '/pedidos': typeof AppPedidosRoute
   '/pedidos-compra': typeof AppPedidosCompraRoute
@@ -195,6 +202,7 @@ export interface FileRoutesByTo {
   '/hub-fornecedores': typeof AppHubFornecedoresRoute
   '/leads': typeof AppLeadsRoute
   '/motor-produtos': typeof AppMotorProdutosRoute
+  '/novo-orcamento': typeof AppNovoOrcamentoRoute
   '/orcamentos': typeof AppOrcamentosRoute
   '/pedidos': typeof AppPedidosRoute
   '/pedidos-compra': typeof AppPedidosCompraRoute
@@ -222,6 +230,7 @@ export interface FileRoutesById {
   '/_app/hub-fornecedores': typeof AppHubFornecedoresRoute
   '/_app/leads': typeof AppLeadsRoute
   '/_app/motor-produtos': typeof AppMotorProdutosRoute
+  '/_app/novo-orcamento': typeof AppNovoOrcamentoRoute
   '/_app/orcamentos': typeof AppOrcamentosRoute
   '/_app/pedidos': typeof AppPedidosRoute
   '/_app/pedidos-compra': typeof AppPedidosCompraRoute
@@ -249,6 +258,7 @@ export interface FileRouteTypes {
     | '/hub-fornecedores'
     | '/leads'
     | '/motor-produtos'
+    | '/novo-orcamento'
     | '/orcamentos'
     | '/pedidos'
     | '/pedidos-compra'
@@ -274,6 +284,7 @@ export interface FileRouteTypes {
     | '/hub-fornecedores'
     | '/leads'
     | '/motor-produtos'
+    | '/novo-orcamento'
     | '/orcamentos'
     | '/pedidos'
     | '/pedidos-compra'
@@ -300,6 +311,7 @@ export interface FileRouteTypes {
     | '/_app/hub-fornecedores'
     | '/_app/leads'
     | '/_app/motor-produtos'
+    | '/_app/novo-orcamento'
     | '/_app/orcamentos'
     | '/_app/pedidos'
     | '/_app/pedidos-compra'
@@ -413,6 +425,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOrcamentosRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/novo-orcamento': {
+      id: '/_app/novo-orcamento'
+      path: '/novo-orcamento'
+      fullPath: '/novo-orcamento'
+      preLoaderRoute: typeof AppNovoOrcamentoRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/motor-produtos': {
       id: '/_app/motor-produtos'
       path: '/motor-produtos'
@@ -504,6 +523,7 @@ interface AppRouteChildren {
   AppHubFornecedoresRoute: typeof AppHubFornecedoresRoute
   AppLeadsRoute: typeof AppLeadsRoute
   AppMotorProdutosRoute: typeof AppMotorProdutosRoute
+  AppNovoOrcamentoRoute: typeof AppNovoOrcamentoRoute
   AppOrcamentosRoute: typeof AppOrcamentosRoute
   AppPedidosRoute: typeof AppPedidosRoute
   AppPedidosCompraRoute: typeof AppPedidosCompraRoute
@@ -524,6 +544,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppHubFornecedoresRoute: AppHubFornecedoresRoute,
   AppLeadsRoute: AppLeadsRoute,
   AppMotorProdutosRoute: AppMotorProdutosRoute,
+  AppNovoOrcamentoRoute: AppNovoOrcamentoRoute,
   AppOrcamentosRoute: AppOrcamentosRoute,
   AppPedidosRoute: AppPedidosRoute,
   AppPedidosCompraRoute: AppPedidosCompraRoute,

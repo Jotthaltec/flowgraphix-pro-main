@@ -14,6 +14,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TechnicalSheetEditor } from "@/components/production/technical-sheet-editor";
 
+const db = supabase as any;
+
 export const Route = createFileRoute("/_app/producao")({ component: ProducaoPage });
 
 const COLUMNS_ORDERS = [
@@ -63,7 +65,7 @@ function ProducaoPage() {
   const { data: factoryItems, isLoading: loadingFactory } = useQuery({
     queryKey: ["factory_production_items"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (db)
         .from("production_order_items")
         .select(`
           id, quantity, status, product_id,
@@ -89,15 +91,15 @@ function ProducaoPage() {
   const updateFactoryStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string, status: string }) => {
       // Busca status atual para registrar histórico
-      const { data: currentItem } = await supabase.from("production_order_items").select("status, production_order_id").eq("id", id).single();
+      const { data: currentItem } = await (db).from("production_order_items").select("status, production_order_id").eq("id", id).single();
       const oldStatus = currentItem?.status || 'aguardando';
 
-      const { error } = await supabase.from("production_order_items").update({ status }).eq("id", id);
+      const { error } = await (db).from("production_order_items").update({ status }).eq("id", id);
       if (error) throw error;
 
       // Registrar no histórico de produção
       const { data: userData } = await supabase.auth.getUser();
-      await supabase.from("production_history").insert([{
+      await (db).from("production_history").insert([{
         production_order_id: currentItem?.production_order_id,
         production_order_item_id: id,
         action: `Movido de "${oldStatus}" para "${status}"`,

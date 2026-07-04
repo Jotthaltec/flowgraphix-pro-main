@@ -1,8 +1,10 @@
 import { supabase } from "@/integrations/supabase/client";
 
+const db = supabase as any;
+
 export async function generateProductionOrderFromQuote(quoteId: string, companyId: string, profileId: string) {
   // 1. Verifica se já existe OP (Idempotência)
-  const { data: existingOP } = await supabase
+  const { data: existingOP } = await (db)
     .from("production_orders")
     .select("id, order_number")
     .eq("quote_id", quoteId)
@@ -12,7 +14,7 @@ export async function generateProductionOrderFromQuote(quoteId: string, companyI
     return { alreadyExisted: true, order_number: existingOP.order_number, id: existingOP.id };
   }
 
-  // 2. Busca o orçamento e os itens
+  // 2. Busca o orçamento e os itens (incluindo atributos escolhidos na venda)
   const { data: quote, error: qErr } = await supabase
     .from("quotes")
     .select("client_id, deadline, notes")
@@ -30,8 +32,8 @@ export async function generateProductionOrderFromQuote(quoteId: string, companyI
     throw new Error("Orçamento não possui itens para produzir.");
   }
 
-  // 3. Cria o Cabeçalho da OP (Gatilho no banco gera o order_number automaticamente)
-  const { data: newOP, error: opErr } = await supabase
+  // 3. Cria o Cabeçalho da OP
+  const { data: newOP, error: opErr } = await (db)
     .from("production_orders")
     .insert([{
       company_id: companyId,
@@ -47,7 +49,7 @@ export async function generateProductionOrderFromQuote(quoteId: string, companyI
 
   if (opErr || !newOP) throw new Error("Falha ao criar cabeçalho da OP: " + opErr?.message);
 
-  // 4. Mapear e criar os itens da OP e Etapas Padrão
+  // 4. Mapear e criar os itens da OP
   const productionItemsData = quoteItems.map(item => ({
     production_order_id: newOP.id,
     product_id: item.product_service_id,
@@ -55,17 +57,16 @@ export async function generateProductionOrderFromQuote(quoteId: string, companyI
     status: "aguardando"
   }));
 
-  const { data: insertedItems, error: itemsErr } = await supabase
+  const { data: insertedItems, error: itemsErr } = await (db)
     .from("production_order_items")
     .insert(productionItemsData)
     .select("id, product_id");
 
   if (itemsErr || !insertedItems) throw new Error("Falha ao criar itens da OP: " + itemsErr?.message);
 
-  // 5. Para cada item, gerar as etapas (Arte, Pré-impressão, Impressão, Acabamento, Expedição)
-  // Num cenário avançado, leríamos de um template do product_model_id, mas vamos gerar um fluxo universal.
+  // 5. Para cada item, gerar etapas padrão
   const stepsData: any[] = [];
-  insertedItems.forEach((pItem) => {
+  insertedItems.forEach((pItem: any) => {
     const defaultSteps = [
       { step_name: "Arte e Aprovação", order_index: 1 },
       { step_name: "Pré-impressão", order_index: 2 },
@@ -84,14 +85,48 @@ export async function generateProductionOrderFromQuote(quoteId: string, companyI
   });
 
   if (stepsData.length > 0) {
-    await supabase.from("production_steps").insert(stepsData);
+    await (db).from("production_steps").insert(stepsData);
   }
 
-  // 6. Registro no Histórico
-  await supabase.from("production_history").insert([{
+  // 6. NOVO: Transferir atributos do orçamento para a ficha técnica da produção
+  // Busca os atributos técnicos para resolver code -> id
+  const { data: techAttrs } = await (db)
+    .from("technical_attributes")
+    .select("id, code");
+
+  const attrCodeToId: Record<string, string> = {};
+  (techAttrs || []).forEach((a: any) => { attrCodeToId[a.code] = a.id; });
+
+  const attrInserts: any[] = [];
+  quoteItems.forEach((qItem: any, idx: number) => {
+    const pItem = insertedItems[idx];
+    if (!pItem) return;
+
+    // Ler item_attributes JSONB do quote_item
+    const itemAttrs = qItem.item_attributes;
+    if (itemAttrs && itemAttrs.values && typeof itemAttrs.values === 'object') {
+      Object.entries(itemAttrs.values).forEach(([code, value]) => {
+        const attrId = attrCodeToId[code];
+        if (attrId && value !== undefined && value !== null && value !== "") {
+          attrInserts.push({
+            production_order_item_id: pItem.id,
+            attribute_id: attrId,
+            value: String(value)
+          });
+        }
+      });
+    }
+  });
+
+  if (attrInserts.length > 0) {
+    await (db).from("production_item_attributes").insert(attrInserts);
+  }
+
+  // 7. Registro no Histórico
+  await (db).from("production_history").insert([{
     production_order_id: newOP.id,
     action: "OP Criada",
-    notes: `Criada automaticamente após aprovação do orçamento.`,
+    notes: `Criada automaticamente após aprovação do orçamento. ${attrInserts.length} atributo(s) técnico(s) transferidos da venda.`,
     actor_id: profileId
   }]);
 
