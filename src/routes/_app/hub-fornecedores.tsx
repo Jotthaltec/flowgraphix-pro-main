@@ -1,10 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/page-header";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card } from "@/components/ui/card";
-import { Link2, PackageOpen, Globe, Cpu, ShoppingCart, Settings } from "lucide-react";
-import { ImportarLink } from "@/components/hub/importar-link";
+import { PackageOpen, Globe, Cpu, ShoppingCart, Settings, Sparkles } from "lucide-react";
 import { ProdutosImportados } from "@/components/hub/produtos-importados";
 import { CatalogoFornecedores } from "@/components/hub/catalogo-fornecedores";
 import { RegrasMapeamento } from "@/components/hub/regras-mapeamento";
@@ -16,23 +15,28 @@ export const Route = createFileRoute("/_app/hub-fornecedores")({
 });
 
 function HubFornecedoresPage() {
-  const [activeTab, setActiveTab] = useState("importar");
+  const [activeTab, setActiveTab] = useState("produtos");
   const navigate = useNavigate();
 
   return (
     <div className="flex flex-col space-y-6">
       <PageHeader
         title="Hub de Fornecedores"
-        description="Importe produtos gráficos por link ou catálogo, gerencie regras de extração e publique em múltiplos marketplaces."
+        description="Gerencie fornecedores, produtos importados e publique seus anúncios em múltiplos marketplaces."
+        action={
+          <Button
+            onClick={() => navigate({ to: "/produtos/importar" })}
+            className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white border-0"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            Importar por link
+          </Button>
+        }
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-4">
         <div className="flex items-center justify-between border-b pb-2 overflow-x-auto">
           <TabsList className="bg-muted/50 p-1 rounded-lg">
-            <TabsTrigger value="importar" className="flex items-center gap-2 text-xs md:text-sm">
-              <Link2 className="h-4 w-4 text-primary" />
-              <span>Importar por Link</span>
-            </TabsTrigger>
             <TabsTrigger value="produtos" className="flex items-center gap-2 text-xs md:text-sm">
               <PackageOpen className="h-4 w-4 text-emerald-500" />
               <span>Produtos Importados</span>
@@ -55,10 +59,6 @@ function HubFornecedoresPage() {
             </TabsTrigger>
           </TabsList>
         </div>
-
-        <TabsContent value="importar" className="space-y-4 outline-none">
-          <ImportarLink onNavigateToProducts={() => navigate({ to: "/produtos" })} onNavigateToDrafts={() => setActiveTab("rascunhos")} />
-        </TabsContent>
 
         <TabsContent value="produtos" className="space-y-4 outline-none">
           <ProdutosImportados onNavigateToDrafts={() => setActiveTab("rascunhos")} />

@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Search, MoreVertical, Loader2, Edit, Trash2, Copy, FilePlus2, Tag, Package, Store, Truck, Hand, Layers, Globe, Plus, Link2, Sparkles } from "lucide-react";
+import { Search, MoreVertical, Loader2, Edit, Trash2, Copy, FilePlus2, Tag, Package, Store, Truck, Hand, Layers, Plus, Sparkles } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { MarketplaceVariationsModal } from "@/components/hub/marketplace-variations-modal";
 import { DialogDescription } from "@/components/ui/dialog";
 import { ProductEditor } from "@/components/products/product-editor";
-import { ImportarLink } from "@/components/hub/importar-link";
 
 export const Route = createFileRoute("/_app/produtos")({ component: ProdutosPage });
 
@@ -79,7 +78,6 @@ function ProdutosPage() {
   const [filterType, setFilterType] = useState("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [isLinkImportModalOpen, setIsLinkImportModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [marketplaceProduct, setMarketplaceProduct] = useState<Product | null>(null);
   const [deleteConfirmProduct, setDeleteConfirmProduct] = useState<Product | null>(null);
@@ -696,17 +694,17 @@ function ProdutosPage() {
               <div className="text-center p-8 border border-dashed rounded-lg">
                 <Package className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
                 <p className="text-muted-foreground mb-2 font-semibold">Nenhum produto capturado ainda.</p>
-                <p className="text-xs text-muted-foreground mb-4">Use o Hub de Fornecedores para importar produtos via link.</p>
-                <Button onClick={() => navigate({ to: "/hub-fornecedores" })}>
-                  <Globe className="h-4 w-4 mr-2" />
-                  Ir para Hub e Importar via Link
+                <p className="text-xs text-muted-foreground mb-4">Use o Importador por Link para trazer produtos do fornecedor.</p>
+                <Button onClick={() => navigate({ to: "/produtos/importar" })}>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Ir para o Importador por Link
                 </Button>
               </div>
             )}
           </div>
           <DialogFooter className="mt-4 pt-4 border-t">
-            <Button variant="ghost" onClick={() => navigate({ to: "/hub-fornecedores" })} className="mr-auto text-muted-foreground">
-              Não achou o que procurava? Importar via Link Web
+            <Button variant="ghost" onClick={() => navigate({ to: "/produtos/importar" })} className="mr-auto text-muted-foreground">
+              Não achou o que procurava? Importar por link
             </Button>
             <Button onClick={() => setIsImportModalOpen(false)}>Concluir</Button>
           </DialogFooter>
@@ -752,26 +750,6 @@ function ProdutosPage() {
         />
       )}
 
-      {/* Modal de Importação por Link */}
-      <Dialog open={isLinkImportModalOpen} onOpenChange={setIsLinkImportModalOpen}>
-        <DialogContent className="sm:max-w-6xl w-[95vw] h-[90vh] max-h-[90vh] overflow-y-auto p-0 gap-0 border-0 shadow-2xl rounded-2xl">
-          <div className="sticky top-0 z-50 bg-background/80 backdrop-blur-xl border-b px-6 py-4 flex items-center justify-between">
-            <DialogTitle className="flex items-center gap-2 text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-violet-600 to-indigo-600">
-              <Sparkles className="h-5 w-5 text-violet-600" />
-              Importação Mágica por Link
-            </DialogTitle>
-          </div>
-          <div className="p-6 bg-slate-50/50 dark:bg-slate-900/50 min-h-full">
-            <ImportarLink 
-              onNavigateToProducts={() => setIsLinkImportModalOpen(false)}
-              onNavigateToDrafts={() => {
-                setIsLinkImportModalOpen(false);
-                navigate({ to: "/hub-fornecedores" });
-              }}
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

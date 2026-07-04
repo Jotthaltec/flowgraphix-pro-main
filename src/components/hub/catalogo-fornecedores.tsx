@@ -12,9 +12,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/status-badge";
 import { 
   Plus, Loader2, Globe, Building2, Mail, Phone, 
-  Settings, Save, Trash2, Edit3, ShieldCheck, CheckSquare
+  Settings, Save, Trash2, Edit3, ShieldCheck, CheckSquare, UserCog
 } from "lucide-react";
 import { toast } from "sonner";
+import { PerfisForncedores } from "@/components/hub/perfis-fornecedores";
 
 export function CatalogoFornecedores() {
   const { user } = useAuth();
@@ -158,119 +159,15 @@ export function CatalogoFornecedores() {
     setOpenModal(true);
   };
 
-  // Cadastra alguns fornecedores mockados se a lista for vazia (Auto-inicialização!)
-  const seedSuppliers = useMutation({
-    mutationFn: async () => {
-      if (!user?.id) throw new Error("Usuário não autenticado.");
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("user_id", user.id)
-        .single();
-      
-      if (!profile?.company_id) throw new Error("Empresa do usuário não identificada.");
-
-      const defaults = [
-        { name: "Printi", domain: "printi.com.br", website_url: "https://www.printi.com.br", default_margin: 60 },
-        { name: "Zap Gráfica", domain: "zapgrafica.com.br", website_url: "https://www.zapgrafica.com.br", default_margin: 70 },
-        { name: "Atual Card", domain: "atualcard.com.br", website_url: "https://www.atualcard.com.br", default_margin: 55 },
-        { name: "Futura IM", domain: "futuraim.com.br", website_url: "https://www.futuraim.com.br", default_margin: 65 },
-        { name: "Futura Imbatível", domain: "futuraimbativel.com.br", website_url: "https://www.futuraimbativel.com.br", default_margin: 65 }
-      ];
-
-      for (const item of defaults) {
-        // Insere o fornecedor e obtém o registro criado
-        const { data: createdSupplier, error: supplierErr } = await supabase
-          .from("suppliers")
-          .insert({
-            company_id: profile.company_id,
-            name: item.name,
-            domain: item.domain,
-            website_url: item.website_url,
-            default_margin: item.default_margin,
-            status: "Ativo"
-          })
-          .select("id")
-          .single();
-
-        if (supplierErr) {
-          console.error(`Erro ao criar fornecedor padrão ${item.name}:`, supplierErr);
-          continue;
-        }
-
-        // Se for a Futura IM (qualquer um dos dois domínios), cadastra também as regras de mapeamento padrão correspondentes
-        if (item.domain === "futuraim.com.br" || item.domain === "futuraimbativel.com.br") {
-          const defaultRules: any[] = [
-            {
-              company_id: profile.company_id,
-              supplier_domain: item.domain,
-              field_key: "product_name",
-              extraction_method: "meta_tag",
-              selector: "og:title",
-              active: true
-            },
-            {
-              company_id: profile.company_id,
-              supplier_domain: item.domain,
-              field_key: "main_image_url",
-              extraction_method: "meta_tag",
-              selector: "og:image",
-              active: true
-            },
-            {
-              company_id: profile.company_id,
-              supplier_domain: item.domain,
-              field_key: "supplier_sku",
-              extraction_method: "meta_tag",
-              selector: "product:retailer_item_id",
-              active: true
-            },
-            {
-              company_id: profile.company_id,
-              supplier_domain: item.domain,
-              field_key: "current_price",
-              extraction_method: "meta_tag",
-              selector: "product:price:amount",
-              active: true
-            },
-            {
-              company_id: profile.company_id,
-              supplier_domain: item.domain,
-              field_key: "production_deadline",
-              extraction_method: "regex",
-              regex_pattern: "(\\d+)\\s*(?:dias|dia)\\s*úteis",
-              active: true
-            }
-          ];
-
-          for (const rule of defaultRules) {
-            const { error: ruleErr } = await supabase
-              .from("supplier_mapping_rules")
-              .insert(rule);
-            
-            if (ruleErr) {
-              console.error(`Erro ao criar regra de mapeamento para ${item.domain}:`, ruleErr);
-            }
-          }
-        }
-      }
-    },
-    onSuccess: () => {
-      toast.success("Fornecedores e regras de mapeamento padrão cadastrados com sucesso!");
-      queryClient.invalidateQueries({ queryKey: ["suppliers"] });
-      queryClient.invalidateQueries({ queryKey: ["supplier_mapping_rules"] });
-    },
-    onError: (err: any) => {
-      toast.error(`Erro na carga dos fornecedores: ${err.message}`);
-    }
-  });
-
   return (
     <Tabs defaultValue="fornecedores" className="w-full">
       <div className="flex justify-between items-center mb-4">
         <TabsList className="bg-muted p-1 rounded-lg">
           <TabsTrigger value="fornecedores" className="flex items-center gap-1.5 text-xs md:text-sm">
             <Building2 className="h-4 w-4" /> Fornecedores Vinculados
+          </TabsTrigger>
+          <TabsTrigger value="perfis" className="flex items-center gap-1.5 text-xs md:text-sm">
+            <UserCog className="h-4 w-4 text-violet-500" /> Perfis de Conta
           </TabsTrigger>
           <TabsTrigger value="catalogo" className="flex items-center gap-1.5 text-xs md:text-sm">
             <ShieldCheck className="h-4 w-4" /> Catálogo Autorizado (API)
@@ -394,16 +291,21 @@ export function CatalogoFornecedores() {
               </div>
             ) : (
               <div className="border border-dashed rounded-lg p-10 text-center flex flex-col items-center justify-center text-muted-foreground">
-                <Building2 className="h-10 w-10 text-muted-foreground/30 mb-3 animate-pulse" />
-                <h4 className="font-bold text-sm">Nenhum Fornecedor Encontrado</h4>
-                <p className="text-xs max-w-sm mt-1 mb-4">Cadastre parceiros gráficos de suprimentos ou crie os fornecedores nacionais padrão do mercado.</p>
-                <Button size="sm" variant="outline" className="border-purple-500/20 text-purple-500 hover:bg-purple-500/5" onClick={() => seedSuppliers.mutate()}>
-                  Cadastrar Fornecedores Padrão (ZAP, Printi, Atual)
+                <Building2 className="h-10 w-10 text-muted-foreground/30 mb-3" />
+                <h4 className="font-bold text-sm">Nenhum Fornecedor Cadastrado</h4>
+                <p className="text-xs max-w-sm mt-1 mb-4">Cadastre seus parceiros gráficos de suprimentos para vinculá-los aos produtos importados e habilitar a importação por link.</p>
+                <Button size="sm" onClick={() => { resetForm(); setOpenModal(true); }}>
+                  <Plus className="h-4 w-4 mr-1" /> Cadastrar Fornecedor
                 </Button>
               </div>
             )}
           </CardContent>
         </Card>
+      </TabsContent>
+
+      {/* TABS CONTENT: PERFIS DE CONTA */}
+      <TabsContent value="perfis" className="space-y-4 outline-none">
+        <PerfisForncedores />
       </TabsContent>
 
       {/* TABS CONTENT: CATÁLOGO AUTORIZADO */}

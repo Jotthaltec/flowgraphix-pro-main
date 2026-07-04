@@ -66,6 +66,8 @@ interface QueueItem {
   editName?: string;
   editCategory?: string;
   editSubcategory?: string;
+  /** Nossos dias de produção (somados aos do fornecedor). */
+  editOurProductionDays?: number;
   saved?: "created" | "updated" | "skipped";
 }
 
@@ -269,6 +271,11 @@ export function ImportadorProdutos() {
     }
     if (item.editCategory) p.classification.category = item.editCategory;
     if (item.editSubcategory) p.classification.subcategory = item.editSubcategory;
+    if (item.editOurProductionDays != null && p.production_time) {
+      p.production_time.our_production_days = item.editOurProductionDays;
+      p.production_time.total_production_days =
+        (p.production_time.production_days ?? 0) + item.editOurProductionDays;
+    }
     if (!options.importImages) p.images = [];
     if (!options.importPriceTiers) p.variants.forEach((v) => (v.price_tiers = []));
     if (!options.importTemplates) p.templates = [];
@@ -691,6 +698,45 @@ function PreviewCard({
                     <Input className="h-8 text-xs bg-muted" value={p.classification.production_sector} readOnly />
                   </div>
                 </div>
+
+                {/* Prazo: fornecedor (somente leitura) + nossos dias (editável) = total */}
+                {(() => {
+                  const supplierDays = p.production_time?.production_days ?? 0;
+                  const ourDays = item.editOurProductionDays ?? p.production_time?.our_production_days ?? 0;
+                  return (
+                    <div className="grid grid-cols-3 gap-2 mt-2 p-2 rounded-md bg-muted/30 border">
+                      <div>
+                        <Label className="text-[10px]">Prazo fornecedor (não editável)</Label>
+                        <Input
+                          className="h-8 text-xs bg-muted"
+                          readOnly
+                          value={
+                            p.production_time?.original_production_time ||
+                            (supplierDays ? `${supplierDays} dias` : "não informado")
+                          }
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px]">+ Nossos dias de produção</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          className="h-8 text-xs"
+                          value={ourDays}
+                          onChange={(e) => patch(item.id, { editOurProductionDays: parseInt(e.target.value) || 0 })}
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px]">= Prazo total ao cliente</Label>
+                        <Input
+                          className="h-8 text-xs bg-emerald-500/10 border-emerald-500/20 font-semibold text-emerald-700"
+                          readOnly
+                          value={`${supplierDays + ourDays} dias úteis${p.production_time?.freight_not_included ? " + frete" : ""}`}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {p.classification.segments.length > 0 && (
                   <p className="text-[10px] text-muted-foreground mt-1">

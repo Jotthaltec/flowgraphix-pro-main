@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -290,6 +291,7 @@ export function ProductEditor({
 }: ProductEditorProps) {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const isEditing = !!product?.id;
 
   const [tab, setTab] = useState<string>("basic");
@@ -612,7 +614,10 @@ export function ProductEditor({
 
   const reimportSupplier = () => {
     if (!f.source_url) { toast.error("Sem link do fornecedor para reimportar."); return; }
-    toast.info("Reimportação pelo Hub: configuração pendente. Use o Hub de Fornecedores para atualizar via link.");
+    // Encaminha para o importador real (aba "Atualizar preços" verifica o fornecedor pelo source_url).
+    toast.info("Abrindo o importador para atualizar este produto pelo fornecedor...");
+    onOpenChange(false);
+    navigate({ to: "/produtos/importar" });
   };
 
   /* ---------- render ---------- */

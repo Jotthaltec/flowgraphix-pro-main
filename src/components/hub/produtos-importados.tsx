@@ -16,7 +16,7 @@ import {
   RefreshCcw, Link2Off, Loader2, PackageX, FileSpreadsheet,
   Edit3, Save, Plus, Trash
 } from "lucide-react";
-import { fetchProductHtml } from "@/integrations/supabase/hub-actions";
+import { fetchSupplierPage } from "@/integrations/supabase/importer-actions";
 import { extractProductFromHtml } from "@/lib/supplier-extractor";
 import { toast } from "sonner";
 import { MarketplaceVariationsModal } from "@/components/hub/marketplace-variations-modal";
@@ -150,8 +150,9 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
       setEnrichingProductId(product.id);
       if (!product.source_url) throw new Error("Este produto não possui link de fornecedor vinculado.");
 
-      // 1. Fetch do HTML atualizado
-      const htmlRes = await fetchProductHtml({ data: { url: product.source_url } });
+      // 1. Fetch do HTML atualizado — fetcher seguro (anti-SSRF: HTTPS-only,
+      //    bloqueio de IPs/redes internas, allowlist de domínio, timeout e limite).
+      const htmlRes = await fetchSupplierPage({ data: { url: product.source_url } });
       if (!htmlRes.success || !htmlRes.html) {
         throw new Error(htmlRes.error || "Não foi possível obter o conteúdo do fornecedor.");
       }

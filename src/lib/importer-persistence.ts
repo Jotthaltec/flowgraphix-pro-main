@@ -10,6 +10,7 @@ import type { ImportedProduct } from "@/types/importedProduct";
 import { buildProductRow, type BuildProductRowOptions } from "@/services/productImporterService";
 import { persistStructured } from "@/lib/importer-structured-persistence";
 import { copyImagesToStorage } from "@/lib/importer-image-storage";
+import { resolveSupplierByUrl } from "@/lib/supplier-link";
 
 export interface PersistOptions extends Omit<BuildProductRowOptions, "companyId"> {
   companyId: string;
@@ -56,7 +57,27 @@ export async function persistImportedProduct(
   product: ImportedProduct,
   opts: PersistOptions,
 ): Promise<PersistResult> {
-  const row = buildProductRow(product, opts);
+  // Fase 3 — vínculo produto↔fornecedor: se o chamador não informou um
+  // supplierId explícito, encontra/cria o fornecedor pelo domínio do link de
+  // origem. Garante que todo produto importado fique ligado a um `suppliers`
+  // real (base da compra assistida). Best-effort: nunca derruba a importação.
+  let effectiveOpts = opts;
+  if (!opts.supplierId) {
+    try {
+      const resolved = await resolveSupplierByUrl(opts.companyId, product.source_url, product.supplier);
+      if (resolved) {
+        effectiveOpts = {
+          ...opts,
+          supplierId: resolved.id,
+          supplierName: opts.supplierName ?? resolved.name,
+        };
+      }
+    } catch {
+      // segue sem o vínculo; o produto ainda é salvo com supplier_name textual.
+    }
+  }
+
+  const row = buildProductRow(product, effectiveOpts);
   const existingId = await findExisting(product, opts.companyId);
 
   if (existingId && !opts.updateExisting) {

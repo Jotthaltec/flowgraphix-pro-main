@@ -161,6 +161,17 @@ Custo do fornecedor, preço de venda e margem permanecem **separados**; o preço
 
 **46 testes** (2 novos de varredura); `tsc --noEmit` = 0; build OK.
 
+## 14f. Prazo de produção: fornecedor + nossos dias (entregue)
+
+A FuturaIM expõe o prazo na ficha como `Prazo de produção … 3 dias úteis + frete`, mas `úteis` vem como entidade HTML (`&#xFA;teis`) — por isso antes não era capturado. Agora o parser decodifica e extrai `production_days`, `business_days` e `freight_not_included` (validado: Rifa=3, Cartão=2).
+
+Na tela de importação, cada produto mostra:
+- **Prazo fornecedor** (somente leitura, coletado).
+- **+ Nossos dias de produção** (editável).
+- **= Prazo total ao cliente** (fornecedor + nossos), gravado em `products.production_deadline` via `buildDeadlineText`.
+
+Entrega/retirada não têm dias numéricos publicados (entrega depende do frete; retirada = "Balcões de Retirada"), então capturamos a flag `freight_not_included` e o texto original. **48 testes**; tsc 0; build OK.
+
 ## 15. Melhorias futuras
 
 - Ligar `buildProductRow` + novas tabelas (variants/tiers/images/extras) com upsert por `computeDedupKeys`.

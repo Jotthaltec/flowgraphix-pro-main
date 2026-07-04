@@ -186,10 +186,15 @@ export interface ImportedClassification {
 
 /** Prazo de produção decomposto (seção 19). */
 export interface ImportedProductionTime {
+  /** Dias de produção do FORNECEDOR (coletado, somente leitura). */
   production_days?: number;
   production_day_type?: "business_days" | "calendar_days";
   freight_not_included?: boolean;
   original_production_time?: string;
+  /** Nossos dias de produção (editável pelo usuário) — somados aos do fornecedor. */
+  our_production_days?: number;
+  /** Total = fornecedor + nossos (calculado). */
+  total_production_days?: number;
 }
 
 // ---------------------------------------------------------------------------

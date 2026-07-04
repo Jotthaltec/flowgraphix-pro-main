@@ -52,7 +52,7 @@ function ContratosPage() {
         .from("contracts")
         .select(`
           *,
-          clients:client_id (name, document, address)
+          clients:client_id (name, document, address, whatsapp)
         `)
         .order("created_at", { ascending: false });
       
@@ -126,6 +126,39 @@ function ContratosPage() {
     setTimeout(() => {
       window.print();
     }, 100);
+  };
+
+  // Marca o contrato como enviado ao disparar a mensagem (apenas se ainda em rascunho).
+  const sendMutation = useMutation({
+    mutationFn: async (contract: any) => {
+      if (contract.status && contract.status !== "rascunho") return;
+      const { error } = await supabase.from("contracts").update({ status: "enviado" }).eq("id", contract.id);
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["contracts"] }),
+    onError: (err: any) => toast.error("Não foi possível atualizar o status: " + err.message),
+  });
+
+  const handleSendContract = (contract: any) => {
+    if (!contract) return;
+    const valor = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(contract.total_value || 0);
+    const msg =
+      `Olá ${contract.clients?.name || ""}! Segue o contrato *${contract.contract_number}* ` +
+      `referente a "${contract.notes || "serviços gráficos"}" no valor de *${valor}*. ` +
+      `Prazo de entrega: ${contract.delivery_date || "a combinar"}. ` +
+      `Por favor, confirme a leitura e o aceite para iniciarmos a produção.`;
+    const digits = (contract.clients?.whatsapp || "").replace(/\D/g, "");
+    const phone = digits ? (digits.length <= 11 ? `55${digits}` : digits) : "";
+    const url = phone
+      ? `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`
+      : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    window.open(url, "_blank");
+    sendMutation.mutate(contract);
+    toast.success(
+      phone
+        ? "Contrato aberto no WhatsApp do cliente. Status atualizado para 'enviado'."
+        : "Contrato aberto no WhatsApp (selecione o contato). Status atualizado para 'enviado'."
+    );
   };
 
   return (
@@ -239,8 +272,8 @@ function ContratosPage() {
               <Button variant="outline" size="sm" className="flex-1" disabled={!selectedContract} onClick={() => handlePrint(selectedContract)}>
                 <Download className="h-3.5 w-3.5 mr-1" /> Imprimir / PDF
               </Button>
-              <Button size="sm" className="flex-1" disabled={!selectedContract} onClick={() => toast.info("Integração de envio via WhatsApp/Email em breve.")}>
-                <Send className="h-3.5 w-3.5 mr-1" /> Enviar
+              <Button size="sm" className="flex-1" disabled={!selectedContract || sendMutation.isPending} onClick={() => handleSendContract(selectedContract)}>
+                {sendMutation.isPending ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Send className="h-3.5 w-3.5 mr-1" />} Enviar
               </Button>
             </div>
           </Card>

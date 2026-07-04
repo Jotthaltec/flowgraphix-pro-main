@@ -62,6 +62,38 @@ describe("FuturaIM — páginas reais (classificação)", () => {
     });
   }
 
+  it("Rifa Personalizada extrai TODOS os eixos (Material, Formato, Cor, Enobrecimento, Acabamento)", () => {
+    const p = parseFuturaImProduct(fixture("futuraim-rifa.html"), "https://www.futuraim.com.br/produto/rifa-personalizada?id=112791");
+    const axes = p.variant_axes.map((a) => a.normalized_name);
+    expect(axes).toContain("material");
+    expect(axes).toContain("formato");
+    expect(axes).toContain("cor");
+    expect(axes).toContain("enobrecimento");
+    expect(axes).toContain("acabamento");
+    // cada eixo tem ao menos 1 valor não vazio
+    for (const a of p.variant_axes) {
+      expect(a.options.length).toBeGreaterThan(0);
+      expect(a.options.every((o) => o.value.trim().length > 0)).toBe(true);
+    }
+    // specs derivadas refletem os eixos selecionados
+    const specNames = p.specifications.map((s) => s.normalized_name);
+    expect(specNames).toContain("material");
+    expect(specNames).toContain("cor");
+  });
+
+  it("extrai prazo de produção do fornecedor (dias úteis + frete)", () => {
+    const rifa = parseFuturaImProduct(fixture("futuraim-rifa.html"), "https://www.futuraim.com.br/produto/rifa-personalizada?id=112791");
+    expect(rifa.production_time?.production_days).toBe(3);
+    expect(rifa.production_time?.production_day_type).toBe("business_days");
+    expect(rifa.production_time?.freight_not_included).toBe(true);
+
+    const cartao = parseFuturaImProduct(
+      fixture("futuraim-cartao-de-visita.html"),
+      "https://www.futuraim.com.br/produto/cartao?id=4627",
+    );
+    expect(cartao.production_time?.production_days).toBe(2);
+  });
+
   it("DTF UV não é classificado como DTF Têxtil (seção 32)", () => {
     const p = parseFuturaImProduct(fixture("futuraim-dtf-uv.html"), "https://www.futuraim.com.br/produto/dtf-uv?id=87625");
     expect(p.classification.subcategory).not.toBe("DTF Têxtil");

@@ -128,6 +128,31 @@ export interface BuildProductRowOptions {
  * Importante: nenhuma faixa de preço é fabricada — usamos apenas as tiragens
  * realmente coletadas.
  */
+/**
+ * Calcula o prazo total: dias do FORNECEDOR (coletado) + NOSSOS dias (editável).
+ * Retorna { supplierDays, ourDays, totalDays }.
+ */
+export function computeDeadlineDays(product: ImportedProduct): {
+  supplierDays: number;
+  ourDays: number;
+  totalDays: number;
+} {
+  const pt = product.production_time;
+  const supplierDays = pt?.production_days ?? 0;
+  const ourDays = pt?.our_production_days ?? 0;
+  return { supplierDays, ourDays, totalDays: supplierDays + ourDays };
+}
+
+/** Texto do prazo para gravar em `products.production_deadline`. */
+export function buildDeadlineText(product: ImportedProduct): string | null {
+  const pt = product.production_time;
+  if (!pt) return null;
+  const { supplierDays, ourDays, totalDays } = computeDeadlineDays(product);
+  const supplierLabel = pt.original_production_time || (supplierDays ? `${supplierDays} dias` : "—");
+  if (!ourDays) return supplierLabel;
+  return `Total: ${totalDays} dias (fornecedor ${supplierDays} + nossos ${ourDays})${pt.freight_not_included ? " + frete" : ""}`;
+}
+
 export function buildProductRow(product: ImportedProduct, opts: BuildProductRowOptions) {
   const margin = opts.marginPercent ?? 50;
   const factor = 1 + margin / 100;
@@ -175,9 +200,10 @@ export function buildProductRow(product: ImportedProduct, opts: BuildProductRowO
     quantity_price_table: quantityPriceTable,
     quantity_prices: quantityPriceTable,
     specifications,
-    production_deadline: product.production_time?.original_production_time ?? null,
-    review_required: product.classification.review_required,
-    classification_confidence: product.classification.confidence,
+    production_deadline: buildDeadlineText(product),
+    // review_required/classification_confidence vivem no grafo estruturado
+    // (product_category_mappings) — não gravamos em `products` para não exigir
+    // colunas que podem não existir no banco antes da migration.
     status: "Ativo",
     imported_from_supplier: false,
   };

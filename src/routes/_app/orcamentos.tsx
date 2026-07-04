@@ -316,14 +316,69 @@ function OrcamentosPage() {
     mutationFn: async ({ id, status }: { id: string, status: string }) => {
       const { error } = await supabase.from("quotes").update({ status }).eq("id", id);
       if (error) throw error;
-      
-      if (status === 'convertido_pedido') {
-        toast.info("Em breve: Criação de pedido automático e redirecionamento.");
+
+      if (status !== 'convertido_pedido') {
+        return { converted: false as const };
       }
+
+      // Conversão real em pedido. Evita duplicar caso já exista pedido para este orçamento.
+      const { data: existingOrder } = await supabase
+        .from("orders")
+        .select("id")
+        .eq("quote_id", id)
+        .maybeSingle();
+      if (existingOrder?.id) {
+        return { converted: true as const, alreadyExisted: true };
+      }
+
+      // Carrega o orçamento completo para montar o pedido.
+      const { data: quote, error: qErr } = await supabase
+        .from("quotes")
+        .select("*")
+        .eq("id", id)
+        .single();
+      if (qErr) throw qErr;
+      if (!quote.client_id) {
+        throw new Error("Defina um cliente no orçamento antes de convertê-lo em pedido.");
+      }
+
+      // Numeração sequencial coerente com a aba Pedidos (PED-000000).
+      const { count } = await supabase.from("orders").select("*", { count: "exact", head: true });
+      const oNum = `PED-${String((count || 0) + 1).padStart(6, '0')}`;
+      const deadline =
+        quote.deadline ||
+        quote.valid_until ||
+        new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+      const { error: orderErr } = await supabase.from("orders").insert([{
+        company_id: quote.company_id,
+        client_id: quote.client_id,
+        quote_id: quote.id,
+        order_number: oNum,
+        product_desc: quote.quantity ? `${quote.service_desc} (x${quote.quantity})` : quote.service_desc,
+        total_value: quote.final_value,
+        deadline,
+        priority: "normal",
+        payment_status: 'nao_pago',
+        production_status: 'pedido_criado',
+      }]);
+      if (orderErr) throw orderErr;
+
+      return { converted: true as const, alreadyExisted: false };
     },
-    onSuccess: (_, variables) => {
+    onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: ["quotes"] });
-      toast.success(`Orçamento marcado como ${variables.status.replace("_", " ")}`);
+      if (result.converted) {
+        queryClient.invalidateQueries({ queryKey: ["orders"] });
+        toast.success(
+          result.alreadyExisted
+            ? "Este orçamento já possuía um pedido. Abrindo a fila de Pedidos..."
+            : "Pedido criado a partir do orçamento! Produção e Financeiro atualizados."
+        );
+        navigate({ to: "/pedidos" });
+      } else {
+        toast.success(`Orçamento marcado como ${variables.status.replace("_", " ")}`);
+      }
     },
     onError: (err) => toast.error("Erro ao alterar: " + err.message)
   });

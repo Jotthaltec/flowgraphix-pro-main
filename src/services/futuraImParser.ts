@@ -187,33 +187,52 @@ export function extractVariantAxes(html: string): ImportedVariantAxis[] {
     if (!v) return;
     const axis = ensure(axisName);
     const external_id = url ? externalIdFromUrl(url) : undefined;
-    if (axis.options.some((o) => o.normalized_value === normalizeKey(v))) return;
-    axis.options.push({ value: v, normalized_value: normalizeKey(v), external_id, url, selected });
+    const nv = normalizeKey(v);
+    const existing = axis.options.find((o) => o.normalized_value === nv);
+    if (existing) {
+      // Mescla: preenche o id/url quando ainda não havia (a FuturaIM expõe o
+      // mesmo valor em um botão sem link e em um <a> oculto com o id real).
+      if (!existing.external_id && external_id) {
+        existing.external_id = external_id;
+        existing.url = url;
+      }
+      if (selected) existing.selected = true;
+      return;
+    }
+    axis.options.push({ value: v, normalized_value: nv, external_id, url, selected });
   }
 
-  // 1) <select data-type=Formato ...><option value="/produto/...id=N"> Label
+  // 1) <select data-type=Eixo ...> — inclui opção única (texto mesmo sem id).
   const selRe = /<select[^>]*data-type=["']?([^"'\s>]+)["']?[^>]*>([\s\S]*?)<\/select>/gi;
   let sm: RegExpExecArray | null;
   while ((sm = selRe.exec(html))) {
     const axisName = stripTags(sm[1]);
-    const optRe = /<option[^>]*value=["']([^"']*id=\d+[^"']*)["'][^>]*>\s*([^<]+?)\s*(?=<|$)/gi;
+    const optRe = /<option\b([^>]*)>\s*([^<]*?)\s*(?=<|$)/gi;
     let om: RegExpExecArray | null;
     while ((om = optRe.exec(sm[2]))) {
-      addOption(axisName, om[2], om[1]);
+      const attrs = om[1];
+      const text = om[2];
+      if (!text) continue;
+      const urlM = attrs.match(/value=["']([^"']*\?id=\d+[^"']*)["']/i);
+      const selected = /\bselected\b/i.test(attrs);
+      addOption(axisName, text, urlM ? urlM[1] : undefined, selected);
     }
   }
 
-  // 2) Links/botões com title="Ver produto (no|na|com|em) <Eixo> <Valor>" + id.
-  //    Ex.: "Ver produto no Material Couché Fosco 300g"
-  //         "Ver produto com Cor 4x0 - Colorido Frente"
-  const titleRe =
-    /title=["']Ver produto (?:no|na|com|em)\s+([A-Za-zÀ-ú]+)\s+([^"']+)["'][^>]*(?:href|onclick)=["']?[^"']*?(\/produto\/[^"'?]*\?id=\d+|[^"']*id=\d+)/gi;
+  // 2) Qualquer <a>/<button> com title="Ver produto (no|na|com|em) <Eixo> <Valor>".
+  //    O id pode estar em href/onclick/value, em QUALQUER ordem dentro do tag
+  //    (a FuturaIM costuma colocar o href ANTES do title). Botões ativos não têm
+  //    link, mas há um <a> oculto com o mesmo título e o id real.
+  const tagRe = /<(?:a|button)\b([^>]*\btitle=["']Ver produto (?:no|na|com|em)\s+([A-Za-zÀ-ú]+)\s+([^"']+)["'][^>]*)>/gi;
   let tm: RegExpExecArray | null;
-  while ((tm = titleRe.exec(html))) {
-    const axisName = stripTags(tm[1]);
-    const value = stripTags(tm[2]);
-    const url = tm[3];
-    addOption(axisName, value, url);
+  while ((tm = tagRe.exec(html))) {
+    const attrs = tm[1];
+    const axisName = stripTags(tm[2]);
+    const value = stripTags(tm[3]);
+    const urlM = attrs.match(/(\/produto\/[^"'\s]*\?id=\d+)/i) || attrs.match(/[?&]id=\d+/i);
+    const url = urlM ? urlM[0] : undefined;
+    const selected = /\bactive\b|aria-current/i.test(attrs);
+    addOption(axisName, value, url, selected);
   }
 
   return [...axes.values()].filter((a) => a.options.length > 0);
@@ -385,15 +404,23 @@ export function parseFuturaImProduct(html: string, sourceUrl: string): ImportedP
     normalized_value: normalizeKey(v),
   }));
 
-  // Prazo de produção (seção 19) — frequentemente renderizado via JS na FuturaIM.
+  // Prazo de produção (seção 19). A FuturaIM expõe na ficha:
+  //   <th>Prazo de produção<td><strong> 3 dias &#xFA;teis + frete ...
+  // ("úteis" vem como entidade HTML, por isso decodificamos antes de casar).
   let production_time;
-  const deadlineM =
-    html.match(/(\d+\s*dias?\s*[úu]teis(?:\s*\+\s*frete)?)/i) ||
-    html.match(/prazo[^<]{0,40}?(\d+\s*dias?[^<]{0,12})/i);
-  if (deadlineM) {
-    production_time = parseProductionTime(deadlineM[1]);
+  let prazoText = "";
+  const labelM = html.match(/Prazo de produ[\s\S]{0,80}?<strong[^>]*>([^<]+)<\/strong>/i);
+  if (labelM) {
+    prazoText = cleanText(decodeEntities(labelM[1]));
+  }
+  if (!prazoText) {
+    const dm = decodeEntities(html).match(/(\d+\s*dias?\s*(?:[úu]teis|corridos?)(?:\s*\+\s*frete)?)/i);
+    if (dm) prazoText = dm[1];
+  }
+  if (prazoText) {
+    production_time = parseProductionTime(prazoText);
   } else {
-    warnings.push("Prazo de produção não está no HTML estático (provável renderização via JavaScript).");
+    warnings.push("Prazo de produção não encontrado no HTML.");
   }
 
   // Imagens / extras

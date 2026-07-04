@@ -12,7 +12,7 @@ import { AtualizarPrecos } from "@/components/products/atualizar-precos";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 
-export const Route = createFileRoute("/_app/produtos/importar")({
+export const Route = createFileRoute("/_app/produtos_/importar")({
   component: ImportarProdutosPage,
 });
 
