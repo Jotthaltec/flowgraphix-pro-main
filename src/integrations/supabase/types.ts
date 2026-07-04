@@ -1,4 +1,4 @@
-﻿export type Json =
+export type Json =
   | string
   | number
   | boolean
@@ -11,6 +11,31 @@ export type Database = {
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
@@ -1439,79 +1464,93 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "purchase_order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "purchase_order_items_purchase_order_id_fkey"
             columns: ["purchase_order_id"]
             isOneToOne: false
             referencedRelation: "purchase_orders"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "purchase_order_items_quote_item_id_fkey"
+            columns: ["quote_item_id"]
+            isOneToOne: false
+            referencedRelation: "quote_items"
+            referencedColumns: ["id"]
+          },
         ]
       }
       purchase_orders: {
         Row: {
+          actual_cost: number | null
           company_id: string
           created_at: string
           delivery_snapshot: Json | null
+          expected_delivery: string | null
           id: string
           notes: string | null
           order_id: string | null
           po_number: string
+          purchase_notes: string | null
+          purchased_at: string | null
           quote_id: string | null
           receiving_mode: string | null
           status: string
           supplier_account_id: string | null
           supplier_id: string | null
-          actual_cost: number | null
-          expected_delivery: string | null
-          purchase_notes: string | null
-          purchased_at: string | null
           supplier_order_number: string | null
-          tracking_code: string | null
           total_cost: number
+          tracking_code: string | null
           updated_at: string
         }
         Insert: {
+          actual_cost?: number | null
           company_id: string
           created_at?: string
           delivery_snapshot?: Json | null
+          expected_delivery?: string | null
           id?: string
           notes?: string | null
           order_id?: string | null
           po_number: string
+          purchase_notes?: string | null
+          purchased_at?: string | null
           quote_id?: string | null
           receiving_mode?: string | null
           status?: string
           supplier_account_id?: string | null
           supplier_id?: string | null
-          actual_cost?: number | null
-          expected_delivery?: string | null
-          purchase_notes?: string | null
-          purchased_at?: string | null
           supplier_order_number?: string | null
-          tracking_code?: string | null
           total_cost?: number
+          tracking_code?: string | null
           updated_at?: string
         }
         Update: {
+          actual_cost?: number | null
           company_id?: string
           created_at?: string
           delivery_snapshot?: Json | null
+          expected_delivery?: string | null
           id?: string
           notes?: string | null
           order_id?: string | null
           po_number?: string
+          purchase_notes?: string | null
+          purchased_at?: string | null
           quote_id?: string | null
           receiving_mode?: string | null
           status?: string
           supplier_account_id?: string | null
           supplier_id?: string | null
-          actual_cost?: number | null
-          expected_delivery?: string | null
-          purchase_notes?: string | null
-          purchased_at?: string | null
           supplier_order_number?: string | null
-          tracking_code?: string | null
           total_cost?: number
+          tracking_code?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -1527,6 +1566,27 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_orders_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_orders_supplier_account_id_fkey"
+            columns: ["supplier_account_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_orders_supplier_account_id_fkey"
+            columns: ["supplier_account_id"]
+            isOneToOne: false
+            referencedRelation: "supplier_accounts_safe"
             referencedColumns: ["id"]
           },
           {
@@ -2396,6 +2456,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       contract_status: [
