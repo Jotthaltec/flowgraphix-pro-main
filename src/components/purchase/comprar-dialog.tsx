@@ -215,12 +215,12 @@ export function ComprarDialog({
         </DialogHeader>
 
         <div className="space-y-5">
-          {/* Ação principal */}
+          {/* Ação principal — abrir site conectado + checklist pronto */}
           <div className="flex flex-wrap gap-2">
             {po.suppliers?.website_url && (
               <Button asChild>
                 <a href={po.suppliers.website_url} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="h-4 w-4 mr-1.5" /> Abrir site do fornecedor
+                  <ExternalLink className="h-4 w-4 mr-1.5" /> Abrir site e enviar pedido
                 </a>
               </Button>
             )}
@@ -233,6 +233,11 @@ export function ComprarDialog({
           <section className="rounded-lg border p-3">
             <p className="text-sm font-medium mb-2 flex items-center gap-1.5">
               <KeyRound className="h-4 w-4" /> Conta no fornecedor
+              {account
+                ? account.has_password
+                  ? <StatusBadge variant="success">conectado</StatusBadge>
+                  : <StatusBadge variant="warning">login sem senha</StatusBadge>
+                : <StatusBadge variant="muted">não conectado</StatusBadge>}
             </p>
             {account ? (
               <div className="space-y-1">

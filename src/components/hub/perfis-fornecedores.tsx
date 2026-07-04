@@ -15,14 +15,11 @@ import {
 import {
   Tabs, TabsContent, TabsList, TabsTrigger
 } from "@/components/ui/tabs";
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
-} from "@/components/ui/table";
 import { StatusBadge } from "@/components/status-badge";
 import {
-  Plus, Loader2, Building2, Mail, Phone, MapPin, KeyRound,
+  Loader2, Building2, Mail, MapPin, KeyRound,
   UserCircle2, Truck, Clipboard, CheckCircle2, CircleDot,
-  WifiOff, Copy, Save
+  WifiOff, Copy, Save, ExternalLink, Link2, PlugZap, Trash2
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -116,19 +113,31 @@ const emptyForm = {
 
 type FormState = typeof emptyForm;
 
-// ─── Helper: status da conta ──────────────────────────────────────────────
+// ─── Helper: status da conexão ────────────────────────────────────────────
 
-function accountStatus(acc: SupplierAccountSafe | undefined): {
+type ConnState = "connected" | "partial" | "none";
+
+function connectionStatus(acc: SupplierAccountSafe | undefined): {
+  state: ConnState;
   variant: "success" | "warning" | "muted";
   label: string;
   icon: React.ReactNode;
 } {
-  if (!acc) return { variant: "muted", label: "Sem perfil", icon: <WifiOff className="h-3 w-3" /> };
-  if (acc.registration_email && acc.login_username && acc.has_password)
-    return { variant: "success", label: "Completo", icon: <CheckCircle2 className="h-3 w-3" /> };
-  if (acc.registration_email || acc.login_username)
-    return { variant: "warning", label: "Incompleto", icon: <CircleDot className="h-3 w-3" /> };
-  return { variant: "muted", label: "Sem perfil", icon: <WifiOff className="h-3 w-3" /> };
+  // "Conectado" = já dá para logar no site (usuário + senha guardada).
+  if (acc && acc.login_username && acc.has_password)
+    return { state: "connected", variant: "success", label: "Conectado", icon: <CheckCircle2 className="h-3 w-3" /> };
+  // Tem algum dado, mas ainda falta login/senha para conectar de fato.
+  if (acc && (acc.login_username || acc.registration_email))
+    return { state: "partial", variant: "warning", label: "Conexão incompleta", icon: <CircleDot className="h-3 w-3" /> };
+  return { state: "none", variant: "muted", label: "Não conectado", icon: <WifiOff className="h-3 w-3" /> };
+}
+
+/** URL de login/site do fornecedor, com fallback para o domínio. */
+function supplierSiteUrl(s: Supplier | undefined): string | null {
+  if (!s) return null;
+  if (s.website_url) return s.website_url;
+  if (s.domain) return `https://${s.domain.replace(/^https?:\/\//, "")}`;
+  return null;
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────
@@ -186,6 +195,16 @@ export function PerfisForncedores() {
   });
 
   // ── Acções ─────────────────────────────────────────────────────────────
+
+  /** Abre o site de login do fornecedor em nova aba. */
+  const openSupplierSite = (supplier?: Supplier) => {
+    const url = supplierSiteUrl(supplier);
+    if (!url) {
+      toast.error("Este fornecedor não tem site cadastrado. Adicione o link em Fornecedores Vinculados.");
+      return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
 
   const openNew = (supplierId?: string) => {
     setEditingAccountId(null);
@@ -266,7 +285,7 @@ export function PerfisForncedores() {
     toast.success("Endereço de entrega preenchido com os dados da gráfica!");
   };
 
-  const handleSave = async () => {
+  const handleSave = async (openSiteAfter = false) => {
     if (!profile?.company_id || !form.supplier_id) {
       toast.error("Selecione um fornecedor.");
       return;
@@ -298,11 +317,13 @@ export function PerfisForncedores() {
       });
       if (error) throw error;
 
-      toast.success(editingAccountId ? "Perfil atualizado!" : "Perfil de fornecedor criado!");
+      const supplierToOpen = suppliers.find(s => s.id === form.supplier_id);
+      toast.success(editingAccountId ? "Conexão atualizada!" : "Conta conectada!");
       queryClient.invalidateQueries({ queryKey: ["supplier_accounts_safe"] });
       setOpen(false);
       setForm(emptyForm);
       setEditingAccountId(null);
+      if (openSiteAfter) openSupplierSite(supplierToOpen);
     } catch (err: any) {
       toast.error(`Erro ao salvar: ${err.message}`);
     } finally {
@@ -335,154 +356,160 @@ export function PerfisForncedores() {
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-base font-semibold">Perfis de Conta nos Fornecedores</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Gerencie os dados de cadastro e credenciais de acesso da sua gráfica em cada fornecedor parceiro.
+          <h3 className="text-base font-semibold flex items-center gap-1.5">
+            <Link2 className="h-4 w-4 text-violet-500" /> Conexão com Fornecedores
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5 max-w-xl">
+            Conecte a conta da sua gráfica em cada fornecedor. Depois de conectado, você abre o site
+            já com o login à mão e envia o pedido de compra em poucos cliques.
           </p>
         </div>
-        <Button size="sm" onClick={() => openNew()} className="flex items-center gap-1.5">
-          <Plus className="h-4 w-4" /> Nova Conta
+        <Button size="sm" onClick={() => openNew()} className="flex items-center gap-1.5 shrink-0">
+          <PlugZap className="h-4 w-4" /> Conectar conta
         </Button>
       </div>
 
-      {/* Tabela */}
-      <Card className="border-t-4 border-violet-500">
-        <CardContent className="pt-4">
-          {isLoading ? (
-            <div className="flex items-center justify-center h-32">
-              <Loader2 className="h-6 w-6 text-primary animate-spin" />
-            </div>
-          ) : suppliers.length === 0 ? (
-            <div className="border border-dashed rounded-lg p-10 text-center text-muted-foreground">
-              <Building2 className="h-10 w-10 mx-auto mb-3 opacity-20 animate-pulse" />
-              <p className="text-sm font-semibold">Nenhum fornecedor vinculado</p>
-              <p className="text-xs mt-1">Cadastre fornecedores na aba "Fornecedores Vinculados" primeiro.</p>
-            </div>
-          ) : (
-            <div className="border rounded-lg overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Fornecedor</TableHead>
-                    <TableHead>Cadastrado como</TableHead>
-                    <TableHead>Login</TableHead>
-                    <TableHead>Recebimento</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {suppliers.map(supplier => {
-                    const acc = accountOf(supplier.id);
-                    const st = accountStatus(acc);
-                    return (
-                      <TableRow key={supplier.id}>
-                        <TableCell>
-                          <div className="font-semibold text-sm">{supplier.name}</div>
-                          {supplier.domain && (
-                            <div className="text-xs text-muted-foreground font-mono">{supplier.domain}</div>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {acc?.registration_name ? (
-                            <div>
-                              <div className="text-sm font-medium">{acc.registration_name}</div>
-                              {acc.registration_email && (
-                                <div className="text-xs text-muted-foreground flex items-center gap-1">
-                                  <Mail className="h-3 w-3" /> {acc.registration_email}
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground italic">Não configurado</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {acc?.login_username ? (
-                            <div className="text-xs space-y-0.5">
-                              <div className="flex items-center gap-1 font-mono">
-                                <UserCircle2 className="h-3 w-3 text-muted-foreground" />
-                                {acc.login_username}
-                              </div>
-                              <div className="flex items-center gap-1 text-muted-foreground">
-                                <KeyRound className="h-3 w-3" />
-                                {acc.has_password ? "Senha armazenada ✓" : "Sem senha"}
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground italic">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {acc ? (
-                            <div className="text-xs space-y-0.5">
-                              <StatusBadge variant={acc.receiving_mode === "delivery" ? "info" : acc.receiving_mode === "pickup" ? "warning" : "muted"}>
-                                {acc.receiving_mode === "delivery" ? "Entrega na gráfica"
-                                  : acc.receiving_mode === "pickup" ? "Retirar no balcão"
-                                  : "Padrão da empresa"}
-                              </StatusBadge>
-                              {acc.delivery_override && acc.delivery_address && (
-                                <div className="flex items-center gap-1 text-muted-foreground pt-0.5">
-                                  <MapPin className="h-3 w-3" />
-                                  <span className="truncate max-w-[140px]">
-                                    {acc.delivery_address}{acc.delivery_number ? `, ${acc.delivery_number}` : ""}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground italic">—</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge variant={st.variant}>
-                            <span className="flex items-center gap-1">{st.icon} {st.label}</span>
-                          </StatusBadge>
-                        </TableCell>
-                        <TableCell className="text-right space-x-1">
-                          <Button
-                            size="sm"
-                            variant={acc ? "outline" : "default"}
-                            className="h-8 text-xs"
-                            onClick={() => acc ? openEdit(acc) : openNew(supplier.id)}
-                          >
-                            {acc ? "Editar" : <><Plus className="h-3 w-3 mr-1" />Configurar</>}
-                          </Button>
-                          {acc && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-destructive hover:bg-destructive/10"
-                              onClick={() => handleDelete(acc)}
-                            >
-                              <WifiOff className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Grid de cartões de conexão */}
+      {isLoading ? (
+        <div className="flex items-center justify-center h-32">
+          <Loader2 className="h-6 w-6 text-primary animate-spin" />
+        </div>
+      ) : suppliers.length === 0 ? (
+        <div className="border border-dashed rounded-lg p-10 text-center text-muted-foreground">
+          <Building2 className="h-10 w-10 mx-auto mb-3 opacity-20 animate-pulse" />
+          <p className="text-sm font-semibold">Nenhum fornecedor vinculado</p>
+          <p className="text-xs mt-1">Cadastre fornecedores na aba "Fornecedores Vinculados" primeiro.</p>
+        </div>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {suppliers.map(supplier => {
+            const acc = accountOf(supplier.id);
+            const st = connectionStatus(acc);
+            const hasSite = !!supplierSiteUrl(supplier);
+            const borderColor =
+              st.state === "connected" ? "border-t-emerald-500"
+              : st.state === "partial" ? "border-t-amber-500"
+              : "border-t-slate-300 dark:border-t-slate-700";
+            return (
+              <Card key={supplier.id} className={`border-t-4 ${borderColor} flex flex-col`}>
+                <CardContent className="pt-4 flex flex-col gap-3 flex-1">
+                  {/* Cabeçalho do cartão */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-sm truncate">{supplier.name}</div>
+                      {supplier.domain && (
+                        <div className="text-xs text-muted-foreground font-mono truncate">{supplier.domain}</div>
+                      )}
+                    </div>
+                    <StatusBadge variant={st.variant}>
+                      <span className="flex items-center gap-1 whitespace-nowrap">{st.icon} {st.label}</span>
+                    </StatusBadge>
+                  </div>
+
+                  {/* Corpo: dados da conexão ou chamada para conectar */}
+                  {acc && (acc.login_username || acc.registration_email) ? (
+                    <div className="text-xs space-y-1.5 flex-1">
+                      {acc.login_username && (
+                        <div className="flex items-center gap-1.5 font-mono">
+                          <UserCircle2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span className="truncate">{acc.login_username}</span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <KeyRound className="h-3.5 w-3.5 shrink-0" />
+                        {acc.has_password ? "Senha salva ✓" : "Senha não cadastrada"}
+                      </div>
+                      {acc.registration_email && (
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <Mail className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{acc.registration_email}</span>
+                        </div>
+                      )}
+                      <StatusBadge variant={acc.receiving_mode === "delivery" ? "info" : acc.receiving_mode === "pickup" ? "warning" : "muted"}>
+                        {acc.receiving_mode === "delivery" ? "Entrega na gráfica"
+                          : acc.receiving_mode === "pickup" ? "Retirar no balcão"
+                          : "Recebimento padrão"}
+                      </StatusBadge>
+                      {acc.delivery_override && acc.delivery_address && (
+                        <div className="flex items-center gap-1 text-muted-foreground">
+                          <MapPin className="h-3 w-3 shrink-0" />
+                          <span className="truncate">
+                            {acc.delivery_address}{acc.delivery_number ? `, ${acc.delivery_number}` : ""}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground flex-1">
+                      Conta ainda não conectada. Conecte para comprar direto no site deste fornecedor.
+                    </p>
+                  )}
+
+                  {/* Ações do cartão */}
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t mt-auto">
+                    {st.state === "none" ? (
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs flex-1"
+                        onClick={() => openNew(supplier.id)}
+                      >
+                        <PlugZap className="h-3.5 w-3.5 mr-1" /> Conectar conta
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          className="h-8 text-xs flex-1"
+                          disabled={!hasSite}
+                          onClick={() => openSupplierSite(supplier)}
+                          title={hasSite ? "Abrir o site do fornecedor para login" : "Fornecedor sem site cadastrado"}
+                        >
+                          <ExternalLink className="h-3.5 w-3.5 mr-1" /> Abrir site
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs"
+                          onClick={() => acc && openEdit(acc)}
+                        >
+                          Gerenciar
+                        </Button>
+                      </>
+                    )}
+                    {acc && (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8 text-destructive hover:bg-destructive/10 shrink-0"
+                        onClick={() => handleDelete(acc)}
+                        title="Desconectar / remover conta"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
 
       {/* ── Modal de Edição ──────────────────────────────────────────────── */}
       <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setForm(emptyForm); setEditingAccountId(null); } }}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Building2 className="h-5 w-5 text-violet-500" />
-              {editingAccountId ? "Editar Perfil de Fornecedor" : "Nova Conta em Fornecedor"}
+              <PlugZap className="h-5 w-5 text-violet-500" />
+              {editingAccountId ? "Gerenciar conexão" : "Conectar conta no fornecedor"}
             </DialogTitle>
             <DialogDescription>
               {selectedSupplier
-                ? `Configurando conta no fornecedor: ${selectedSupplier.name}`
-                : "Configure os dados de cadastro e credenciais da sua gráfica neste fornecedor."}
+                ? `Conectando a conta da sua gráfica em: ${selectedSupplier.name}`
+                : "Informe o login do site do fornecedor para conectar. Os dados de cadastro e entrega são opcionais."}
             </DialogDescription>
           </DialogHeader>
 
@@ -508,14 +535,14 @@ export function PerfisForncedores() {
             </div>
           )}
 
-          {/* Abas do formulário */}
-          <Tabs defaultValue="cadastro" className="mt-1">
+          {/* Abas do formulário — conexão (login) em primeiro plano */}
+          <Tabs defaultValue="login" className="mt-1">
             <TabsList className="w-full">
+              <TabsTrigger value="login" className="flex-1 flex items-center gap-1.5 text-xs">
+                <KeyRound className="h-3.5 w-3.5" /> Conexão (Login)
+              </TabsTrigger>
               <TabsTrigger value="cadastro" className="flex-1 flex items-center gap-1.5 text-xs">
                 <Clipboard className="h-3.5 w-3.5" /> Dados de Cadastro
-              </TabsTrigger>
-              <TabsTrigger value="login" className="flex-1 flex items-center gap-1.5 text-xs">
-                <KeyRound className="h-3.5 w-3.5" /> Login no Site
               </TabsTrigger>
               <TabsTrigger value="entrega" className="flex-1 flex items-center gap-1.5 text-xs">
                 <Truck className="h-3.5 w-3.5" /> Entrega & Recebimento
@@ -787,14 +814,24 @@ export function PerfisForncedores() {
               Cancelar
             </Button>
             <Button
-              onClick={handleSave}
+              variant="secondary"
+              onClick={() => handleSave(true)}
+              disabled={saving || !form.supplier_id || !supplierSiteUrl(selectedSupplier)}
+              className="flex items-center gap-1.5"
+              title={supplierSiteUrl(selectedSupplier) ? "Salva e abre o site do fornecedor para login" : "Fornecedor sem site cadastrado"}
+            >
+              <ExternalLink className="h-4 w-4" />
+              Conectar e abrir site
+            </Button>
+            <Button
+              onClick={() => handleSave(false)}
               disabled={saving || !form.supplier_id}
               className="flex items-center gap-1.5"
             >
               {saving
                 ? <Loader2 className="h-4 w-4 animate-spin" />
                 : <Save className="h-4 w-4" />}
-              {editingAccountId ? "Atualizar Perfil" : "Criar Perfil"}
+              {editingAccountId ? "Salvar conexão" : "Conectar"}
             </Button>
           </DialogFooter>
         </DialogContent>
