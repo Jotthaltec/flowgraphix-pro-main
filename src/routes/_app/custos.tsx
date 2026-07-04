@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,6 +27,7 @@ const fields = [
 
 function CustosPage() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [productName, setProductName] = useState("");
   const [qty, setQty] = useState(100);
   const [venda, setVenda] = useState(38);
@@ -65,6 +66,52 @@ function CustosPage() {
       setProductName("");
     },
     onError: (err) => toast.error("Erro ao salvar produto: " + err.message)
+  });
+
+  const saveQuoteMutation = useMutation({
+    mutationFn: async () => {
+      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
+      if (!profileData?.company_id) throw new Error("Empresa não identificada.");
+
+      const { count } = await supabase.from("quotes").select("*", { count: "exact", head: true });
+      const qNum = `ORC-${String((count || 0) + 1).padStart(6, '0')}`;
+      const desc = productName || "Simulação de custo";
+      const totalSale = venda * qty;
+
+      const { data: quote, error } = await supabase.from("quotes").insert([{
+        company_id: profileData.company_id,
+        client_id: null,
+        quote_number: qNum,
+        service_desc: desc,
+        quantity: qty,
+        cost_value: total,
+        sale_price: totalSale,
+        margin_percentage: parseFloat(margem.toFixed(2)),
+        discount: 0,
+        final_value: totalSale,
+        notes: "Gerado pela calculadora de Custos & Lucro.",
+        status: "rascunho",
+      }]).select("id").single();
+      if (error) throw error;
+
+      // Snapshot do item (custo/venda unitários) para o orçamento.
+      await supabase.from("quote_items").insert([{
+        quote_id: quote.id,
+        item_name: desc,
+        quantity: qty,
+        unit_price: venda,
+        total_price: totalSale,
+        cost_price: unit,
+        margin_percent: parseFloat(margem.toFixed(2)),
+        source_origin: "custos",
+      }]);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["quotes"] });
+      toast.success("Orçamento rascunho criado! Defina o cliente na aba Orçamentos.");
+      navigate({ to: "/orcamentos", search: { selectProductId: undefined } });
+    },
+    onError: (err) => toast.error("Erro ao criar orçamento: " + err.message)
   });
 
   return (
@@ -112,10 +159,12 @@ function CustosPage() {
                 {saveProductMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Salvar como Produto
               </Button>
-              <Button 
+              <Button
                 className="flex-1"
-                onClick={() => toast.info("Para salvar como orçamento, vá até a aba Orçamentos e insira o custo base calculado.")}
+                disabled={saveQuoteMutation.isPending}
+                onClick={() => saveQuoteMutation.mutate()}
               >
+                {saveQuoteMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Salvar como Orçamento
               </Button>
             </div>

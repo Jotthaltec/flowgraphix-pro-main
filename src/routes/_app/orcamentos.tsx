@@ -403,6 +403,45 @@ function OrcamentosPage() {
     onError: (err) => toast.error("Erro ao alterar: " + err.message)
   });
 
+  // Gera um contrato real a partir de um orçamento aprovado (linkado por quote_id).
+  const contractMutation = useMutation({
+    mutationFn: async (q: any) => {
+      if (!q.client_id) {
+        throw new Error("Defina um cliente no orçamento antes de gerar o contrato.");
+      }
+      // Um contrato por orçamento.
+      const { data: existing } = await supabase
+        .from("contracts").select("id").eq("quote_id", q.id).maybeSingle();
+      if (existing?.id) return { alreadyExisted: true as const };
+
+      const { count } = await supabase.from("contracts").select("*", { count: "exact", head: true });
+      const cNum = `CTR-${String((count || 0) + 1).padStart(6, '0')}`;
+
+      const { error } = await supabase.from("contracts").insert([{
+        company_id: q.company_id,
+        client_id: q.client_id,
+        quote_id: q.id,
+        contract_number: cNum,
+        total_value: q.final_value,
+        down_payment: 0,
+        delivery_date: q.deadline || q.valid_until || null,
+        status: "rascunho",
+        notes: q.service_desc,
+        approval_terms: "1. O contratante concorda com as artes enviadas.\n2. Cancelamentos terão multa de 20%.\n3. O prazo inicia após a aprovação da arte final e pagamento da entrada.",
+      }]);
+      if (error) throw error;
+      return { alreadyExisted: false as const };
+    },
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ["contracts"] });
+      toast.success(r.alreadyExisted
+        ? "Este orçamento já possuía contrato. Abrindo Contratos..."
+        : "Contrato gerado a partir do orçamento!");
+      navigate({ to: "/contratos" });
+    },
+    onError: (err: any) => toast.error("Erro ao gerar contrato: " + err.message),
+  });
+
   function resetForm() {
     setSelectedProduct(null);
     setProductSearch("");
@@ -519,9 +558,9 @@ function OrcamentosPage() {
                       >
                         <FilePlus2 className="h-4 w-4 mr-2" /> Converter p/ Pedido
                       </DropdownMenuItem>
-                      <DropdownMenuItem 
-                        disabled={q.status !== 'aprovado'}
-                        onClick={() => toast.info("Geração de contrato será implementada no módulo Contratos.")}
+                      <DropdownMenuItem
+                        disabled={q.status !== 'aprovado' || contractMutation.isPending}
+                        onClick={() => contractMutation.mutate(q)}
                       >
                         <FileSignature className="h-4 w-4 mr-2" /> Gerar Contrato
                       </DropdownMenuItem>

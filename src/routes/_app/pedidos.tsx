@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { Search, MoreVertical, Loader2, Edit, Trash2 } from "lucide-react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { Search, MoreVertical, Loader2, Workflow, Wallet } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ export const Route = createFileRoute("/_app/pedidos")({ component: PedidosPage }
 
 function PedidosPage() {
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [prodFilter, setProdFilter] = useState("all");
@@ -203,8 +204,11 @@ function PedidosPage() {
                       <Button size="icon" variant="ghost"><MoreVertical className="h-4 w-4" /></Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => toast.info("Você pode mudar o status na aba Produção e o financeiro na aba Financeiro.")}>
-                        Ver detalhes integrados
+                      <DropdownMenuItem onClick={() => navigate({ to: "/producao" })}>
+                        <Workflow className="h-4 w-4 mr-2" /> Ver na fila de Produção
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => navigate({ to: "/financeiro" })}>
+                        <Wallet className="h-4 w-4 mr-2" /> Ver no Financeiro
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
