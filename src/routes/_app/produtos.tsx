@@ -363,6 +363,10 @@ function ProdutosPage() {
               <Truck className="h-4 w-4 mr-2 text-muted-foreground" /> Hub
             </Button>
             
+            <Button variant="outline" onClick={() => navigate({ to: "/motor-produtos" })} className="shadow-sm hover:shadow-md transition-all">
+              <Settings2 className="h-4 w-4 mr-2 text-muted-foreground" /> Motor Técnico
+            </Button>
+            
             <Button onClick={handleNew} className="shadow-md hover:shadow-lg transition-all hover:scale-105">
               <Plus className="h-4 w-4 mr-2" /> Novo Produto
             </Button>

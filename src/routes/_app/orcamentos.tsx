@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { createPurchaseOrdersForOrder } from "@/lib/purchase-orders";
+import { generateProductionOrderFromQuote } from "@/services/production";
 
 export const Route = createFileRoute("/_app/orcamentos")({
   component: OrcamentosPage,
@@ -318,8 +319,20 @@ function OrcamentosPage() {
       const { error } = await supabase.from("quotes").update({ status }).eq("id", id);
       if (error) throw error;
 
+      if (status === 'aprovado') {
+        const { data: profileData } = await supabase.from('profiles').select('company_id, user_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
+        if (profileData?.company_id && profileData?.user_id) {
+          try {
+            const opResult = await generateProductionOrderFromQuote(id, profileData.company_id, profileData.user_id);
+            return { converted: false as const, status, opResult };
+          } catch (e) {
+            console.error("Falha ao gerar Ordem de Produção:", e);
+          }
+        }
+      }
+
       if (status !== 'convertido_pedido') {
-        return { converted: false as const };
+        return { converted: false as const, status };
       }
 
       // Conversão real em pedido. Evita duplicar caso já exista pedido para este orçamento.
@@ -397,7 +410,11 @@ function OrcamentosPage() {
         }
         navigate({ to: "/pedidos" });
       } else {
-        toast.success(`Orçamento marcado como ${variables.status.replace("_", " ")}`);
+        if (result.status === 'aprovado' && result.opResult) {
+          toast.success(`Orçamento aprovado! Ordem de Produção ${result.opResult.order_number} gerada.`, { duration: 5000 });
+        } else {
+          toast.success(`Orçamento marcado como ${variables.status.replace("_", " ")}`);
+        }
       }
     },
     onError: (err) => toast.error("Erro ao alterar: " + err.message)

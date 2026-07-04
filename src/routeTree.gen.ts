@@ -15,12 +15,14 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PrintOpItemIdRouteImport } from './routes/print-op.$itemId'
 import { Route as AppRelatoriosRouteImport } from './routes/_app/relatorios'
 import { Route as AppProdutosRouteImport } from './routes/_app/produtos'
 import { Route as AppProducaoRouteImport } from './routes/_app/producao'
 import { Route as AppPedidosCompraRouteImport } from './routes/_app/pedidos-compra'
 import { Route as AppPedidosRouteImport } from './routes/_app/pedidos'
 import { Route as AppOrcamentosRouteImport } from './routes/_app/orcamentos'
+import { Route as AppMotorProdutosRouteImport } from './routes/_app/motor-produtos'
 import { Route as AppLeadsRouteImport } from './routes/_app/leads'
 import { Route as AppHubFornecedoresRouteImport } from './routes/_app/hub-fornecedores'
 import { Route as AppFinanceiroRouteImport } from './routes/_app/financeiro'
@@ -61,6 +63,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrintOpItemIdRoute = PrintOpItemIdRouteImport.update({
+  id: '/print-op/$itemId',
+  path: '/print-op/$itemId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppRelatoriosRoute = AppRelatoriosRouteImport.update({
   id: '/relatorios',
   path: '/relatorios',
@@ -89,6 +96,11 @@ const AppPedidosRoute = AppPedidosRouteImport.update({
 const AppOrcamentosRoute = AppOrcamentosRouteImport.update({
   id: '/orcamentos',
   path: '/orcamentos',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppMotorProdutosRoute = AppMotorProdutosRouteImport.update({
+  id: '/motor-produtos',
+  path: '/motor-produtos',
   getParentRoute: () => AppRoute,
 } as any)
 const AppLeadsRoute = AppLeadsRouteImport.update({
@@ -157,12 +169,14 @@ export interface FileRoutesByFullPath {
   '/financeiro': typeof AppFinanceiroRoute
   '/hub-fornecedores': typeof AppHubFornecedoresRoute
   '/leads': typeof AppLeadsRoute
+  '/motor-produtos': typeof AppMotorProdutosRoute
   '/orcamentos': typeof AppOrcamentosRoute
   '/pedidos': typeof AppPedidosRoute
   '/pedidos-compra': typeof AppPedidosCompraRoute
   '/producao': typeof AppProducaoRoute
   '/produtos': typeof AppProdutosRoute
   '/relatorios': typeof AppRelatoriosRoute
+  '/print-op/$itemId': typeof PrintOpItemIdRoute
   '/produtos/importar': typeof AppProdutosImportarRoute
 }
 export interface FileRoutesByTo {
@@ -180,12 +194,14 @@ export interface FileRoutesByTo {
   '/financeiro': typeof AppFinanceiroRoute
   '/hub-fornecedores': typeof AppHubFornecedoresRoute
   '/leads': typeof AppLeadsRoute
+  '/motor-produtos': typeof AppMotorProdutosRoute
   '/orcamentos': typeof AppOrcamentosRoute
   '/pedidos': typeof AppPedidosRoute
   '/pedidos-compra': typeof AppPedidosCompraRoute
   '/producao': typeof AppProducaoRoute
   '/produtos': typeof AppProdutosRoute
   '/relatorios': typeof AppRelatoriosRoute
+  '/print-op/$itemId': typeof PrintOpItemIdRoute
   '/produtos/importar': typeof AppProdutosImportarRoute
 }
 export interface FileRoutesById {
@@ -205,12 +221,14 @@ export interface FileRoutesById {
   '/_app/financeiro': typeof AppFinanceiroRoute
   '/_app/hub-fornecedores': typeof AppHubFornecedoresRoute
   '/_app/leads': typeof AppLeadsRoute
+  '/_app/motor-produtos': typeof AppMotorProdutosRoute
   '/_app/orcamentos': typeof AppOrcamentosRoute
   '/_app/pedidos': typeof AppPedidosRoute
   '/_app/pedidos-compra': typeof AppPedidosCompraRoute
   '/_app/producao': typeof AppProducaoRoute
   '/_app/produtos': typeof AppProdutosRoute
   '/_app/relatorios': typeof AppRelatoriosRoute
+  '/print-op/$itemId': typeof PrintOpItemIdRoute
   '/_app/produtos_/importar': typeof AppProdutosImportarRoute
 }
 export interface FileRouteTypes {
@@ -230,12 +248,14 @@ export interface FileRouteTypes {
     | '/financeiro'
     | '/hub-fornecedores'
     | '/leads'
+    | '/motor-produtos'
     | '/orcamentos'
     | '/pedidos'
     | '/pedidos-compra'
     | '/producao'
     | '/produtos'
     | '/relatorios'
+    | '/print-op/$itemId'
     | '/produtos/importar'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -253,12 +273,14 @@ export interface FileRouteTypes {
     | '/financeiro'
     | '/hub-fornecedores'
     | '/leads'
+    | '/motor-produtos'
     | '/orcamentos'
     | '/pedidos'
     | '/pedidos-compra'
     | '/producao'
     | '/produtos'
     | '/relatorios'
+    | '/print-op/$itemId'
     | '/produtos/importar'
   id:
     | '__root__'
@@ -277,12 +299,14 @@ export interface FileRouteTypes {
     | '/_app/financeiro'
     | '/_app/hub-fornecedores'
     | '/_app/leads'
+    | '/_app/motor-produtos'
     | '/_app/orcamentos'
     | '/_app/pedidos'
     | '/_app/pedidos-compra'
     | '/_app/producao'
     | '/_app/produtos'
     | '/_app/relatorios'
+    | '/print-op/$itemId'
     | '/_app/produtos_/importar'
   fileRoutesById: FileRoutesById
 }
@@ -293,6 +317,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
+  PrintOpItemIdRoute: typeof PrintOpItemIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -339,6 +364,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/print-op/$itemId': {
+      id: '/print-op/$itemId'
+      path: '/print-op/$itemId'
+      fullPath: '/print-op/$itemId'
+      preLoaderRoute: typeof PrintOpItemIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/relatorios': {
       id: '/_app/relatorios'
       path: '/relatorios'
@@ -379,6 +411,13 @@ declare module '@tanstack/react-router' {
       path: '/orcamentos'
       fullPath: '/orcamentos'
       preLoaderRoute: typeof AppOrcamentosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/motor-produtos': {
+      id: '/_app/motor-produtos'
+      path: '/motor-produtos'
+      fullPath: '/motor-produtos'
+      preLoaderRoute: typeof AppMotorProdutosRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/leads': {
@@ -464,6 +503,7 @@ interface AppRouteChildren {
   AppFinanceiroRoute: typeof AppFinanceiroRoute
   AppHubFornecedoresRoute: typeof AppHubFornecedoresRoute
   AppLeadsRoute: typeof AppLeadsRoute
+  AppMotorProdutosRoute: typeof AppMotorProdutosRoute
   AppOrcamentosRoute: typeof AppOrcamentosRoute
   AppPedidosRoute: typeof AppPedidosRoute
   AppPedidosCompraRoute: typeof AppPedidosCompraRoute
@@ -483,6 +523,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppFinanceiroRoute: AppFinanceiroRoute,
   AppHubFornecedoresRoute: AppHubFornecedoresRoute,
   AppLeadsRoute: AppLeadsRoute,
+  AppMotorProdutosRoute: AppMotorProdutosRoute,
   AppOrcamentosRoute: AppOrcamentosRoute,
   AppPedidosRoute: AppPedidosRoute,
   AppPedidosCompraRoute: AppPedidosCompraRoute,
@@ -501,6 +542,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
+  PrintOpItemIdRoute: PrintOpItemIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
