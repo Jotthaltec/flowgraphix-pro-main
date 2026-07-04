@@ -56,7 +56,7 @@ export function TechnicalSheetEditor({ productionOrderItemId, onSaved }: Technic
   const { data: savedAttributes, isLoading: loadingSaved } = useQuery({
     queryKey: ["item_attributes", productionOrderItemId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("production_item_attributes").select("*").eq("production_order_item_id", productionOrderItemId);
+      const { data, error } = await db.from("production_item_attributes").select("*").eq("production_order_item_id", productionOrderItemId);
       if (error) throw error;
       return data || [];
     },
@@ -66,7 +66,7 @@ export function TechnicalSheetEditor({ productionOrderItemId, onSaved }: Technic
   const { data: steps, isLoading: loadingSteps } = useQuery({
     queryKey: ["item_steps", productionOrderItemId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("production_steps").select("id, step_name, order_index").eq("production_order_item_id", productionOrderItemId).order("order_index");
+      const { data, error } = await db.from("production_steps").select("id, step_name, order_index").eq("production_order_item_id", productionOrderItemId).order("order_index");
       if (error) throw error;
       return data || [];
     },
@@ -76,7 +76,7 @@ export function TechnicalSheetEditor({ productionOrderItemId, onSaved }: Technic
   const { data: materials, isLoading: loadingMaterials } = useQuery({
     queryKey: ["item_materials", productionOrderItemId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("production_materials_consumption")
         .select(`id, material_name, actual_qty, unit_cost, created_at, production_steps!inner(production_order_item_id, step_name)`)
         .eq("production_steps.production_order_item_id", productionOrderItemId)
@@ -91,7 +91,7 @@ export function TechnicalSheetEditor({ productionOrderItemId, onSaved }: Technic
   const { data: reworks, isLoading: loadingReworks } = useQuery({
     queryKey: ["item_reworks", productionOrderItemId],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("production_reworks")
         .select(`id, reason, status, created_at, profiles(full_name)`)
         .eq("production_order_item_id", productionOrderItemId)
@@ -124,10 +124,10 @@ export function TechnicalSheetEditor({ productionOrderItemId, onSaved }: Technic
           attribute_id: attr.id,
           attribute_value: formData[attr.code] 
         }));
-      const { error: delErr } = await supabase.from("production_item_attributes").delete().eq("production_order_item_id", productionOrderItemId);
+      const { error: delErr } = await db.from("production_item_attributes").delete().eq("production_order_item_id", productionOrderItemId);
       if (delErr) throw delErr;
       if (payloadToUpsert.length > 0) {
-        const { error: insErr } = await supabase.from("production_item_attributes").insert(payloadToUpsert);
+        const { error: insErr } = await db.from("production_item_attributes").insert(payloadToUpsert);
         if (insErr) throw insErr;
       }
     },
@@ -141,7 +141,7 @@ export function TechnicalSheetEditor({ productionOrderItemId, onSaved }: Technic
   const saveMaterialMutation = useMutation({
     mutationFn: async (payload: typeof matForm) => {
       const { data: profile } = await supabase.auth.getUser();
-      const { error } = await supabase.from("production_materials_consumption").insert([{
+      const { error } = await db.from("production_materials_consumption").insert([{
         step_id: payload.step_id,
         material_name: payload.material_name,
         actual_qty: payload.actual_qty,
@@ -161,7 +161,7 @@ export function TechnicalSheetEditor({ productionOrderItemId, onSaved }: Technic
 
   const deleteMaterialMutation = useMutation({
     mutationFn: async (matId: string) => {
-      const { error } = await supabase.from("production_materials_consumption").delete().eq("id", matId);
+      const { error } = await db.from("production_materials_consumption").delete().eq("id", matId);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -173,7 +173,7 @@ export function TechnicalSheetEditor({ productionOrderItemId, onSaved }: Technic
   const saveReworkMutation = useMutation({
     mutationFn: async (payload: typeof reworkForm) => {
       const { data: profile } = await supabase.auth.getUser();
-      const { error } = await supabase.from("production_reworks").insert([{
+      const { error } = await db.from("production_reworks").insert([{
         production_order_item_id: productionOrderItemId,
         reason: payload.reason,
         reported_by: profile.user?.id,
@@ -183,7 +183,7 @@ export function TechnicalSheetEditor({ productionOrderItemId, onSaved }: Technic
       
       // Quando aponta refação, ele deve jogar o item para trás no Kanban.
       // Vou jogar para "aguardando" (imprimindo novamente ou iniciando o fluxo).
-      await supabase.from("production_order_items").update({ status: 'aguardando' }).eq("id", productionOrderItemId);
+      await db.from("production_order_items").update({ status: 'aguardando' }).eq("id", productionOrderItemId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["item_reworks", productionOrderItemId] });
@@ -197,7 +197,7 @@ export function TechnicalSheetEditor({ productionOrderItemId, onSaved }: Technic
 
   const updateReworkStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string, status: string }) => {
-      const { error } = await supabase.from("production_reworks").update({ status, resolved_at: status === 'resolvido' ? new Date().toISOString() : null }).eq("id", id);
+      const { error } = await db.from("production_reworks").update({ status, resolved_at: status === 'resolvido' ? new Date().toISOString() : null }).eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
