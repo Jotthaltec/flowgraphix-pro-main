@@ -18,6 +18,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AppRelatoriosRouteImport } from './routes/_app/relatorios'
 import { Route as AppProdutosRouteImport } from './routes/_app/produtos'
 import { Route as AppProducaoRouteImport } from './routes/_app/producao'
+import { Route as AppPedidosCompraRouteImport } from './routes/_app/pedidos-compra'
 import { Route as AppPedidosRouteImport } from './routes/_app/pedidos'
 import { Route as AppOrcamentosRouteImport } from './routes/_app/orcamentos'
 import { Route as AppLeadsRouteImport } from './routes/_app/leads'
@@ -73,6 +74,11 @@ const AppProdutosRoute = AppProdutosRouteImport.update({
 const AppProducaoRoute = AppProducaoRouteImport.update({
   id: '/producao',
   path: '/producao',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPedidosCompraRoute = AppPedidosCompraRouteImport.update({
+  id: '/pedidos-compra',
+  path: '/pedidos-compra',
   getParentRoute: () => AppRoute,
 } as any)
 const AppPedidosRoute = AppPedidosRouteImport.update({
@@ -153,6 +159,7 @@ export interface FileRoutesByFullPath {
   '/leads': typeof AppLeadsRoute
   '/orcamentos': typeof AppOrcamentosRoute
   '/pedidos': typeof AppPedidosRoute
+  '/pedidos-compra': typeof AppPedidosCompraRoute
   '/producao': typeof AppProducaoRoute
   '/produtos': typeof AppProdutosRoute
   '/relatorios': typeof AppRelatoriosRoute
@@ -175,6 +182,7 @@ export interface FileRoutesByTo {
   '/leads': typeof AppLeadsRoute
   '/orcamentos': typeof AppOrcamentosRoute
   '/pedidos': typeof AppPedidosRoute
+  '/pedidos-compra': typeof AppPedidosCompraRoute
   '/producao': typeof AppProducaoRoute
   '/produtos': typeof AppProdutosRoute
   '/relatorios': typeof AppRelatoriosRoute
@@ -199,6 +207,7 @@ export interface FileRoutesById {
   '/_app/leads': typeof AppLeadsRoute
   '/_app/orcamentos': typeof AppOrcamentosRoute
   '/_app/pedidos': typeof AppPedidosRoute
+  '/_app/pedidos-compra': typeof AppPedidosCompraRoute
   '/_app/producao': typeof AppProducaoRoute
   '/_app/produtos': typeof AppProdutosRoute
   '/_app/relatorios': typeof AppRelatoriosRoute
@@ -223,6 +232,7 @@ export interface FileRouteTypes {
     | '/leads'
     | '/orcamentos'
     | '/pedidos'
+    | '/pedidos-compra'
     | '/producao'
     | '/produtos'
     | '/relatorios'
@@ -245,6 +255,7 @@ export interface FileRouteTypes {
     | '/leads'
     | '/orcamentos'
     | '/pedidos'
+    | '/pedidos-compra'
     | '/producao'
     | '/produtos'
     | '/relatorios'
@@ -268,6 +279,7 @@ export interface FileRouteTypes {
     | '/_app/leads'
     | '/_app/orcamentos'
     | '/_app/pedidos'
+    | '/_app/pedidos-compra'
     | '/_app/producao'
     | '/_app/produtos'
     | '/_app/relatorios'
@@ -346,6 +358,13 @@ declare module '@tanstack/react-router' {
       path: '/producao'
       fullPath: '/producao'
       preLoaderRoute: typeof AppProducaoRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/pedidos-compra': {
+      id: '/_app/pedidos-compra'
+      path: '/pedidos-compra'
+      fullPath: '/pedidos-compra'
+      preLoaderRoute: typeof AppPedidosCompraRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/pedidos': {
@@ -447,6 +466,7 @@ interface AppRouteChildren {
   AppLeadsRoute: typeof AppLeadsRoute
   AppOrcamentosRoute: typeof AppOrcamentosRoute
   AppPedidosRoute: typeof AppPedidosRoute
+  AppPedidosCompraRoute: typeof AppPedidosCompraRoute
   AppProducaoRoute: typeof AppProducaoRoute
   AppProdutosRoute: typeof AppProdutosRoute
   AppRelatoriosRoute: typeof AppRelatoriosRoute
@@ -465,6 +485,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppLeadsRoute: AppLeadsRoute,
   AppOrcamentosRoute: AppOrcamentosRoute,
   AppPedidosRoute: AppPedidosRoute,
+  AppPedidosCompraRoute: AppPedidosCompraRoute,
   AppProducaoRoute: AppProducaoRoute,
   AppProdutosRoute: AppProdutosRoute,
   AppRelatoriosRoute: AppRelatoriosRoute,

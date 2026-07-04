@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { createPurchaseOrdersForOrder } from "@/lib/purchase-orders";
 
 export const Route = createFileRoute("/_app/orcamentos")({
   component: OrcamentosPage,
@@ -350,7 +351,7 @@ function OrcamentosPage() {
         quote.valid_until ||
         new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-      const { error: orderErr } = await supabase.from("orders").insert([{
+      const { data: newOrder, error: orderErr } = await supabase.from("orders").insert([{
         company_id: quote.company_id,
         client_id: quote.client_id,
         quote_id: quote.id,
@@ -361,20 +362,39 @@ function OrcamentosPage() {
         priority: "normal",
         payment_status: 'nao_pago',
         production_status: 'pedido_criado',
-      }]);
+      }]).select("id").single();
       if (orderErr) throw orderErr;
 
-      return { converted: true as const, alreadyExisted: false };
+      // Fase 4 — gera pedidos de compra por fornecedor (itens do orçamento com supplier_id).
+      // Não bloqueia a conversão: se falhar, o pedido do cliente segue criado.
+      let purchaseOrders = 0;
+      try {
+        const po = await createPurchaseOrdersForOrder({
+          companyId: quote.company_id,
+          quoteId: quote.id,
+          orderId: newOrder.id,
+        });
+        purchaseOrders = po.created;
+      } catch (e) {
+        console.error("Falha ao gerar pedidos de compra:", e);
+      }
+
+      return { converted: true as const, alreadyExisted: false, purchaseOrders };
     },
     onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: ["quotes"] });
       if (result.converted) {
         queryClient.invalidateQueries({ queryKey: ["orders"] });
-        toast.success(
-          result.alreadyExisted
-            ? "Este orçamento já possuía um pedido. Abrindo a fila de Pedidos..."
-            : "Pedido criado a partir do orçamento! Produção e Financeiro atualizados."
-        );
+        if (result.alreadyExisted) {
+          toast.success("Este orçamento já possuía um pedido. Abrindo a fila de Pedidos...");
+        } else {
+          queryClient.invalidateQueries({ queryKey: ["purchase_orders"] });
+          const poCount = result.purchaseOrders ?? 0;
+          const poMsg = poCount > 0
+            ? ` ${poCount} pedido(s) de compra ao fornecedor gerado(s).`
+            : "";
+          toast.success(`Pedido criado a partir do orçamento! Produção e Financeiro atualizados.${poMsg}`);
+        }
         navigate({ to: "/pedidos" });
       } else {
         toast.success(`Orçamento marcado como ${variables.status.replace("_", " ")}`);

@@ -2,7 +2,7 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
   LayoutDashboard, Users, MapPin, FileText, FileSignature, ShoppingBag,
   Workflow, Package, Calculator, Wallet, FolderOpen, BarChart3, Settings,
-  LogOut, Printer, Globe,
+  LogOut, Printer, Globe, ShoppingCart,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
@@ -20,6 +20,7 @@ const items = [
   { title: "Orçamentos", url: "/orcamentos", icon: FileText },
   { title: "Contratos", url: "/contratos", icon: FileSignature },
   { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
+  { title: "Pedidos de Compra", url: "/pedidos-compra", icon: ShoppingCart },
   { title: "Produção", url: "/producao", icon: Workflow },
   { title: "Produtos & Serviços", url: "/produtos", icon: Package },
   { title: "Hub de Fornecedores", url: "/hub-fornecedores", icon: Globe },

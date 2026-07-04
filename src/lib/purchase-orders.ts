@@ -14,6 +14,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 
 export interface DeliverySnapshot {
   receiving_mode: string | null;
@@ -177,7 +178,7 @@ export async function createPurchaseOrdersForOrder(params: {
         po_number: poNumber,
         status: "rascunho",
         receiving_mode,
-        delivery_snapshot: snapshot as unknown as Record<string, unknown>,
+        delivery_snapshot: snapshot as unknown as Json,
         total_cost: parseFloat(totalCost.toFixed(2)),
       })
       .select("id")

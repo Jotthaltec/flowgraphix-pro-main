@@ -1461,6 +1461,12 @@ export type Database = {
           status: string
           supplier_account_id: string | null
           supplier_id: string | null
+          actual_cost: number | null
+          expected_delivery: string | null
+          purchase_notes: string | null
+          purchased_at: string | null
+          supplier_order_number: string | null
+          tracking_code: string | null
           total_cost: number
           updated_at: string
         }
@@ -1477,6 +1483,12 @@ export type Database = {
           status?: string
           supplier_account_id?: string | null
           supplier_id?: string | null
+          actual_cost?: number | null
+          expected_delivery?: string | null
+          purchase_notes?: string | null
+          purchased_at?: string | null
+          supplier_order_number?: string | null
+          tracking_code?: string | null
           total_cost?: number
           updated_at?: string
         }
@@ -1493,6 +1505,12 @@ export type Database = {
           status?: string
           supplier_account_id?: string | null
           supplier_id?: string | null
+          actual_cost?: number | null
+          expected_delivery?: string | null
+          purchase_notes?: string | null
+          purchased_at?: string | null
+          supplier_order_number?: string | null
+          tracking_code?: string | null
           total_cost?: number
           updated_at?: string
         }
