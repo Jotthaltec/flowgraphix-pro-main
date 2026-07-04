@@ -13,6 +13,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useState, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
@@ -33,6 +34,7 @@ function ContratosPage() {
     upfront_value: 0,
     payment_method: "",
     delivery_date: "",
+    additional_terms: "",
     status: "rascunho"
   });
 
@@ -62,6 +64,16 @@ function ContratosPage() {
     enabled: !!profile,
   });
 
+  // Dados da própria empresa (Contratada) para qualificar no contrato.
+  const { data: company } = useQuery({
+    queryKey: ["company_for_contract", profile?.company_id],
+    queryFn: async () => {
+      const { data } = await supabase.from("companies").select("*").eq("id", profile!.company_id!).maybeSingle();
+      return data;
+    },
+    enabled: !!profile?.company_id,
+  });
+
   const filteredData = contracts?.filter(item => {
     const matchesSearch = item.contract_number.toLowerCase().includes(searchTerm.toLowerCase()) || 
                           item.clients?.name?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -88,7 +100,7 @@ function ContratosPage() {
         delivery_date: data.delivery_date,
         status: data.status,
         notes: data.service_description,
-        approval_terms: "1. O contratante concorda com as artes enviadas. \n2. Cancelamentos terão multa de 20%.\n3. O prazo inicia após a aprovação da arte final e pagamento da entrada."
+        approval_terms: data.additional_terms || null
       }]);
       if (error) throw error;
     },
@@ -104,9 +116,9 @@ function ContratosPage() {
   });
 
   function resetForm() {
-    setFormData({ 
-      client_id: "", service_description: "", total_value: 0, 
-      upfront_value: 0, payment_method: "", delivery_date: "", status: "rascunho" 
+    setFormData({
+      client_id: "", service_description: "", total_value: 0,
+      upfront_value: 0, payment_method: "", delivery_date: "", additional_terms: "", status: "rascunho"
     });
   }
 
@@ -161,14 +173,21 @@ function ContratosPage() {
     );
   };
 
+  const fmtBRL = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
+
   return (
     <>
       <style>{`
+        /* Escondido na tela; visível apenas na impressão/PDF.
+           (Antes usava a classe 'hidden' = display:none, que 'visibility:visible'
+           NÃO anula — por isso o download saía em branco.) */
+        #printable-contract { display: none; }
         @media print {
           body * { visibility: hidden; }
           #printable-contract, #printable-contract * { visibility: visible; }
-          #printable-contract { position: absolute; left: 0; top: 0; width: 100%; padding: 40px; }
+          #printable-contract { display: block; position: absolute; left: 0; top: 0; width: 100%; padding: 0; }
           .no-print { display: none !important; }
+          @page { margin: 1.6cm; }
         }
       `}</style>
       <PageHeader 
@@ -257,9 +276,12 @@ function ContratosPage() {
                     <p className="text-muted-foreground"><strong>Documento:</strong> {selectedContract.clients?.document || 'Não informado'}</p>
                     <p className="text-muted-foreground"><strong>Objeto:</strong> {selectedContract.notes}</p>
                     <p className="text-muted-foreground"><strong>Valor Total:</strong> {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedContract.total_value)}</p>
-                    <p className="text-muted-foreground"><strong>Data de Entrega:</strong> {selectedContract.delivery_date}</p>
-                    <p className="text-muted-foreground pt-2"><strong>Termos:</strong></p>
-                    <p className="text-muted-foreground line-clamp-4">{selectedContract.approval_terms}</p>
+                    <p className="text-muted-foreground"><strong>Entrada:</strong> {fmtBRL(selectedContract.down_payment || 0)}</p>
+                    <p className="text-muted-foreground"><strong>Data de Entrega:</strong> {selectedContract.delivery_date || '—'}</p>
+                    <p className="text-[11px] text-foreground/80 pt-2 border-t mt-2">📄 O contrato completo — com cláusulas de pagamento, prazo, aprovação de arte, cancelamento (retenção de sinal + multa), tolerâncias técnicas, LGPD e foro — é gerado ao clicar em <strong>Imprimir / PDF</strong>.</p>
+                    {selectedContract.approval_terms && String(selectedContract.approval_terms).trim() && (
+                      <p className="text-muted-foreground line-clamp-3"><strong>Cláusulas adicionais:</strong> {selectedContract.approval_terms}</p>
+                    )}
                   </div>
                 </>
               ) : (
@@ -311,6 +333,19 @@ function ContratosPage() {
                   <Label>Prazo / Data Entrega</Label>
                   <Input type="date" value={formData.delivery_date} onChange={(e) => setFormData({...formData, delivery_date: e.target.value})} />
                 </div>
+                <div className="grid gap-2">
+                  <Label>Forma de pagamento</Label>
+                  <Input placeholder="Ex.: 50% entrada + 50% na entrega (Pix)" value={formData.payment_method} onChange={(e) => setFormData({...formData, payment_method: e.target.value})} />
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label>Cláusulas adicionais / observações (opcional)</Label>
+                <Textarea
+                  rows={3}
+                  placeholder="Cláusulas específicas deste contrato. As cláusulas de proteção padrão (pagamento, prazo, aprovação de arte, cancelamento, tolerâncias etc.) já entram automaticamente no documento."
+                  value={formData.additional_terms}
+                  onChange={(e) => setFormData({...formData, additional_terms: e.target.value})}
+                />
               </div>
             </div>
             <DialogFooter>
@@ -326,47 +361,100 @@ function ContratosPage() {
         </Dialog>
       </div>
 
-      {/* Printable Area (Hidden normally, visible only in print mode via CSS) */}
-      {selectedContract && (
-        <div id="printable-contract" className="hidden">
-          <div style={{ maxWidth: '800px', margin: '0 auto', fontFamily: 'sans-serif', lineHeight: '1.6' }}>
-            <h1 style={{ textAlign: 'center', fontSize: '24px', marginBottom: '20px' }}>CONTRATO DE PRESTAÇÃO DE SERVIÇOS GRÁFICOS</h1>
-            <p style={{ textAlign: 'right' }}><strong>Contrato Nº:</strong> {selectedContract.contract_number}</p>
-            
-            <h3 style={{ marginTop: '30px', borderBottom: '1px solid #ccc' }}>1. AS PARTES</h3>
-            <p><strong>Contratante:</strong> {selectedContract.clients?.name}</p>
-            <p><strong>Documento:</strong> {selectedContract.clients?.document || 'Não informado'}</p>
-            <p><strong>Endereço:</strong> {selectedContract.clients?.address || 'Não informado'}</p>
+      {/* Área imprimível — contrato completo (escondida na tela, visível na impressão/PDF) */}
+      {selectedContract && (() => {
+        const sc = selectedContract;
+        const compName = company?.legal_name || company?.name || "________________________";
+        const compDoc = company?.cnpj ? `inscrita no CNPJ sob o nº ${company.cnpj}` : "inscrita no CNPJ sob o nº ________________";
+        const compEnd =
+          [company?.address, company?.address_number, company?.neighborhood, company?.complement, company?.zip_code ? `CEP ${company.zip_code}` : null]
+            .filter(Boolean).join(", ") || "endereço constante em seus registros";
+        const cliName = sc.clients?.name || "________________________";
+        const cliDoc = sc.clients?.document ? `inscrito(a) no CPF/CNPJ sob o nº ${sc.clients.document}` : "documento a ser informado";
+        const cliEnd = sc.clients?.address || "endereço constante em seu cadastro";
+        const total = sc.total_value || 0;
+        const entrada = sc.down_payment || 0;
+        const saldo = Math.max(total - entrada, 0);
+        const P = { margin: "0 0 8px", textAlign: "justify" as const };
 
-            <h3 style={{ marginTop: '30px', borderBottom: '1px solid #ccc' }}>2. DO OBJETO</h3>
-            <p>A Contratada se obriga a prestar os seguintes serviços gráficos: <strong>{selectedContract.notes}</strong>.</p>
+        return (
+          <div id="printable-contract">
+            <div style={{ maxWidth: "820px", margin: "0 auto", fontFamily: '"Times New Roman", Georgia, serif', fontSize: "12.5px", lineHeight: 1.5, color: "#111" }}>
+              <h1 style={{ textAlign: "center", fontSize: "16px", margin: "0 0 2px", textTransform: "uppercase" }}>
+                Contrato de Prestação de Serviços Gráficos
+              </h1>
+              <p style={{ textAlign: "center", margin: "0 0 16px", fontSize: "11px", color: "#444" }}>Nº {sc.contract_number}</p>
 
-            <h3 style={{ marginTop: '30px', borderBottom: '1px solid #ccc' }}>3. DO VALOR E FORMA DE PAGAMENTO</h3>
-            <p>Pelo serviço descrito, o Contratante pagará o valor total de <strong>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedContract.total_value)}</strong>.</p>
-            <p>Sendo um valor de entrada de <strong>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(selectedContract.down_payment || 0)}</strong> acordado entre as partes.</p>
+              <p style={P}>
+                <strong>CONTRATADA:</strong> {compName}, {compDoc}, com sede em {compEnd}.
+              </p>
+              <p style={P}>
+                <strong>CONTRATANTE:</strong> {cliName}, {cliDoc}, com endereço em {cliEnd}.
+              </p>
+              <p style={P}>
+                As partes acima qualificadas têm, entre si, justo e contratado o presente Contrato de Prestação de Serviços
+                Gráficos, que se regerá pelas cláusulas e condições seguintes, que mutuamente aceitam:
+              </p>
 
-            <h3 style={{ marginTop: '30px', borderBottom: '1px solid #ccc' }}>4. DO PRAZO</h3>
-            <p>O prazo acordado para entrega é: <strong>{selectedContract.delivery_date || 'A combinar'}</strong>.</p>
+              <p style={P}><strong>CLÁUSULA 1ª – DO OBJETO.</strong> A CONTRATADA obriga-se a prestar ao CONTRATANTE os seguintes serviços gráficos: <strong>{sc.notes || "conforme pedido/orçamento aprovado"}</strong>, compreendendo, quando aplicável, a preparação de arte, impressão e acabamento, segundo as especificações aprovadas.</p>
 
-            <h3 style={{ marginTop: '30px', borderBottom: '1px solid #ccc' }}>5. TERMOS GERAIS</h3>
-            <p style={{ whiteSpace: 'pre-wrap' }}>{selectedContract.approval_terms}</p>
+              <p style={P}><strong>CLÁUSULA 2ª – DO PREÇO E DA FORMA DE PAGAMENTO.</strong> Pela prestação dos serviços, o CONTRATANTE pagará o valor total de <strong>{fmtBRL(total)}</strong>, sendo <strong>{fmtBRL(entrada)}</strong> a título de entrada/sinal e o saldo de <strong>{fmtBRL(saldo)}</strong> {sc.payment_method ? <>na seguinte forma: <strong>{sc.payment_method}</strong></> : "na forma ajustada entre as partes"}. <strong>2.1.</strong> O sinal confirma o pedido e a produção somente se inicia após sua compensação. <strong>2.2.</strong> O atraso de qualquer pagamento acarretará multa de <strong>2%</strong>, juros de mora de <strong>1% ao mês</strong> e correção monetária, sem prejuízo da suspensão dos serviços e da cobrança do débito.</p>
 
-            <div style={{ marginTop: '80px', display: 'flex', justifyContent: 'space-between' }}>
-              <div style={{ width: '45%', textAlign: 'center', borderTop: '1px solid black', paddingTop: '10px' }}>
-                <p><strong>A GRÁFICA</strong></p>
-                <p>Contratada</p>
+              <p style={P}><strong>CLÁUSULA 3ª – DO PRAZO.</strong> O prazo estimado de entrega é <strong>{sc.delivery_date || "a ser ajustado entre as partes"}</strong>, contado a partir do cumprimento cumulativo do pagamento da entrada e da aprovação final da arte. <strong>3.1.</strong> Atrasos causados pelo CONTRATANTE (demora na aprovação da arte, no envio de arquivos/materiais ou no pagamento) suspendem e prorrogam automaticamente o prazo, sem qualquer penalidade à CONTRATADA.</p>
+
+              <p style={P}><strong>CLÁUSULA 4ª – DA APROVAÇÃO DA ARTE.</strong> A produção somente se inicia após a aprovação expressa da arte final pelo CONTRATANTE. <strong>4.1.</strong> Após a aprovação, o CONTRATANTE assume integral responsabilidade por eventuais erros de texto, ortografia, medidas, cores, imagens e dados, não cabendo à CONTRATADA refação, reembolso ou reimpressão gratuita. <strong>4.2.</strong> Alterações solicitadas após a aprovação da arte ou o início da produção serão orçadas à parte e implicarão novo prazo.</p>
+
+              <p style={P}><strong>CLÁUSULA 5ª – DAS OBRIGAÇÕES DO CONTRATANTE.</strong> Fornecer informações e arquivos corretos, completos e em qualidade adequada; aprovar a arte tempestivamente; efetuar os pagamentos nas datas ajustadas; e conferir os produtos no ato da entrega.</p>
+
+              <p style={P}><strong>CLÁUSULA 6ª – DA PROPRIEDADE INTELECTUAL E ISENÇÃO.</strong> O CONTRATANTE declara e garante ser titular ou legítimo autorizado dos direitos de uso de marcas, logotipos, imagens, textos e demais conteúdos fornecidos, respondendo com exclusividade por qualquer violação de direitos de terceiros e isentando e mantendo indene a CONTRATADA de toda reclamação, indenização, custa ou honorário daí decorrentes.</p>
+
+              <p style={P}><strong>CLÁUSULA 7ª – DAS TOLERÂNCIAS TÉCNICAS.</strong> Em razão da natureza do processo gráfico, não configuram defeito: (a) variação de até <strong>10%</strong>, para mais ou para menos, na quantidade produzida, faturando-se a quantidade efetivamente entregue; (b) pequenas variações de cor em relação ao visualizado em tela ou a impressões anteriores; e (c) pequenas variações de corte, dobra, registro e acabamento dentro das tolerâncias usuais do mercado.</p>
+
+              <p style={P}><strong>CLÁUSULA 8ª – DA ENTREGA E DOS VÍCIOS.</strong> O CONTRATANTE deverá conferir os produtos no recebimento; vícios aparentes deverão ser reclamados por escrito em até <strong>7 (sete) dias</strong> corridos, sob pena de aceitação tácita. Constatado vício comprovadamente atribuível à CONTRATADA, sua obrigação limita-se à refação da parte defeituosa, excluída qualquer outra indenização.</p>
+
+              <p style={P}><strong>CLÁUSULA 9ª – DO CANCELAMENTO E DA RESCISÃO.</strong> Tratando-se de produto personalizado, feito sob encomenda, o cancelamento pelo CONTRATANTE após o início dos trabalhos <strong>não dá direito à devolução do sinal</strong> e obriga-o ao ressarcimento dos custos e materiais já empregados, acrescidos de multa de <strong>20%</strong> sobre o saldo do contrato. O inadimplemento de qualquer cláusula faculta à parte inocente rescindir o contrato e exigir as perdas e danos cabíveis.</p>
+
+              <p style={P}><strong>CLÁUSULA 10 – DA LIMITAÇÃO DE RESPONSABILIDADE.</strong> A responsabilidade total da CONTRATADA, por qualquer causa, fica limitada ao valor efetivamente pago por este contrato, não respondendo por lucros cessantes, danos indiretos ou expectativas de terceiros.</p>
+
+              <p style={P}><strong>CLÁUSULA 11 – DO CASO FORTUITO E FORÇA MAIOR.</strong> Nenhuma das partes responderá por descumprimento decorrente de caso fortuito ou força maior, nos termos do art. 393 do Código Civil.</p>
+
+              <p style={P}><strong>CLÁUSULA 12 – DA PROTEÇÃO DE DADOS (LGPD).</strong> As partes tratarão os dados pessoais estritamente para a execução deste contrato, em conformidade com a Lei nº 13.709/2018, adotando medidas de segurança e não os utilizando para finalidades diversas sem consentimento.</p>
+
+              <p style={P}><strong>CLÁUSULA 13 – DAS DISPOSIÇÕES GERAIS.</strong> Toda alteração deverá ser feita por escrito; a tolerância quanto ao descumprimento de qualquer cláusula não implica novação ou renúncia; e a eventual nulidade de uma cláusula não prejudica as demais.</p>
+
+              {sc.approval_terms && String(sc.approval_terms).trim() && (
+                <p style={{ ...P, whiteSpace: "pre-wrap" }}><strong>CLÁUSULA 14 – DAS CONDIÇÕES ADICIONAIS.</strong> {sc.approval_terms}</p>
+              )}
+
+              <p style={P}><strong>CLÁUSULA {sc.approval_terms && String(sc.approval_terms).trim() ? "15" : "14"} – DO FORO.</strong> Fica eleito o foro da comarca da sede da CONTRATADA para dirimir quaisquer dúvidas oriundas deste contrato, com renúncia a qualquer outro, por mais privilegiado que seja.</p>
+
+              <p style={{ ...P, marginTop: "14px" }}>E, por estarem assim justas e contratadas, firmam o presente instrumento em 2 (duas) vias de igual teor e forma, na presença das testemunhas abaixo.</p>
+
+              <p style={{ margin: "18px 0 40px" }}>{company?.name ? `${company.name}, ` : ""}{new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}.</p>
+
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: "50px" }}>
+                <div style={{ width: "45%", textAlign: "center", borderTop: "1px solid #000", paddingTop: "6px" }}>
+                  <p style={{ margin: 0 }}><strong>{compName}</strong></p>
+                  <p style={{ margin: 0, fontSize: "11px" }}>CONTRATADA</p>
+                </div>
+                <div style={{ width: "45%", textAlign: "center", borderTop: "1px solid #000", paddingTop: "6px" }}>
+                  <p style={{ margin: 0 }}><strong>{cliName}</strong></p>
+                  <p style={{ margin: 0, fontSize: "11px" }}>CONTRATANTE</p>
+                </div>
               </div>
-              <div style={{ width: '45%', textAlign: 'center', borderTop: '1px solid black', paddingTop: '10px' }}>
-                <p><strong>{selectedContract.clients?.name}</strong></p>
-                <p>Contratante</p>
+
+              <div style={{ marginTop: "34px", fontSize: "11.5px" }}>
+                <p style={{ margin: "0 0 18px" }}>Testemunha 1: ______________________________  CPF: ______________________</p>
+                <p style={{ margin: 0 }}>Testemunha 2: ______________________________  CPF: ______________________</p>
               </div>
-            </div>
-            <div style={{ textAlign: 'center', marginTop: '40px', fontSize: '12px', color: '#666' }}>
-              Gerado via PrintFlow CRM em {new Date().toLocaleDateString('pt-BR')}
+
+              <div style={{ textAlign: "center", marginTop: "26px", fontSize: "10px", color: "#777" }}>
+                Documento gerado via PrintFlow CRM — {sc.contract_number}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </>
   );
 }
