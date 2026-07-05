@@ -103,15 +103,31 @@ function NovoOrcamentoPage() {
           quantity: item.quantity,
           unit_price: item.unit_price,
           total_price: item.total_price,
-          cost_price: item.unit_cost + Object.values(item.attribute_price_impacts).reduce((s, v) => s + (v || 0), 0),
+          cost_price: item.is_supplier
+            ? item.unit_cost
+            : item.unit_cost + Object.values(item.attribute_price_impacts).reduce((s, v) => s + (v || 0), 0),
           margin_percent: item.margin_percent,
           supplier_id: item.supplier_id || null,
-          source_origin: item.supplier_id ? "supplier_import" : "manual",
+          source_origin: item.supplier_id || item.is_supplier ? "supplier_import" : "manual",
           notes: item.notes || null,
           item_attributes: {
             values: item.attributes,
-            price_impacts: item.attribute_price_impacts
-          }
+            price_impacts: item.attribute_price_impacts,
+            // Snapshot da configuração no momento do orçamento (seção 19): trava
+            // custo/preço/prazo/opções usados, para uma atualização futura do
+            // fornecedor não alterar silenciosamente um orçamento já enviado.
+            snapshot: {
+              is_supplier: !!item.is_supplier,
+              unit_cost: item.unit_cost,
+              unit_price: item.unit_price,
+              quantity: item.quantity,
+              production_deadline: item.production_deadline || null,
+              source_url: item.source_url || null,
+              selection: item.selection_snapshot || {},
+              override_cost: item.override_unit_cost ?? null,
+              captured_at: new Date().toISOString(),
+            },
+          },
         }));
 
         const { error: itemsError } = await (db).from("quote_items").insert(itemsPayload);

@@ -14,6 +14,14 @@ import { Textarea } from "@/components/ui/textarea";
 const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 const db = supabase as any;
 
+/** Faixa de preço por quantidade (tiragem real do fornecedor — seção 7). */
+export interface QuoteTier {
+  quantity: number;
+  unitCost: number; // custo unitário do fornecedor nesta faixa
+  unitPrice: number; // preço de venda unitário (custo × margem)
+  external_id?: string | null;
+}
+
 export interface QuoteItemData {
   id: string; // temp client id
   product_id: string | null;
@@ -27,6 +35,19 @@ export interface QuoteItemData {
   attributes: Record<string, any>; // { attr_code: value }
   attribute_price_impacts: Record<string, number>; // { attr_code: price_impact }
   notes: string;
+  // Origem / configuração importada
+  is_supplier?: boolean;
+  margin_percent_target?: number; // margem alvo p/ recalcular preço a partir do custo
+  tiers?: QuoteTier[]; // faixas por quantidade (produto importado)
+  // Custo unitário REAL da combinação escolhida (varredura). Quando definido,
+  // substitui a tiragem-âncora — o preço da FuturaIM é por combinação. `label`
+  // indica qual opção o determinou (transparência).
+  override_unit_cost?: number | null;
+  override_label?: string | null;
+  production_deadline?: string | null;
+  source_url?: string | null;
+  // Snapshot da configuração no momento (seção 19) — persistido em item_attributes
+  selection_snapshot?: Record<string, { value: string; external_id?: string | null; unit_cost?: number | null }>;
   // Calculated
   total_cost: number;
   total_price: number;
@@ -40,6 +61,45 @@ interface QuoteItemBuilderProps {
 
 function generateId() {
   return 'qi_' + Math.random().toString(36).substring(2, 11);
+}
+
+/** Lê as faixas de preço reais do produto importado (seção 7). Não fabrica nada. */
+function readTiers(product: any): QuoteTier[] {
+  const raw = Array.isArray(product?.quantity_prices)
+    ? product.quantity_prices
+    : Array.isArray(product?.quantity_price_table)
+      ? product.quantity_price_table
+      : [];
+  const margin = Number(product?.margin_percent ?? product?.target_margin) || 0;
+  const factor = 1 + margin / 100;
+  const tiers: QuoteTier[] = raw
+    .map((t: any) => {
+      const quantity = Number(t.quantity) || 0;
+      const unitCost = Number(t.unitPrice ?? t.unit_price ?? (t.price && quantity ? t.price / quantity : 0)) || 0;
+      const unitSell = Number(t.unitSellPrice ?? (unitCost ? unitCost * factor : 0)) || 0;
+      return { quantity, unitCost, unitPrice: unitSell, external_id: t.external_id ?? null };
+    })
+    .filter((t: QuoteTier) => t.quantity > 0)
+    .sort((a: QuoteTier, b: QuoteTier) => a.quantity - b.quantity);
+  return tiers;
+}
+
+/**
+ * Resolve a faixa aplicável para uma quantidade (seção 7): usa a faixa exata; na
+ * ausência, a faixa imediatamente INFERIOR (melhor custo já garantido); se a
+ * quantidade for menor que a menor faixa, usa a menor. Nunca arredonda a
+ * quantidade — apenas escolhe qual faixa de preço aplicar.
+ */
+function resolveTier(tiers: QuoteTier[], qty: number): QuoteTier | null {
+  if (!tiers.length) return null;
+  const exact = tiers.find((t) => t.quantity === qty);
+  if (exact) return exact;
+  let lower: QuoteTier | null = null;
+  for (const t of tiers) {
+    if (t.quantity <= qty) lower = t;
+    else break;
+  }
+  return lower || tiers[0];
 }
 
 export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps) {
@@ -106,6 +166,15 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
   }, [catalogProducts, productSearch, productFilterOrigin]);
 
   function addItem(product?: any) {
+    const isSupplier = !!(product && (product.imported_from_supplier === true || product.origin === "supplier_import"));
+    const tiers = product ? readTiers(product) : [];
+    const marginTarget = Number(product?.margin_percent ?? product?.target_margin) || 0;
+    // Produto importado com tiragens: começa na MENOR faixa (custo/preço reais dela).
+    const firstTier = tiers[0] || null;
+    const initialQty = firstTier ? firstTier.quantity : 1;
+    const initialCost = firstTier ? firstTier.unitCost : product?.cost_price || product?.base_cost || 0;
+    const initialPrice = firstTier ? firstTier.unitPrice : product?.sale_price || product?.suggested_price || 0;
+
     const newItem: QuoteItemData = {
       id: generateId(),
       product_id: product?.id || null,
@@ -113,14 +182,20 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
       product_image: product?.image_url || product?.main_image_url || null,
       supplier_id: product?.supplier_id || null,
       supplier_name: product?.supplier_name || null,
-      quantity: 1,
-      unit_cost: product?.cost_price || product?.base_cost || 0,
-      unit_price: product?.sale_price || product?.suggested_price || 0,
+      quantity: initialQty,
+      unit_cost: initialCost,
+      unit_price: initialPrice,
       attributes: {},
       attribute_price_impacts: {},
       notes: product?.technical_description || product?.description || "",
-      total_cost: product?.cost_price || product?.base_cost || 0,
-      total_price: product?.sale_price || product?.suggested_price || 0,
+      is_supplier: isSupplier,
+      margin_percent_target: marginTarget,
+      tiers: tiers.length ? tiers : undefined,
+      production_deadline: product?.production_deadline || product?.avg_production_time || null,
+      source_url: product?.source_url || null,
+      selection_snapshot: {},
+      total_cost: initialCost * initialQty,
+      total_price: initialPrice * initialQty,
       margin_percent: 0,
     };
     recalcItem(newItem);
@@ -146,6 +221,30 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
   }
 
   function recalcItem(item: QuoteItemData) {
+    // Produto importado com tiragens: o custo/preço UNITÁRIO vêm da faixa real
+    // aplicável à quantidade (seção 7) — sem somar impactos por eixo (o preço da
+    // FuturaIM é por combinação, não aditivo).
+    if (item.is_supplier) {
+      // 1) Se a varredura definiu o custo real da combinação escolhida, ele manda
+      //    (preço por combinação, não aditivo). Preço = custo × margem alvo.
+      if (item.override_unit_cost != null) {
+        const factor = 1 + (item.margin_percent_target || 0) / 100;
+        item.unit_cost = item.override_unit_cost;
+        item.unit_price = parseFloat((item.override_unit_cost * factor).toFixed(2));
+      } else if (item.tiers && item.tiers.length) {
+        // 2) Senão, usa a faixa por quantidade da configuração importada (seção 7).
+        const tier = resolveTier(item.tiers, item.quantity);
+        if (tier) {
+          item.unit_cost = tier.unitCost;
+          item.unit_price = tier.unitPrice;
+        }
+      }
+      item.total_cost = item.unit_cost * item.quantity;
+      item.total_price = item.unit_price * item.quantity;
+      item.margin_percent = item.total_price > 0 ? ((item.total_price - item.total_cost) / item.total_price) * 100 : 0;
+      return;
+    }
+    // Motor/manual: mantém o modelo ADITIVO de impacto por atributo.
     const attrCostSum = Object.values(item.attribute_price_impacts).reduce((s, v) => s + (v || 0), 0);
     const effectiveCost = item.unit_cost + attrCostSum;
     item.total_cost = effectiveCost * item.quantity;
@@ -156,27 +255,53 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
   function handleAttributeChange(idx: number, attrCode: string, value: any, attrId?: string) {
     const item = items[idx];
     const newAttributes = { ...item.attributes, [attrCode]: value };
-    const newImpacts = { ...item.attribute_price_impacts };
+    const { attributes: attrDefs, options } = getProductAttributes(item.product_id);
+    const option = attrId && options ? options.find((o: any) => o.attribute_id === attrId && o.value === value) : null;
+    const attrDef = attrDefs?.find((a: any) => a.id === attrId);
 
-    // Buscar o preço do impacto da opção selecionada
-    let newImpact = 0;
-    const { options } = getProductAttributes(item.product_id);
-    if (attrId && options) {
-      const option = options.find((o: any) => o.attribute_id === attrId && o.value === value);
-      newImpact = option?.price_impact || 0;
+    // Produto importado: o preço é POR COMBINAÇÃO (não aditivo). Guardamos a
+    // seleção no snapshot (seção 19) e, quando a opção tem custo real (varredura),
+    // ele passa a dirigir o custo unitário do item (substitui, não soma).
+    if (item.is_supplier) {
+      const snapshot = { ...(item.selection_snapshot || {}) };
+      snapshot[attrCode] = {
+        value: String(value),
+        external_id: option?.external_id ?? null,
+        unit_cost: option?.real_cost ?? null,
+      };
+      // Recalcula o override a partir da opção mais recentemente escolhida que
+      // tenha custo real; se nenhuma tem, volta às tiragens da configuração.
+      let overrideCost: number | null = null;
+      let overrideLabel: string | null = null;
+      if (option?.real_cost != null) {
+        overrideCost = Number(option.real_cost);
+        overrideLabel = `${attrDef?.name || attrCode}: ${value}`;
+      } else if (item.override_unit_cost != null) {
+        // mantém o override anterior (outra opção já o definiu)
+        overrideCost = item.override_unit_cost;
+        overrideLabel = item.override_label ?? null;
+      }
+      updateItem(idx, {
+        attributes: newAttributes,
+        selection_snapshot: snapshot,
+        override_unit_cost: overrideCost,
+        override_label: overrideLabel,
+      });
+      return;
     }
 
+    // Motor/manual: modelo ADITIVO por impacto de atributo.
+    const newImpacts = { ...item.attribute_price_impacts };
+    const newImpact = option?.price_impact || 0;
     const oldImpact = newImpacts[attrCode] || 0;
     newImpacts[attrCode] = newImpact;
-
-    // Ajusta o preço de venda pela diferença de impacto (delta)
     const delta = newImpact - oldImpact;
     const newUnitPrice = Math.max(0, item.unit_price + delta);
 
-    updateItem(idx, { 
-      attributes: newAttributes, 
+    updateItem(idx, {
+      attributes: newAttributes,
       attribute_price_impacts: newImpacts,
-      unit_price: newUnitPrice
+      unit_price: newUnitPrice,
     });
   }
 
@@ -206,8 +331,14 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
             const arr = Array.isArray(v?.values) ? v.values : (Array.isArray(v?.options) ? v.options : null);
             if (v?.name && arr) {
                arr.forEach((val: any) => {
-                 const optName = typeof val === "object" && val !== null && 'value' in val ? val.value : String(val);
-                 legacyVariations.push({ type: v.name, name: String(optName), cost: 0, price: 0 });
+                 const isObj = typeof val === "object" && val !== null;
+                 const optName = isObj && 'value' in val ? val.value : String(val);
+                 // Custo/preço REAIS da combinação (varredura). Sem varredura ficam
+                 // null e a opção é só descritiva (não altera o preço).
+                 const cost = isObj && val.cost != null ? Number(val.cost) : null;
+                 const price = isObj && val.sell != null ? Number(val.sell) : null;
+                 const external_id = isObj ? (val.external_id ?? null) : null;
+                 legacyVariations.push({ type: v.name, name: String(optName), cost, price, external_id });
                });
             }
           });
@@ -237,17 +368,22 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
                is_required: false,
             });
             grouped[type].forEach((row: any, j: number) => {
-               // Base cost para calcular impacto
+               // Base cost para calcular impacto (usado só no modelo aditivo/manual).
                const baseCost = Number(product.base_cost) || 0;
-               const costValue = Number(row.cost);
-               const impact = costValue > baseCost ? (costValue - baseCost) : 0;
-               
+               const hasRealCost = row.cost != null && !Number.isNaN(Number(row.cost));
+               const costValue = hasRealCost ? Number(row.cost) : 0;
+               const impact = hasRealCost && costValue > baseCost ? costValue - baseCost : 0;
+
                syntheticOpts.push({
                   id: `legacy-opt-${i}-${j}`,
                   attribute_id: attrId,
                   value: row.name,
                   label: row.name,
                   price_impact: impact,
+                  // Custo real da combinação (varredura) e id externo — dirigem o
+                  // preço em produtos importados e alimentam o snapshot (seção 19).
+                  real_cost: hasRealCost ? costValue : null,
+                  external_id: row.external_id ?? null,
                });
             });
          });
@@ -331,6 +467,36 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
             </Button>
           </div>
 
+          {/* Faixas de quantidade reais do fornecedor (seção 7) */}
+          {editingItem.is_supplier && editingItem.tiers && editingItem.tiers.length > 0 && (() => {
+            const applied = resolveTier(editingItem.tiers, editingItem.quantity);
+            return (
+              <div className="space-y-1.5">
+                <Label className="text-xs flex items-center gap-1.5">
+                  <Truck className="h-3 w-3 text-sky-600" /> Tiragens do fornecedor
+                  {editingItem.override_unit_cost != null && (
+                    <span className="text-[10px] text-amber-600">(preço vindo da combinação escolhida)</span>
+                  )}
+                </Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {editingItem.tiers.map((t) => {
+                    const isApplied = editingItem.override_unit_cost == null && applied?.quantity === t.quantity;
+                    return (
+                      <button
+                        key={t.quantity}
+                        onClick={() => updateItem(editingIdx, { quantity: t.quantity, override_unit_cost: null, override_label: null })}
+                        className={`text-[11px] px-2 py-1 rounded-md border transition-colors ${isApplied ? "bg-sky-600 text-white border-sky-600 font-semibold" : "bg-background hover:border-sky-400"}`}
+                        title={`${fmt.format(t.unitPrice)}/un`}
+                      >
+                        {t.quantity} un · {fmt.format(t.unitPrice * t.quantity)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Linha: Quantidade + Custo + Preço */}
           <div className="grid grid-cols-3 gap-3">
             <div>
@@ -342,15 +508,17 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
               />
             </div>
             <div>
-              <Label className="text-xs">Custo Base (R$)</Label>
+              <Label className="text-xs">Custo unit. (R$){editingItem.is_supplier && <span className="text-[9px] text-muted-foreground ml-1">fornecedor</span>}</Label>
               <Input
                 type="number" min="0" step="0.01"
                 value={editingItem.unit_cost}
+                readOnly={editingItem.is_supplier}
+                className={editingItem.is_supplier ? "bg-secondary/40" : ""}
                 onChange={(e) => updateItem(editingIdx, { unit_cost: parseFloat(e.target.value) || 0 })}
               />
             </div>
             <div>
-              <Label className="text-xs">Preço de Venda (R$)</Label>
+              <Label className="text-xs">Preço venda unit. (R$)</Label>
               <Input
                 type="number" min="0" step="0.01"
                 value={editingItem.unit_price}
@@ -358,6 +526,25 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
               />
             </div>
           </div>
+
+          {/* Transparência: origem do custo e prazo do fornecedor */}
+          {editingItem.is_supplier && (
+            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              {editingItem.override_label && (
+                <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                  Custo baseado em {editingItem.override_label} · {fmt.format(editingItem.unit_cost)}/un (ref. da combinação)
+                </span>
+              )}
+              {editingItem.production_deadline && (
+                <span className="text-muted-foreground">Prazo fornecedor: {editingItem.production_deadline}</span>
+              )}
+              {editingItem.source_url && (
+                <a href={editingItem.source_url} target="_blank" rel="noreferrer" className="text-sky-600 hover:underline inline-flex items-center gap-0.5">
+                  <Truck className="h-3 w-3" /> Ver no fornecedor
+                </a>
+              )}
+            </div>
+          )}
 
           {/* Atributos Dinâmicos do Motor Universal */}
           {editingAttrs.length > 0 ? (
@@ -394,11 +581,17 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
                             <SelectItem key={opt.id} value={opt.value}>
                               <div className="flex items-center justify-between w-full gap-4">
                                 <span>{opt.label}</span>
-                                {opt.price_impact > 0 && (
-                                  <span className="text-[10px] text-amber-600 font-semibold">
-                                    +{fmt.format(opt.price_impact)}
-                                  </span>
-                                )}
+                                {editingItem.is_supplier
+                                  ? opt.real_cost != null && (
+                                      <span className="text-[10px] text-sky-600 font-semibold">
+                                        {fmt.format(opt.real_cost)}/un
+                                      </span>
+                                    )
+                                  : opt.price_impact > 0 && (
+                                      <span className="text-[10px] text-amber-600 font-semibold">
+                                        +{fmt.format(opt.price_impact)}
+                                      </span>
+                                    )}
                               </div>
                             </SelectItem>
                           ))}
@@ -444,25 +637,30 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
 
           {/* Resumo de custo do item */}
           {(() => {
-            const attrCostSum = Object.values(editingItem.attribute_price_impacts).reduce((s, v) => s + (v || 0), 0);
+            const attrCostSum = editingItem.is_supplier
+              ? 0
+              : Object.values(editingItem.attribute_price_impacts).reduce((s, v) => s + (v || 0), 0);
             const effectiveCost = editingItem.unit_cost + attrCostSum;
+            const profit = editingItem.total_price - editingItem.total_cost;
             return (
               <div className="p-3 bg-secondary/50 rounded-md grid grid-cols-4 gap-2 text-center">
                 <div>
-                  <p className="text-[10px] text-muted-foreground">Custo Base</p>
-                  <p className="font-bold text-xs">{fmt.format(editingItem.unit_cost)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground">+ Materiais</p>
-                  <p className="font-bold text-xs text-amber-600">{fmt.format(attrCostSum)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] text-muted-foreground">Custo Efetivo/un</p>
+                  <p className="text-[10px] text-muted-foreground">Custo/un</p>
                   <p className="font-bold text-xs">{fmt.format(effectiveCost)}</p>
                 </div>
                 <div>
                   <p className="text-[10px] text-muted-foreground">Total ({editingItem.quantity}x)</p>
                   <p className="font-bold text-xs text-primary">{fmt.format(editingItem.total_price)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Lucro</p>
+                  <p className={`font-bold text-xs ${profit >= 0 ? "text-emerald-600" : "text-red-500"}`}>{fmt.format(profit)}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] text-muted-foreground">Margem</p>
+                  <p className={`font-bold text-xs ${editingItem.margin_percent >= 30 ? "text-emerald-600" : editingItem.margin_percent >= 15 ? "text-amber-600" : "text-red-500"}`}>
+                    {editingItem.margin_percent.toFixed(1)}%
+                  </p>
                 </div>
               </div>
             );

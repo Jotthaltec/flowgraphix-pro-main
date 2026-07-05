@@ -94,6 +94,28 @@ describe("FuturaIM — páginas reais (classificação)", () => {
     expect(cartao.production_time?.production_days).toBe(2);
   });
 
+  it("a MAIOR tiragem tem preço real (não vaza para frete/extra após a tabela)", () => {
+    // Regressão: o HTML da FuturaIM não fecha <tr>/<td>; sem limitar a linha ao
+    // </table>, a última tiragem capturava o último R$ da página (frete R$ 9,99)
+    // em vez do total real. Aqui garantimos que a maior quantidade é a mais cara.
+    const cases: Array<[string, number, number]> = [
+      // arquivo, maior quantidade esperada, preço total mínimo aceitável
+      ["futuraim-banner.html", 50, 700],
+      ["futuraim-camiseta.html", 100, 3000],
+      ["futuraim-cartao-de-visita.html", 20000, 1500],
+    ];
+    for (const [file, maxQty, minPrice] of cases) {
+      const p = parseFuturaImProduct(fixture(file), "https://www.futuraim.com.br/produto/x?id=1");
+      const tiers = p.variants[0]?.price_tiers || [];
+      const top = tiers[tiers.length - 1];
+      expect(top.quantity).toBe(maxQty);
+      expect(top.total_price).toBeGreaterThan(minPrice);
+      // a maior tiragem é a de maior preço total (monotônico no topo)
+      const maxPrice = Math.max(...tiers.map((t) => t.total_price));
+      expect(top.total_price).toBe(maxPrice);
+    }
+  });
+
   it("DTF UV não é classificado como DTF Têxtil (seção 32)", () => {
     const p = parseFuturaImProduct(fixture("futuraim-dtf-uv.html"), "https://www.futuraim.com.br/produto/dtf-uv?id=87625");
     expect(p.classification.subcategory).not.toBe("DTF Têxtil");
