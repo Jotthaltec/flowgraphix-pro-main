@@ -155,7 +155,7 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
           imported_from_supplier, model_id, editor_meta, variations,
           quantity_prices, quantity_price_table, supplier_product_families(id)
         `)
-        .eq("status", "Ativo")
+        .or("status.eq.Ativo,status.is.null")
         .order("name");
       if (error) throw error;
       return (data || []) as any[];

@@ -136,7 +136,7 @@ function OrcamentosPage() {
           main_image_url, description, technical_description, supplier_id,
           production_deadline, imported_from_supplier
         `)
-        .eq("status", "Ativo")
+        .or("status.eq.Ativo,status.is.null")
         .order("name");
       if (error) throw error;
       return data as CatalogProduct[];
