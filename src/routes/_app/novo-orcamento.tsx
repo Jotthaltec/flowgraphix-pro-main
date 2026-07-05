@@ -126,6 +126,8 @@ function NovoOrcamentoPage() {
               selection: item.selection_snapshot || {},
               override_cost: item.override_unit_cost ?? null,
               captured_at: new Date().toISOString(),
+              family_id: item.family_id || null,
+              combination_calc: item.calc_snapshot || null,
             },
           },
         }));

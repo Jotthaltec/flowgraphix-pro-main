@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { StatusBadge } from "@/components/status-badge";
+import { SupplierCombinationWrapper } from "./supplier-combination-wrapper";
+import { useAuth } from "@/hooks/use-auth";
 import { Textarea } from "@/components/ui/textarea";
 
 const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -54,6 +56,10 @@ export interface QuoteItemData {
   total_cost: number;
   total_price: number;
   margin_percent: number;
+  // New Combination Engine
+  has_combination_engine?: boolean;
+  family_id?: string;
+  calc_snapshot?: any;
 }
 
 interface QuoteItemBuilderProps {
@@ -128,6 +134,7 @@ function resolveTier(tiers: QuoteTier[], qty: number): QuoteTier | null {
 }
 
 export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps) {
+  const { profile } = useAuth();
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [productSearch, setProductSearch] = useState("");
@@ -146,7 +153,7 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
           main_image_url, description, technical_description, supplier_id,
           production_deadline, avg_production_time, source_url, minimum_quantity,
           imported_from_supplier, model_id, editor_meta, variations,
-          quantity_prices, quantity_price_table
+          quantity_prices, quantity_price_table, supplier_product_families(id)
         `)
         .eq("status", "Ativo")
         .order("name");
@@ -193,6 +200,8 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
 
   function addItem(product?: any) {
     const isSupplier = !!(product && (product.imported_from_supplier === true || product.origin === "supplier_import"));
+    const familyId = product?.supplier_product_families?.[0]?.id || null;
+    const hasCombinationEngine = !!familyId;
     const tiers = product ? readTiers(product) : [];
     const marginTarget = Number(product?.margin_percent ?? product?.target_margin) || 0;
     // Produto importado com tiragens: começa na MENOR faixa (custo/preço reais dela).
@@ -215,6 +224,8 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
       attribute_price_impacts: {},
       notes: product?.technical_description || product?.description || "",
       is_supplier: isSupplier,
+      has_combination_engine: hasCombinationEngine,
+      family_id: familyId,
       margin_percent_target: marginTarget,
       tiers: tiers.length ? tiers : undefined,
       production_deadline: product?.production_deadline || product?.avg_production_time || null,
@@ -523,7 +534,33 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
             </Button>
           </div>
 
-          {/* Faixas de quantidade reais do fornecedor (seção 7) */}
+          {/* Se usar o motor de combinações */}
+          {editingItem.has_combination_engine && editingItem.family_id ? (
+            <div className="pt-2 border-t mt-2">
+              <SupplierCombinationWrapper
+                familyId={editingItem.family_id}
+                companyId={profile?.company_id || ""}
+                marginPercent={editingItem.margin_percent_target || 30}
+                onCalculationChange={(calc) => {
+                  if (!calc) return;
+                  updateItem(editingIdx, {
+                    unit_cost: calc.unit_price_display, // display na UI
+                    unit_price: calc.final_sale_price / calc.quantity,
+                    quantity: calc.quantity,
+                    total_cost: calc.total_supplier_cost,
+                    total_price: calc.final_sale_price,
+                    margin_percent: calc.margin_percent,
+                    calc_snapshot: calc
+                  });
+                }}
+                onSelectionChange={(sel) => {
+                  updateItem(editingIdx, { selection_snapshot: sel as any });
+                }}
+              />
+            </div>
+          ) : (
+            <>
+              {/* Faixas de quantidade reais do fornecedor (seção 7) */}
           {editingItem.is_supplier && editingItem.tiers && editingItem.tiers.length > 0 && (() => {
             const applied = resolveTier(editingItem.tiers, editingItem.quantity);
             return (
@@ -721,6 +758,8 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
               </div>
             );
           })()}
+            </>
+          )}
 
           {/* Observações do item */}
           <div>
