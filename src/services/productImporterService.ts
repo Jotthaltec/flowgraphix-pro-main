@@ -176,15 +176,24 @@ export function buildProductRow(product: ImportedProduct, opts: BuildProductRowO
   // Cada eixo já traz TODAS as opções reais numa única página (com id externo),
   // então a lista completa é gravada mesmo sem a varredura multi-página. É o
   // campo lido pelo botão "Importar do fornecedor" do editor de produto.
+  // `cost` por opção = custo real da combinação (só após varredura completa);
+  // `sell` aplica a margem. Sem varredura, ficam null e o editor herda o
+  // custo/preço-base do produto.
   const variations = product.variant_axes.map((a) => ({
     name: a.name,
     normalized_name: a.normalized_name,
-    values: a.options.map((o) => ({
-      value: o.value,
-      external_id: o.external_id ?? null,
-      url: o.url ?? null,
-      selected: o.selected ?? false,
-    })),
+    values: a.options.map((o) => {
+      const cost = o.unit_price ?? null;
+      return {
+        value: o.value,
+        external_id: o.external_id ?? null,
+        url: o.url ?? null,
+        selected: o.selected ?? false,
+        cost,
+        sell: cost != null ? parseFloat((cost * factor).toFixed(2)) : null,
+        ref_quantity: o.ref_quantity ?? null,
+      };
+    }),
   }));
 
   // Serviços/acabamentos extras (ex.: "Kit Canetas Marcador + R$ 29,99").

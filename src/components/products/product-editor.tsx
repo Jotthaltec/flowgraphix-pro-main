@@ -173,9 +173,14 @@ function fromProduct(p: any): FormState {
     for (const axis of supplierAxes) {
       const opts = Array.isArray(axis?.values) ? axis.values : (Array.isArray(axis?.options) ? axis.options : []);
       for (const opt of opts) {
-        const name = typeof opt === "object" && opt !== null && "value" in opt ? String(opt.value) : String(opt);
+        const isObj = typeof opt === "object" && opt !== null;
+        const name = isObj && "value" in opt ? String(opt.value) : String(opt);
         if (!axis?.name || !name) continue;
-        seeded.push({ id: uid(), type: String(axis.name), name, cost: f.base_cost, price: num(p.sale_price), sku: "", active: true });
+        // Custo/preço REAIS da combinação quando a varredura os trouxe;
+        // caso contrário herda o custo/preço-base do produto.
+        const cost = isObj && opt.cost != null ? num(opt.cost) : f.base_cost;
+        const price = isObj && opt.sell != null ? num(opt.sell) : num(p.sale_price);
+        seeded.push({ id: uid(), type: String(axis.name), name, cost, price, sku: "", active: true });
       }
     }
     f.variation_rows = seeded;
@@ -541,8 +546,13 @@ export function ProductEditor({
       const arr = Array.isArray(v?.values) ? v.values : (Array.isArray(v?.options) ? v.options : null);
       if (v?.name && arr) {
         for (const val of arr) {
-          const optName = typeof val === "object" && val !== null && 'value' in val ? val.value : String(val);
-          rows.push({ id: uid(), type: v.name, name: String(optName), cost: num(f.base_cost), price: pricing.finalPrice, sku: "", active: true });
+          const isObj = typeof val === "object" && val !== null;
+          const optName = isObj && 'value' in val ? val.value : String(val);
+          // Custo/preço reais da combinação quando disponíveis (varredura);
+          // senão herda o custo-base e o preço final do produto.
+          const cost = isObj && val.cost != null ? num(val.cost) : num(f.base_cost);
+          const price = isObj && val.sell != null ? num(val.sell) : pricing.finalPrice;
+          rows.push({ id: uid(), type: v.name, name: String(optName), cost, price, sku: "", active: true });
         }
       }
     }

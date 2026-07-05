@@ -150,6 +150,15 @@ export interface ImportedVariantAxis {
     external_id?: string;
     url?: string;
     selected?: boolean;
+    /**
+     * Preço REAL desta opção (custo do fornecedor), preenchido só após a
+     * varredura completa de variantes — cada opção aponta para uma combinação
+     * (`?id=`) com sua própria tabela de tiragens. Sem varredura ficam undefined
+     * e a UI herda o custo-base do produto.
+     */
+    unit_price?: number; // custo unitário na tiragem de referência
+    total_price?: number; // custo total da tiragem de referência
+    ref_quantity?: number; // quantidade da tiragem usada como referência
   }>;
 }
 

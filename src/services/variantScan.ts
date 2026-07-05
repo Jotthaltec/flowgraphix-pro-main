@@ -27,6 +27,42 @@ export function collectVariantUrls(product: ImportedProduct): string[] {
 }
 
 /**
+ * Anexa a cada OPÇÃO de eixo o preço real da sua combinação (`?id=`), lido das
+ * variantes já coletadas na varredura. Cada opção aponta para um id específico;
+ * a variante com esse `external_id` traz a tabela de tiragens daquela escolha.
+ * Usamos a MENOR tiragem como referência (custo unitário/total de entrada).
+ *
+ * Sem varredura (nenhuma variante extra) as opções ficam sem preço e a UI herda
+ * o custo-base — nada é fabricado.
+ */
+export function attachVariantPrices(product: ImportedProduct): ImportedProduct {
+  const byExtId = new Map<string, { unit_price: number; total_price: number; quantity: number }>();
+  for (const v of product.variants) {
+    if (!v.external_id) continue;
+    // Menor tiragem disponível = referência de custo de entrada da opção.
+    const tier = [...v.price_tiers].sort((a, b) => a.quantity - b.quantity)[0];
+    if (!tier || !tier.total_price) continue;
+    byExtId.set(v.external_id, {
+      unit_price: tier.unit_price || parseFloat((tier.total_price / tier.quantity).toFixed(4)),
+      total_price: tier.total_price,
+      quantity: tier.quantity,
+    });
+  }
+  if (!byExtId.size) return product;
+
+  const variant_axes = product.variant_axes.map((axis) => ({
+    ...axis,
+    options: axis.options.map((o) => {
+      const p = o.external_id ? byExtId.get(o.external_id) : undefined;
+      return p
+        ? { ...o, unit_price: p.unit_price, total_price: p.total_price, ref_quantity: p.quantity }
+        : o;
+    }),
+  }));
+  return { ...product, variant_axes };
+}
+
+/**
  * Consolida vários produtos (um por id de combinação) em UM produto-base com
  * todas as variantes reais coletadas e os eixos unidos. Deduplica variantes por
  * id externo/SKU/título.
@@ -58,7 +94,7 @@ export function consolidateVariants(products: ImportedProduct[]): ImportedProduc
     }
   }
 
-  return {
+  const consolidated: ImportedProduct = {
     ...base,
     variants,
     variant_axes: [...axesMap.values()],
@@ -70,4 +106,6 @@ export function consolidateVariants(products: ImportedProduct[]): ImportedProduc
       ]),
     ),
   };
+  // Anexa o preço real de cada combinação às opções dos eixos.
+  return attachVariantPrices(consolidated);
 }
