@@ -54,16 +54,22 @@ describe("variantScan", () => {
       available: true,
       price_tiers: [
         { quantity: 100, unit: "unidade", total_price: 100 + i * 20, unit_price: (100 + i * 20) / 100, currency: "BRL", collected_at: "x" },
+        { quantity: 500, unit: "unidade", total_price: 400 + i * 50, unit_price: (400 + i * 50) / 500, currency: "BRL", collected_at: "x" },
       ],
       raw_attributes: {},
     }));
     const enriched = attachVariantPrices({ ...base, variants: [...base.variants, ...fakeVariants] });
     const eFormato = enriched.variant_axes.find((a) => a.normalized_name === "formato")!;
     const enrichedOpts = eFormato.options.filter((o) => opts.some((x) => x.external_id === o.external_id));
-    // Cada opção varrida recebeu SEU custo (0.—) e a quantidade de referência.
+    // Cada opção varrida recebeu SEU custo (menor tiragem) e a quantidade de referência.
     expect(enrichedOpts.every((o) => typeof o.unit_price === "number" && o.unit_price! > 0)).toBe(true);
     expect(enrichedOpts.map((o) => o.unit_price)).toEqual([1, 1.2]);
     expect(enrichedOpts.every((o) => o.ref_quantity === 100)).toBe(true);
+    // E a TABELA COMPLETA de tiragens da combinação (para o orçamento espelhar o site).
+    expect(enrichedOpts.every((o) => Array.isArray(o.tiers) && o.tiers!.length === 2)).toBe(true);
+    expect(enrichedOpts[0].tiers!.map((t) => t.quantity)).toEqual([100, 500]);
+    expect(enrichedOpts[0].tiers!.map((t) => t.total_price)).toEqual([100, 400]);
+    expect(enrichedOpts[1].tiers!.map((t) => t.total_price)).toEqual([120, 450]);
     // Nada é fabricado: sem variantes coletadas, opções ficam sem preço.
     const untouched = attachVariantPrices({ ...base, variants: [] });
     expect(untouched.variant_axes.every((a) => a.options.every((o) => o.unit_price === undefined))).toBe(true);

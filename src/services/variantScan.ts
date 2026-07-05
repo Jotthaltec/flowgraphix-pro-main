@@ -36,16 +36,30 @@ export function collectVariantUrls(product: ImportedProduct): string[] {
  * o custo-base — nada é fabricado.
  */
 export function attachVariantPrices(product: ImportedProduct): ImportedProduct {
-  const byExtId = new Map<string, { unit_price: number; total_price: number; quantity: number }>();
+  const byExtId = new Map<
+    string,
+    {
+      unit_price: number;
+      total_price: number;
+      quantity: number;
+      tiers: Array<{ quantity: number; unit_price: number; total_price: number }>;
+    }
+  >();
   for (const v of product.variants) {
     if (!v.external_id) continue;
-    // Menor tiragem disponível = referência de custo de entrada da opção.
-    const tier = [...v.price_tiers].sort((a, b) => a.quantity - b.quantity)[0];
+    const sorted = [...v.price_tiers].sort((a, b) => a.quantity - b.quantity);
+    const tier = sorted[0]; // menor tiragem = referência de custo de entrada
     if (!tier || !tier.total_price) continue;
     byExtId.set(v.external_id, {
       unit_price: tier.unit_price || parseFloat((tier.total_price / tier.quantity).toFixed(4)),
       total_price: tier.total_price,
       quantity: tier.quantity,
+      // Tabela COMPLETA da combinação — o orçamento espelha o preço por qtd real.
+      tiers: sorted.map((t) => ({
+        quantity: t.quantity,
+        unit_price: t.unit_price || parseFloat((t.total_price / t.quantity).toFixed(4)),
+        total_price: t.total_price,
+      })),
     });
   }
   if (!byExtId.size) return product;
@@ -55,7 +69,7 @@ export function attachVariantPrices(product: ImportedProduct): ImportedProduct {
     options: axis.options.map((o) => {
       const p = o.external_id ? byExtId.get(o.external_id) : undefined;
       return p
-        ? { ...o, unit_price: p.unit_price, total_price: p.total_price, ref_quantity: p.quantity }
+        ? { ...o, unit_price: p.unit_price, total_price: p.total_price, ref_quantity: p.quantity, tiers: p.tiers }
         : o;
     }),
   }));

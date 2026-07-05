@@ -19,6 +19,8 @@ export interface QuoteTier {
   quantity: number;
   unitCost: number; // custo unitário do fornecedor nesta faixa
   unitPrice: number; // preço de venda unitário (custo × margem)
+  totalCost: number; // custo TOTAL exato da tiragem (preço FuturaIM é por total)
+  totalPrice: number; // preço de venda TOTAL da tiragem
   external_id?: string | null;
 }
 
@@ -75,13 +77,36 @@ function readTiers(product: any): QuoteTier[] {
   const tiers: QuoteTier[] = raw
     .map((t: any) => {
       const quantity = Number(t.quantity) || 0;
-      const unitCost = Number(t.unitPrice ?? t.unit_price ?? (t.price && quantity ? t.price / quantity : 0)) || 0;
-      const unitSell = Number(t.unitSellPrice ?? (unitCost ? unitCost * factor : 0)) || 0;
-      return { quantity, unitCost, unitPrice: unitSell, external_id: t.external_id ?? null };
+      const totalCost = Number(t.price ?? (t.unit_price ? t.unit_price * quantity : 0)) || 0;
+      const unitCost = Number(t.unitPrice ?? t.unit_price ?? (quantity ? totalCost / quantity : 0)) || 0;
+      const totalPrice = Number(t.sellPrice ?? (totalCost ? totalCost * factor : 0)) || 0;
+      const unitSell = Number(t.unitSellPrice ?? (quantity ? totalPrice / quantity : 0)) || 0;
+      return { quantity, unitCost, unitPrice: unitSell, totalCost, totalPrice, external_id: t.external_id ?? null };
     })
     .filter((t: QuoteTier) => t.quantity > 0)
     .sort((a: QuoteTier, b: QuoteTier) => a.quantity - b.quantity);
   return tiers;
+}
+
+/** Converte as tiragens de uma opção (combinação varrida) em QuoteTier[]. */
+function tiersFromOption(optTiers: any[]): QuoteTier[] {
+  if (!Array.isArray(optTiers)) return [];
+  return optTiers
+    .map((t) => {
+      const quantity = Number(t.quantity) || 0;
+      const totalCost = Number(t.price ?? (t.unitCost ? t.unitCost * quantity : 0)) || 0;
+      const totalPrice = Number(t.sellPrice ?? (t.unitSell ? t.unitSell * quantity : 0)) || 0;
+      return {
+        quantity,
+        unitCost: Number(t.unitCost ?? (quantity ? totalCost / quantity : 0)) || 0,
+        unitPrice: Number(t.unitSell ?? (quantity ? totalPrice / quantity : 0)) || 0,
+        totalCost,
+        totalPrice,
+        external_id: t.external_id ?? null,
+      };
+    })
+    .filter((t) => t.quantity > 0)
+    .sort((a, b) => a.quantity - b.quantity);
 }
 
 /**
@@ -117,10 +142,11 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
         .select(`
           id, name, commercial_name, type, origin, supplier_name,
           internal_sku, supplier_sku, category, cost_price, base_cost,
-          sale_price, suggested_price, margin_percent, unit_measure, image_url,
+          sale_price, suggested_price, margin_percent, target_margin, unit_measure, image_url,
           main_image_url, description, technical_description, supplier_id,
-          production_deadline, imported_from_supplier, model_id,
-          editor_meta, variations
+          production_deadline, avg_production_time, source_url, minimum_quantity,
+          imported_from_supplier, model_id, editor_meta, variations,
+          quantity_prices, quantity_price_table
         `)
         .eq("status", "Ativo")
         .order("name");
@@ -231,16 +257,31 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
         const factor = 1 + (item.margin_percent_target || 0) / 100;
         item.unit_cost = item.override_unit_cost;
         item.unit_price = parseFloat((item.override_unit_cost * factor).toFixed(2));
+        item.total_cost = item.unit_cost * item.quantity;
+        item.total_price = item.unit_price * item.quantity;
       } else if (item.tiers && item.tiers.length) {
         // 2) Senão, usa a faixa por quantidade da configuração importada (seção 7).
         const tier = resolveTier(item.tiers, item.quantity);
         if (tier) {
           item.unit_cost = tier.unitCost;
           item.unit_price = tier.unitPrice;
+          if (tier.quantity === item.quantity) {
+            // Quantidade exata da tiragem: usa o TOTAL real (preço FuturaIM é por
+            // total, não linear) — evita erro de arredondamento do custo unitário.
+            item.total_cost = tier.totalCost;
+            item.total_price = tier.totalPrice;
+          } else {
+            item.total_cost = item.unit_cost * item.quantity;
+            item.total_price = item.unit_price * item.quantity;
+          }
+        } else {
+          item.total_cost = item.unit_cost * item.quantity;
+          item.total_price = item.unit_price * item.quantity;
         }
+      } else {
+        item.total_cost = item.unit_cost * item.quantity;
+        item.total_price = item.unit_price * item.quantity;
       }
-      item.total_cost = item.unit_cost * item.quantity;
-      item.total_price = item.unit_price * item.quantity;
       item.margin_percent = item.total_price > 0 ? ((item.total_price - item.total_cost) / item.total_price) * 100 : 0;
       return;
     }
@@ -269,15 +310,27 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
         external_id: option?.external_id ?? null,
         unit_cost: option?.real_cost ?? null,
       };
-      // Recalcula o override a partir da opção mais recentemente escolhida que
-      // tenha custo real; se nenhuma tem, volta às tiragens da configuração.
+      // Preferência 1: a opção traz a TABELA COMPLETA da combinação (varredura)
+      // → troca a tabela de tiragens do item e usa preço por quantidade REAL
+      // daquela combinação (espelha o site). Zera o override (a tabela manda).
+      const optTiers = tiersFromOption(option?.tiers);
+      if (optTiers.length) {
+        updateItem(idx, {
+          attributes: newAttributes,
+          selection_snapshot: snapshot,
+          tiers: optTiers,
+          override_unit_cost: null,
+          override_label: `${attrDef?.name || attrCode}: ${value}`,
+        });
+        return;
+      }
+      // Preferência 2: só o custo de referência (sem tabela) → override do custo.
       let overrideCost: number | null = null;
       let overrideLabel: string | null = null;
       if (option?.real_cost != null) {
         overrideCost = Number(option.real_cost);
         overrideLabel = `${attrDef?.name || attrCode}: ${value}`;
       } else if (item.override_unit_cost != null) {
-        // mantém o override anterior (outra opção já o definiu)
         overrideCost = item.override_unit_cost;
         overrideLabel = item.override_label ?? null;
       }
@@ -338,7 +391,8 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
                  const cost = isObj && val.cost != null ? Number(val.cost) : null;
                  const price = isObj && val.sell != null ? Number(val.sell) : null;
                  const external_id = isObj ? (val.external_id ?? null) : null;
-                 legacyVariations.push({ type: v.name, name: String(optName), cost, price, external_id });
+                 const tiers = isObj && Array.isArray(val.tiers) ? val.tiers : null;
+                 legacyVariations.push({ type: v.name, name: String(optName), cost, price, external_id, tiers });
                });
             }
           });
@@ -384,6 +438,8 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
                   // preço em produtos importados e alimentam o snapshot (seção 19).
                   real_cost: hasRealCost ? costValue : null,
                   external_id: row.external_id ?? null,
+                  // Tabela de tiragens da combinação (varredura) p/ preço por qtd real.
+                  tiers: Array.isArray(row.tiers) ? row.tiers : null,
                });
             });
          });
@@ -488,7 +544,7 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
                         className={`text-[11px] px-2 py-1 rounded-md border transition-colors ${isApplied ? "bg-sky-600 text-white border-sky-600 font-semibold" : "bg-background hover:border-sky-400"}`}
                         title={`${fmt.format(t.unitPrice)}/un`}
                       >
-                        {t.quantity} un · {fmt.format(t.unitPrice * t.quantity)}
+                        {t.quantity} un · {fmt.format(t.totalPrice)}
                       </button>
                     );
                   })}

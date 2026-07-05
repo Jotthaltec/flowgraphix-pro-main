@@ -329,13 +329,22 @@ export function parseFuturaImProduct(html: string, sourceUrl: string): ImportedP
   const metaDesc = html.match(/name=["']?description["']?\s+content=["']([^"']+)["']/i)?.[1];
   const short_description = metaDesc ? decodeEntities(metaDesc) : undefined;
 
-  // Preço / disponibilidade
+  // Preço / disponibilidade.
+  // Alguns produtos têm a tabela de tiragens renderizada por JavaScript e um
+  // Product JSON-LD ESTAGNADO (price 0.00 / OutOfStock). Nesses casos o preço
+  // real e a disponibilidade vêm do dataLayer (view_item = o que a página de
+  // fato mostra ao cliente). Por isso preferimos um preço NÃO-ZERO e só tratamos
+  // como indisponível quando nem a oferta nem o dataLayer trazem preço.
   const offer = Array.isArray(productLd?.offers) ? productLd.offers[0] : productLd?.offers;
-  const currentPrice = parsePriceBR(offer?.price ?? dlItem?.price);
+  const dlPrice = parsePriceBR(dlItem?.price);
+  const currentPrice = parsePriceBR(offer?.price) || dlPrice;
   const availability: string = offer?.availability || "";
-  const unavailable = /OutOfStock|SoldOut|Discontinued/i.test(availability);
+  const unavailable = /OutOfStock|SoldOut|Discontinued/i.test(availability) && !(dlPrice > 0);
   const available = !unavailable;
   if (unavailable) warnings.push("Produto sinalizado como indisponível pelo fornecedor.");
+  if (/OutOfStock|SoldOut|Discontinued/i.test(availability) && dlPrice > 0) {
+    warnings.push("Tabela de preços renderizada via JavaScript: importada a tiragem do estado da página (use a varredura/atualização para as demais).");
+  }
 
   // Avaliações (apenas agregados — sem copiar textos/dados pessoais)
   let rating_average: number | undefined;

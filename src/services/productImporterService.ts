@@ -192,6 +192,17 @@ export function buildProductRow(product: ImportedProduct, opts: BuildProductRowO
         cost,
         sell: cost != null ? parseFloat((cost * factor).toFixed(2)) : null,
         ref_quantity: o.ref_quantity ?? null,
+        // Tabela de tiragens da combinação desta opção (varredura) — o orçamento
+        // troca a tabela de preço/qtd ao trocar a opção. Custo e venda (margem).
+        tiers: o.tiers
+          ? o.tiers.map((t) => ({
+              quantity: t.quantity,
+              unitCost: t.unit_price,
+              price: t.total_price,
+              unitSell: parseFloat((t.unit_price * factor).toFixed(4)),
+              sellPrice: parseFloat((t.total_price * factor).toFixed(2)),
+            }))
+          : null,
       };
     }),
   }));

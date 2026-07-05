@@ -116,6 +116,26 @@ describe("FuturaIM — páginas reais (classificação)", () => {
     }
   });
 
+  it("produto com tabela JS-renderizada + JSON-LD estagnado NÃO vem vazio/indisponível", () => {
+    // Cartão Metalizado: Product JSON-LD com price 0.00/OutOfStock e a tabela de
+    // tiragens renderizada por JavaScript. O preço/dispon. reais vêm do dataLayer
+    // (view_item). Regressão: deve importar disponível, com a tiragem do estado
+    // da página e specs derivadas do descritor — nunca custo 0 / indisponível.
+    const p = parseFuturaImProduct(
+      fixture("futuraim-cartao-metalizado.html"),
+      "https://www.futuraim.com.br/produto/cartao-de-visita-metalizado?id=69861",
+    );
+    expect(p.available).toBe(true);
+    expect(p.unavailable).toBe(false);
+    const tiers = p.variants[0]?.price_tiers || [];
+    expect(tiers.length).toBeGreaterThan(0);
+    expect(tiers[0].total_price).toBeGreaterThan(0);
+    // specs do descritor (item_name) preenchidas mesmo sem os eixos no HTML
+    const specNames = p.specifications.map((s) => s.normalized_name);
+    expect(specNames).toContain("material");
+    expect(specNames).toContain("formato");
+  });
+
   it("DTF UV não é classificado como DTF Têxtil (seção 32)", () => {
     const p = parseFuturaImProduct(fixture("futuraim-dtf-uv.html"), "https://www.futuraim.com.br/produto/dtf-uv?id=87625");
     expect(p.classification.subcategory).not.toBe("DTF Têxtil");

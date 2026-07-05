@@ -159,6 +159,12 @@ export interface ImportedVariantAxis {
     unit_price?: number; // custo unitário na tiragem de referência
     total_price?: number; // custo total da tiragem de referência
     ref_quantity?: number; // quantidade da tiragem usada como referência
+    /**
+     * Tabela COMPLETA de tiragens da combinação desta opção (varredura). Permite
+     * o orçamento trocar a tabela de preço por quantidade ao trocar a opção —
+     * espelhando o preço real do fornecedor por combinação.
+     */
+    tiers?: Array<{ quantity: number; unit_price: number; total_price: number }>;
   }>;
 }
 
