@@ -35,8 +35,35 @@ export interface ValidateResult {
   reason?: string;
 }
 
-/** Valida uma URL de fornecedor (HTTPS-only + allowlist + bloqueio interno). */
-export function validateSupplierUrl(rawUrl: string): ValidateResult {
+export interface ValidateOptions {
+  /**
+   * Allowlist de domínios permitida para ESTA validação. No motor universal ela
+   * vem do banco (supplier_sites.domain onde allowed=true) — assim cada empresa
+   * libera só os fornecedores que cadastrou, sem abrir a internet inteira.
+   * Quando omitida, usa a allowlist padrão (FuturaIM), preservando o
+   * comportamento atual dos chamadores existentes.
+   */
+  allowedDomains?: string[];
+}
+
+/** Normaliza uma lista de domínios (minúsculo, sem www., sem vazios). */
+export function normalizeAllowlist(domains: string[] | undefined): string[] {
+  if (!domains || !domains.length) return ALLOWED_DOMAINS;
+  const set = new Set(
+    domains
+      .map((d) => (d || "").trim().toLowerCase().replace(/^www\./, ""))
+      .filter(Boolean),
+  );
+  return Array.from(set);
+}
+
+/**
+ * Valida uma URL de fornecedor (HTTPS-only + allowlist data-driven + bloqueio
+ * de IP interno/privado). O anti-SSRF (protocolo, IP literal, redes internas) é
+ * SEMPRE aplicado, independentemente da allowlist — a allowlist só restringe
+ * QUAIS domínios públicos são aceitos.
+ */
+export function validateSupplierUrl(rawUrl: string, opts?: ValidateOptions): ValidateResult {
   if (!rawUrl || typeof rawUrl !== "string") {
     return { ok: false, reason: "URL vazia." };
   }
@@ -61,10 +88,11 @@ export function validateSupplierUrl(rawUrl: string): ValidateResult {
     return { ok: false, reason: "Host interno/privado bloqueado." };
   }
 
+  const allowlist = normalizeAllowlist(opts?.allowedDomains);
   const domain = host.replace(/^www\./, "");
-  const allowed = ALLOWED_DOMAINS.some((d) => host === d || host === `www.${d}` || domain === d);
+  const allowed = allowlist.some((d) => host === d || host === `www.${d}` || domain === d);
   if (!allowed) {
-    return { ok: false, reason: `Domínio não permitido: ${host}. Permitidos: ${ALLOWED_DOMAINS.join(", ")}.` };
+    return { ok: false, reason: `Domínio não permitido: ${host}. Permitidos: ${allowlist.join(", ")}.` };
   }
 
   return { ok: true, url: parsed.toString(), domain };
