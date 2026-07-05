@@ -162,7 +162,24 @@ function fromProduct(p: any): FormState {
   f.promo_end = pr.promo_end || "";
   f.min_margin_alert = pr.min_margin_alert ?? 15;
 
-  f.variation_rows = Array.isArray(m.variation_rows) ? m.variation_rows : [];
+  // Variações: usa as já editadas (editor_meta). Se ainda não houver nenhuma mas
+  // o produto veio de importação com eixos do fornecedor (products.variations),
+  // pré-carrega automaticamente — assim o produto importado já "vem com tudo".
+  if (Array.isArray(m.variation_rows) && m.variation_rows.length) {
+    f.variation_rows = m.variation_rows;
+  } else {
+    const supplierAxes = Array.isArray(p.variations) ? p.variations : [];
+    const seeded: VariationRow[] = [];
+    for (const axis of supplierAxes) {
+      const opts = Array.isArray(axis?.values) ? axis.values : (Array.isArray(axis?.options) ? axis.options : []);
+      for (const opt of opts) {
+        const name = typeof opt === "object" && opt !== null && "value" in opt ? String(opt.value) : String(opt);
+        if (!axis?.name || !name) continue;
+        seeded.push({ id: uid(), type: String(axis.name), name, cost: f.base_cost, price: num(p.sale_price), sku: "", active: true });
+      }
+    }
+    f.variation_rows = seeded;
+  }
   // tabela de quantidade: lê da coluna real quantity_prices (compatível com marketplace modal)
   const qp = Array.isArray(p.quantity_prices) ? p.quantity_prices : [];
   f.qty_rows = qp.map((q: any) => ({
@@ -521,8 +538,12 @@ export function ProductEditor({
     const raw = Array.isArray(product?.variations) ? product.variations : [];
     const rows: VariationRow[] = [];
     for (const v of raw) {
-      if (v?.name && Array.isArray(v?.values)) {
-        for (const val of v.values) rows.push({ id: uid(), type: v.name, name: String(val), cost: num(f.base_cost), price: pricing.finalPrice, sku: "", active: true });
+      const arr = Array.isArray(v?.values) ? v.values : (Array.isArray(v?.options) ? v.options : null);
+      if (v?.name && arr) {
+        for (const val of arr) {
+          const optName = typeof val === "object" && val !== null && 'value' in val ? val.value : String(val);
+          rows.push({ id: uid(), type: v.name, name: String(optName), cost: num(f.base_cost), price: pricing.finalPrice, sku: "", active: true });
+        }
       }
     }
     if (rows.length === 0) { toast.info("Nenhuma variação do fornecedor encontrada neste produto."); return; }

@@ -172,6 +172,40 @@ export function buildProductRow(product: ImportedProduct, opts: BuildProductRowO
 
   const specifications = Object.fromEntries(product.specifications.map((s) => [s.name, s.value]));
 
+  // Variações do fornecedor (Material/Formato/Cor/Enobrecimento/Acabamento...).
+  // Cada eixo já traz TODAS as opções reais numa única página (com id externo),
+  // então a lista completa é gravada mesmo sem a varredura multi-página. É o
+  // campo lido pelo botão "Importar do fornecedor" do editor de produto.
+  const variations = product.variant_axes.map((a) => ({
+    name: a.name,
+    normalized_name: a.normalized_name,
+    values: a.options.map((o) => ({
+      value: o.value,
+      external_id: o.external_id ?? null,
+      url: o.url ?? null,
+      selected: o.selected ?? false,
+    })),
+  }));
+
+  // Serviços/acabamentos extras (ex.: "Kit Canetas Marcador + R$ 29,99").
+  const extraServices = product.extras.map((e) => ({
+    name: e.name,
+    price: e.price,
+    currency: e.currency || "BRL",
+    extra_days: e.extra_days ?? null,
+    url: e.url ?? null,
+  }));
+
+  // Gabaritos / templates de arte quando o fornecedor disponibiliza.
+  const templateLinks = product.templates.map((t) => ({
+    name: t.name ?? null,
+    url: t.url,
+    type: t.type ?? null,
+    format: t.format ?? null,
+  }));
+
+  const smallestQty = tiers.length ? Math.min(...tiers.map((t) => t.quantity)) : null;
+
   return {
     company_id: opts.companyId,
     name: product.normalized_name,
@@ -197,15 +231,20 @@ export function buildProductRow(product: ImportedProduct, opts: BuildProductRowO
     suggested_price: salePrice,
     min_price: parseFloat((salePrice * 0.9).toFixed(2)),
     unit_measure: product.variants[0]?.price_tiers[0]?.unit || "Unidade",
+    minimum_quantity: smallestQty,
     quantity_price_table: quantityPriceTable,
     quantity_prices: quantityPriceTable,
     specifications,
+    variations,
+    extra_services: extraServices,
+    template_links: templateLinks,
+    avg_production_time: product.production_time?.original_production_time ?? null,
     production_deadline: buildDeadlineText(product),
     // review_required/classification_confidence vivem no grafo estruturado
     // (product_category_mappings) — não gravamos em `products` para não exigir
     // colunas que podem não existir no banco antes da migration.
     status: "Ativo",
-    imported_from_supplier: false,
+    imported_from_supplier: true,
   };
 }
 

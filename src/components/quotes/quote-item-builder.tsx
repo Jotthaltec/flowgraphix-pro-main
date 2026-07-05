@@ -52,19 +52,20 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
   const { data: catalogProducts } = useQuery({
     queryKey: ["products_catalog_quote"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (db)
         .from("products")
         .select(`
           id, name, commercial_name, type, origin, supplier_name,
           internal_sku, supplier_sku, category, cost_price, base_cost,
           sale_price, suggested_price, margin_percent, unit_measure, image_url,
           main_image_url, description, technical_description, supplier_id,
-          production_deadline, imported_from_supplier, model_id
+          production_deadline, imported_from_supplier, model_id,
+          editor_meta, variations
         `)
         .eq("status", "Ativo")
         .order("name");
       if (error) throw error;
-      return data || [];
+      return (data || []) as any[];
     }
   });
 
@@ -159,8 +160,9 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
 
     // Buscar o preço do impacto da opção selecionada
     let newImpact = 0;
-    if (attrId && motorData?.options) {
-      const option = motorData.options.find((o: any) => o.attribute_id === attrId && o.value === value);
+    const { options } = getProductAttributes(item.product_id);
+    if (attrId && options) {
+      const option = options.find((o: any) => o.attribute_id === attrId && o.value === value);
       newImpact = option?.price_impact || 0;
     }
 
@@ -178,25 +180,86 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
     });
   }
 
-  // Resolver atributos de um produto baseado no model_id
+  // Resolver atributos de um produto baseado no model_id ou variações manuais
   function getProductAttributes(productId: string | null, modelId?: string | null) {
-    if (!motorData) return [];
-    // Se o produto tem um model_id, usamos os atributos do modelo
+    if (!motorData) return { attributes: [], options: [] };
     const product = catalogProducts?.find(p => p.id === productId);
     const mId = modelId || product?.model_id;
+
     if (mId) {
       const modelAttrIds = motorData.modelAttributes
         .filter((ma: any) => ma.model_id === mId)
         .sort((a: any, b: any) => a.order_index - b.order_index)
         .map((ma: any) => ma.attribute_id);
-      return motorData.attributes.filter((a: any) => modelAttrIds.includes(a.id));
+      return { 
+        attributes: motorData.attributes.filter((a: any) => modelAttrIds.includes(a.id)),
+        options: motorData.options
+      };
     }
-    // Fallback: sem modelo, retorna todos os atributos ativos
-    return motorData.attributes;
+
+    // Fallback: Gerar atributos sintéticos a partir de variations antigas
+    if (product) {
+       const legacyVariations: any[] = [];
+       // Variações do fornecedor
+       if (Array.isArray(product.variations)) {
+          product.variations.forEach((v: any) => {
+            const arr = Array.isArray(v?.values) ? v.values : (Array.isArray(v?.options) ? v.options : null);
+            if (v?.name && arr) {
+               arr.forEach((val: any) => {
+                 const optName = typeof val === "object" && val !== null && 'value' in val ? val.value : String(val);
+                 legacyVariations.push({ type: v.name, name: String(optName), cost: 0, price: 0 });
+               });
+            }
+          });
+       }
+       // Variações manuais (editor_meta)
+       if (product.editor_meta?.variation_rows && Array.isArray(product.editor_meta.variation_rows)) {
+          legacyVariations.push(...product.editor_meta.variation_rows);
+       }
+
+       if (legacyVariations.length > 0) {
+         const grouped = legacyVariations.reduce((acc: any, row: any) => {
+           if (!acc[row.type]) acc[row.type] = [];
+           acc[row.type].push(row);
+           return acc;
+         }, {});
+
+         const syntheticAttrs: any[] = [];
+         const syntheticOpts: any[] = [];
+         
+         Object.keys(grouped).forEach((type, i) => {
+            const attrId = `legacy-attr-${i}`;
+            syntheticAttrs.push({
+               id: attrId,
+               code: type.toLowerCase().replace(/\s+/g, '_'),
+               name: type,
+               type: "select",
+               is_required: false,
+            });
+            grouped[type].forEach((row: any, j: number) => {
+               // Base cost para calcular impacto
+               const baseCost = Number(product.base_cost) || 0;
+               const costValue = Number(row.cost);
+               const impact = costValue > baseCost ? (costValue - baseCost) : 0;
+               
+               syntheticOpts.push({
+                  id: `legacy-opt-${i}-${j}`,
+                  attribute_id: attrId,
+                  value: row.name,
+                  label: row.name,
+                  price_impact: impact,
+               });
+            });
+         });
+         return { attributes: syntheticAttrs, options: syntheticOpts };
+       }
+    }
+
+    return { attributes: [], options: [] };
   }
 
   const editingItem = editingIdx !== null ? items[editingIdx] : null;
-  const editingAttrs = editingItem ? getProductAttributes(editingItem.product_id) : [];
+  const { attributes: editingAttrs, options: editingOptions } = editingItem ? getProductAttributes(editingItem.product_id) : { attributes: [], options: [] };
 
   return (
     <div className="space-y-4">
@@ -297,14 +360,14 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
           </div>
 
           {/* Atributos Dinâmicos do Motor Universal */}
-          {editingAttrs.length > 0 && (
+          {editingAttrs.length > 0 ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2 pb-1 border-b">
                 <Settings2 className="h-3.5 w-3.5 text-muted-foreground" />
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Variações e Materiais</span>
               </div>
               {editingAttrs.map((attr: any) => {
-                const options = motorData?.options?.filter((o: any) => o.attribute_id === attr.id) || [];
+                const options = editingOptions.filter((o: any) => o.attribute_id === attr.id) || [];
                 const currentValue = editingItem.attributes[attr.code] || "";
                 const currentImpact = editingItem.attribute_price_impacts[attr.code] || 0;
 
@@ -367,6 +430,15 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
                   </div>
                 );
               })}
+            </div>
+          ) : (
+            <div className="p-4 text-center rounded-md bg-secondary/30 border border-dashed border-border mt-4">
+               <Settings2 className="h-6 w-6 text-muted-foreground mx-auto mb-2 opacity-50" />
+               <p className="text-sm font-medium text-foreground">Nenhuma variação técnica vinculada</p>
+               <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+                 Este produto não possui atributos variáveis. Se desejar que opções (como material, acabamento ou cor) apareçam aqui, 
+                 vincule este produto a um <span className="font-semibold text-primary">Modelo</span> no módulo de Produtos.
+               </p>
             </div>
           )}
 

@@ -58,9 +58,9 @@ function MotorProdutosPage() {
   const { data: models, isLoading: loadingModels } = useQuery({
     queryKey: ["product_models"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("product_models").select("*").order("name");
+      const { data, error } = await (supabase as any).from("product_models").select("*").order("name");
       if (error) throw error;
-      return data;
+      return data as any[];
     },
     enabled: !!profile,
   });

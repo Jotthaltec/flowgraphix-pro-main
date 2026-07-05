@@ -127,7 +127,13 @@ export function extractPriceTiers(html: string, collectedAt: string, currentId?:
   // As linhas de tiragem têm o radio name=qtd-sku. Quebramos por <tr.
   const rows = html.split(/<tr\b/i).slice(1);
   for (const raw of rows) {
-    const chunk = raw.slice(0, raw.search(/<\/tr>|<tr\b/i) >= 0 ? raw.length : raw.length);
+    // Limita o trecho ao fim REAL da linha. O HTML da FuturaIM é minificado e
+    // NÃO fecha <tr>/<td>; a última linha termina em </table> (ou </tbody>).
+    // Sem esse corte, a última tiragem vaza para o conteúdo seguinte
+    // (extras/frete) e o "último R$" vira um preço errado (ex.: frete R$ 9,99)
+    // na maior quantidade.
+    const endIdx = raw.search(/<\/tr>|<\/tbody>|<\/table>/i);
+    const chunk = endIdx >= 0 ? raw.slice(0, endIdx) : raw;
     if (!/qtd-sku/i.test(chunk)) continue;
 
     // Quantidade: do texto "N unidades" ou do id do radio.
