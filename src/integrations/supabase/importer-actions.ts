@@ -9,6 +9,12 @@ import {
   parseFuturaImFreight,
   type FreightOption,
 } from "@/services/futuraImFreight";
+import {
+  extractProductFormFields,
+  parseLivePriceFragment,
+  supportsCustomSize,
+  type LivePriceResult,
+} from "@/services/futuraImLivePrice";
 import type { ImportedProduct } from "@/types/importedProduct";
 
 /**
@@ -429,5 +435,131 @@ export const discoverCatalogLinks = createServerFn({ method: "POST" })
         return { success: false, error: firstError || "Nenhum link de produto encontrado nesta página." };
       }
       return { success: true, links: [...products], pages_crawled: pagesCrawled };
+    },
+  );
+
+/**
+ * LIVE_RESOLVER — consulta o preço REAL de um produto de tamanho personalizado (§8).
+ *
+ * Medido contra o site: o preço NÃO é área × preço/m². Há preço mínimo, limites
+ * de largura/altura e faixas por quantidade. Por isso nunca calculamos: perguntamos.
+ *
+ * Dois passos (server-side, respeitando a allowlist anti-SSRF):
+ *   1. GET da página do produto → cookie antiforgery + token + campos do #formProduto;
+ *   2. POST na mesma URL com o formulário (Largura/Altura/Quantidade) → fragmento
+ *      `#produtoGeral`, de onde lemos o "Total".
+ *
+ * Total 0,00 = dimensão fora dos limites → `has_price=false`, jamais "grátis".
+ */
+export const resolveLivePrice = createServerFn({ method: "POST" })
+  .inputValidator((data: { url: string; largura: number; altura: number; quantidade: number }) => data)
+  .handler(
+    async ({
+      data,
+    }): Promise<
+      | { success: true; result: LivePriceResult; supports_custom_size: boolean; quoted_at: string }
+      | { success: false; error: string }
+    > => {
+      const validation = validateSupplierUrl(data?.url);
+      if (!validation.ok || !validation.url) {
+        return { success: false, error: validation.reason || "URL não permitida." };
+      }
+      const largura = Number(data?.largura);
+      const altura = Number(data?.altura);
+      const quantidade = Number(data?.quantidade);
+      if (!Number.isFinite(largura) || largura <= 0 || !Number.isFinite(altura) || altura <= 0) {
+        return { success: false, error: "Informe largura e altura válidas (maiores que zero)." };
+      }
+      if (!Number.isFinite(quantidade) || quantidade <= 0) {
+        return { success: false, error: "Informe uma quantidade válida." };
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      const commonHeaders = {
+        "User-Agent": "PrintFlowCRM-Importer/1.0 (+contato via painel)",
+        "Accept-Language": "pt-BR,pt;q=0.9",
+      };
+
+      try {
+        // 1. Página do produto: cookie, token e o formulário original.
+        const pageRes = await fetch(validation.url, {
+          method: "GET",
+          redirect: "follow",
+          signal: controller.signal,
+          headers: { ...commonHeaders, Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8" },
+        });
+        if (!pageRes.ok) {
+          return { success: false, error: `Falha ao abrir a página do produto (HTTP ${pageRes.status}).` };
+        }
+
+        const rawCookies: string[] =
+          typeof (pageRes.headers as any).getSetCookie === "function"
+            ? (pageRes.headers as any).getSetCookie()
+            : [pageRes.headers.get("set-cookie") || ""].filter(Boolean);
+        const cookieHeader = rawCookies.map((c) => c.split(";")[0]).filter(Boolean).join("; ");
+
+        const html = await pageRes.text();
+        const token = extractAntiForgeryToken(html);
+        if (!token) {
+          return { success: false, error: "Token de segurança do fornecedor não encontrado na página." };
+        }
+        const custom = supportsCustomSize(html);
+
+        // 2. Reposta o formulário completo, sobrescrevendo dimensões e quantidade.
+        const fields = extractProductFormFields(html);
+        const body = new URLSearchParams({
+          ...fields,
+          Largura: String(Math.trunc(largura)),
+          Altura: String(Math.trunc(altura)),
+          Quantidade: String(Math.trunc(quantidade)),
+          __RequestVerificationToken: token,
+        });
+
+        const priceRes = await fetch(validation.url, {
+          method: "POST",
+          redirect: "manual", // 302 => token/cookie rejeitados
+          signal: controller.signal,
+          headers: {
+            ...commonHeaders,
+            Accept: "text/html,*/*;q=0.8",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-Requested-With": "XMLHttpRequest",
+            RequestVerificationToken: token,
+            Referer: validation.url,
+            ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+          },
+          body: body.toString(),
+        });
+
+        if (priceRes.status !== 200) {
+          return { success: false, error: `Fornecedor não retornou o preço (HTTP ${priceRes.status}).` };
+        }
+
+        const buf = await priceRes.arrayBuffer();
+        if (buf.byteLength > MAX_BYTES) {
+          return { success: false, error: "Resposta de preço excede o tamanho permitido." };
+        }
+        const fragment = new TextDecoder("utf-8").decode(buf);
+
+        const result = parseLivePriceFragment(fragment);
+        if (!result) {
+          return { success: false, error: "Não foi possível ler o preço na resposta do fornecedor." };
+        }
+
+        return {
+          success: true,
+          result,
+          supports_custom_size: custom,
+          quoted_at: new Date().toISOString(),
+        };
+      } catch (err: any) {
+        if (err?.name === "AbortError") {
+          return { success: false, error: "Tempo limite excedido ao consultar o preço." };
+        }
+        return { success: false, error: err?.message || "Erro ao consultar o preço." };
+      } finally {
+        clearTimeout(timeout);
+      }
     },
   );

@@ -182,6 +182,11 @@ export async function importCombinationsFromProduct(
   const errors: string[] = [];
   let created = 0, updated = 0, removed = 0, priceChanges = 0, extrasCreated = 0, servicesCreated = 0;
 
+  // Produtos de tamanho personalizado (medida livre) não têm preço de matriz:
+  // o valor depende de largura × altura e o fornecedor aplica preço mínimo e
+  // limites. Nesses casos a estratégia é LIVE_RESOLVER (§8) — nunca calculamos.
+  const isCustomSize = detectCustomSize(product, variants);
+
   // 1. Família (página amigável, sem preço)
   const familyPayload = {
     company_id: companyId,
@@ -195,7 +200,7 @@ export async function importCombinationsFromProduct(
     image_url: product.image_url || product.main_image_url || null,
     description: product.description || null,
     lead_time_rule: 'max_extra',
-    pricing_strategy: 'MATRIX',
+    pricing_strategy: isCustomSize ? 'LIVE_RESOLVER' : 'MATRIX',
     is_active: true,
   };
 
@@ -490,6 +495,29 @@ function buildCompleteName(product: any, variant: any, quantity: number): string
   if (attrs.length) parts.push(attrs.join(', '));
   parts.push(`${quantity} un`);
   return parts.filter(Boolean).join(' — ');
+}
+
+/**
+ * O produto é vendido por medida livre (largura × altura)?
+ *
+ * Sinais da FuturaIM: a opção de formato "Tamanho personalizado" e o descritor
+ * por área ("cm²"/"m²"). Nesses casos o preço tem mínimo, limites e faixas —
+ * a família vai para LIVE_RESOLVER e o preço é sempre consultado (§8).
+ */
+function detectCustomSize(product: any, variants: any[]): boolean {
+  const CUSTOM = /(tamanho|medida)[_\s-]*personaliz|cm2|cm²|m2|m²/i;
+  if (CUSTOM.test(String(product?.name || ''))) return true;
+
+  const variations: any[] = Array.isArray(product?.variations) ? product.variations : [];
+  for (const v of variations) {
+    const options: any[] = Array.isArray(v?.values) ? v.values : Array.isArray(v?.options) ? v.options : [];
+    for (const opt of options) {
+      const label = typeof opt === 'string' ? opt : opt?.value || opt?.name || '';
+      if (CUSTOM.test(String(label))) return true;
+    }
+  }
+
+  return variants.some((v) => CUSTOM.test(String(v?.format_original || '')) || CUSTOM.test(String(v?.size || '')));
 }
 
 /** Extrai gramatura de um texto de material (ex.: "Couché 300g" → "300g"). */

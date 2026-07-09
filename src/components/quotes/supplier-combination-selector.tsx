@@ -35,8 +35,9 @@ import {
   type FamilyCombinationData,
   type RawPromotion,
 } from '@/services/combinationEngine';
-import { getSupplierFreight } from '@/integrations/supabase/importer-actions';
+import { getSupplierFreight, resolveLivePrice } from '@/integrations/supabase/importer-actions';
 import { isValidCep, type FreightOption } from '@/services/futuraImFreight';
+import type { LivePriceResult } from '@/services/futuraImLivePrice';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
@@ -113,8 +114,16 @@ export function SupplierCombinationSelector({
   const [freightLoading, setFreightLoading] = useState(false);
   const [freightError, setFreightError] = useState<string | null>(null);
   const [freightQuotedAt, setFreightQuotedAt] = useState<string | null>(null);
+  // LIVE_RESOLVER — tamanho personalizado (§8): o preço é SEMPRE consultado.
+  const [customW, setCustomW] = useState('');
+  const [customH, setCustomH] = useState('');
+  const [livePrice, setLivePrice] = useState<LivePriceResult | null>(null);
+  const [liveLoading, setLiveLoading] = useState(false);
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const [liveQuotedAt, setLiveQuotedAt] = useState<string | null>(null);
 
   const { family } = familyData;
+  const isLiveResolver = family.pricing_strategy === 'LIVE_RESOLVER';
 
   // Filtrar opções compatíveis em cascata
   const cascadeResults = useMemo(
@@ -204,9 +213,62 @@ export function SupplierCombinationSelector({
     }
   }, [productResult.product, cep, selectedQuantity]);
 
+  // Dimensões/quantidade mudaram → a consulta anterior não vale mais.
+  useEffect(() => {
+    setLivePrice(null);
+    setLiveError(null);
+    setLiveQuotedAt(null);
+  }, [customW, customH, selectedQuantity, productResult.product?.id]);
+
+  const handleResolveLivePrice = useCallback(async () => {
+    const product = productResult.product;
+    const largura = Number(customW);
+    const altura = Number(customH);
+    if (!product?.source_url || !(largura > 0) || !(altura > 0)) return;
+    setLiveLoading(true);
+    setLiveError(null);
+    try {
+      const res = await resolveLivePrice({
+        data: { url: product.source_url, largura, altura, quantidade: selectedQuantity || 1 },
+      });
+      if (!res.success) {
+        setLivePrice(null);
+        setLiveError(res.error);
+        return;
+      }
+      if (!res.result.has_price) {
+        setLivePrice(null);
+        setLiveError('Dimensão fora dos limites aceitos pelo fornecedor. Preço não confirmado.');
+        return;
+      }
+      setLivePrice(res.result);
+      setLiveQuotedAt(res.quoted_at);
+    } catch (e: any) {
+      setLiveError(e?.message || 'Erro ao consultar o preço.');
+    } finally {
+      setLiveLoading(false);
+    }
+  }, [productResult.product, customW, customH, selectedQuantity]);
+
+  /**
+   * Produto usado no cálculo. Em LIVE_RESOLVER o preço da matriz não vale:
+   * enquanto o fornecedor não confirmar, o custo é 0 → price_status "não
+   * confirmado" (§18). Quando confirma, o total consultado vira o preço oficial.
+   */
+  const effectiveProduct = useMemo(() => {
+    const product = productResult.product;
+    if (!product) return null;
+    if (!isLiveResolver) return product;
+    return {
+      ...product,
+      list_price: livePrice?.total_price ?? 0,
+      promotional_price: null,
+    };
+  }, [productResult.product, isLiveResolver, livePrice]);
+
   // Calcular item quando o produto comercial é resolvido
   const calculation = useMemo((): QuoteItemCalculation | null => {
-    if (!productResult.found || !productResult.product) return null;
+    if (!productResult.found || !effectiveProduct) return null;
 
     const selectedExtras: SelectedExtra[] = availableExtras
       .filter(e => selectedExtraIds.has(e.extra.id))
@@ -226,7 +288,7 @@ export function SupplierCombinationSelector({
 
     return calculateQuoteItem(
       {
-        commercial_product_id: productResult.product.id,
+        commercial_product_id: effectiveProduct.id,
         quantity: selectedQuantity,
         selected_extra_ids: [...selectedExtraIds],
         selected_service_ids: [...selectedServiceIds],
@@ -238,14 +300,15 @@ export function SupplierCombinationSelector({
         profit_margin_percent: profitMarginPercent,
         mirror_supplier_mode: mirrorMode,
       },
-      productResult.product,
-      productResult.active_promotion,
+      effectiveProduct,
+      // Em LIVE_RESOLVER o total consultado já é o preço final: sem promoção.
+      isLiveResolver ? null : productResult.active_promotion,
       selectedExtras,
       selectedServices,
       family.lead_time_rule,
     );
   }, [
-    productResult, selectedExtraIds, selectedServiceIds,
+    productResult, effectiveProduct, isLiveResolver, selectedExtraIds, selectedServiceIds,
     mirrorMode, effectiveFreight, profitMarginPercent, taxPercent,
     safetyMarginPercent, internalOperationsCost, internalServicesCost,
     availableExtras, familyData, selectedQuantity, family.lead_time_rule,
@@ -554,6 +617,73 @@ export function SupplierCombinationSelector({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Tamanho personalizado — LIVE_RESOLVER (§8): preço SEMPRE consultado */}
+      {isLiveResolver && productResult.found && (
+        <div className="space-y-2 p-2 rounded-md border border-dashed">
+          <Label className="text-xs font-medium flex items-center gap-1.5">
+            <Calculator className="h-3 w-3 text-violet-600" />
+            Tamanho personalizado — preço consultado no fornecedor
+          </Label>
+          <div className="flex items-center gap-2">
+            <Input
+              value={customW}
+              onChange={e => setCustomW(e.target.value)}
+              placeholder="Largura (mm)"
+              inputMode="numeric"
+              className="h-9 text-xs"
+            />
+            <span className="text-xs text-muted-foreground">×</span>
+            <Input
+              value={customH}
+              onChange={e => setCustomH(e.target.value)}
+              placeholder="Altura (mm)"
+              inputMode="numeric"
+              className="h-9 text-xs"
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleResolveLivePrice}
+              disabled={!(Number(customW) > 0) || !(Number(customH) > 0) || liveLoading}
+            >
+              {liveLoading ? 'Consultando...' : 'Consultar'}
+            </Button>
+          </div>
+
+          {liveError && (
+            <p className="text-xs text-red-600 flex items-start gap-1">
+              <XCircle className="h-3 w-3 mt-0.5 shrink-0" /> {liveError}
+            </p>
+          )}
+
+          {livePrice && (
+            <div className="text-xs space-y-0.5">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Preço do fornecedor</span>
+                <span className="font-bold text-primary">{fmt.format(livePrice.total_price)}</span>
+              </div>
+              {livePrice.descriptor && (
+                <p className="text-[10px] text-muted-foreground">{livePrice.descriptor}</p>
+              )}
+              {liveQuotedAt && (
+                <p className="text-[10px] text-muted-foreground">
+                  ID {livePrice.external_product_id ?? '—'} · consultado em{' '}
+                  {new Date(liveQuotedAt).toLocaleString('pt-BR')}
+                </p>
+              )}
+            </div>
+          )}
+
+          {!livePrice && !liveError && (
+            <p className="text-[10px] text-muted-foreground">
+              O preço depende de largura × altura (há preço mínimo e limites). Nada é calculado —
+              o valor é sempre confirmado pelo fornecedor.
+            </p>
+          )}
         </div>
       )}
 
