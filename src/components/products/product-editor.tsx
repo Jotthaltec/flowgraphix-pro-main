@@ -494,6 +494,7 @@ export function ProductEditor({
     },
     onSuccess: ({ metaSaved, closeAfter }) => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["imported-products"] });
       if (!metaSaved) {
         toast.warning("Salvo. Os campos avançados não foram persistidos: aplique a migração 'editor_meta' no banco.");
       } else {
@@ -513,6 +514,7 @@ export function ProductEditor({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["imported-products"] });
       toast.success("Produto excluído.");
       setConfirmDelete(false);
       onOpenChange(false);
@@ -529,6 +531,7 @@ export function ProductEditor({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["imported-products"] });
       set("status", "Arquivado");
       toast.success("Produto arquivado.");
       onSaved?.();

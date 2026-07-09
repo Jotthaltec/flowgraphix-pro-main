@@ -94,7 +94,10 @@ const DEFAULT_OPTIONS: ImporterOptions = {
   importDescription: true,
   descriptionInternalOnly: false,
   saveAsExternalSupplier: true,
-  scanVariants: false,
+  // Varredura completa ligada por padrão: importa TODAS as combinações reais do
+  // configurador (cada material/formato/impressão tem seu ?id= próprio), não só
+  // a variante exibida. Produtos sem eixos só custam 1 requisição.
+  scanVariants: true,
   copyImagesToStorage: false,
 };
 

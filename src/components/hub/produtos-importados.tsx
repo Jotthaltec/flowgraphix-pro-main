@@ -10,11 +10,13 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Progress } from "@/components/ui/progress";
 import { StatusBadge } from "@/components/status-badge";
-import { 
-  Search, ExternalLink, Download, Trash2, ShoppingCart, 
+import {
+  Search, ExternalLink, Download, Trash2, ShoppingCart,
   RefreshCcw, Link2Off, Loader2, PackageX, FileSpreadsheet,
-  Edit3, Save, Plus, Trash
+  Edit3, Save, Plus, Trash, Layers, X, CheckSquare
 } from "lucide-react";
 import { fetchSupplierPage } from "@/integrations/supabase/importer-actions";
 import { extractProductFromHtml } from "@/lib/supplier-extractor";
@@ -32,6 +34,24 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedSupplier, setSelectedSupplier] = useState("");
+
+  // Seleção em massa
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [openBulkEditModal, setOpenBulkEditModal] = useState(false);
+  // Barra de progresso da sincronização em massa
+  const [bulkSync, setBulkSync] = useState<{ running: boolean; done: number; total: number } | null>(null);
+
+  // Campos da edição em massa — cada campo só é aplicado se seu toggle estiver ligado
+  const [bulkApplyCategory, setBulkApplyCategory] = useState(false);
+  const [bulkCategory, setBulkCategory] = useState("");
+  const [bulkApplySubcategory, setBulkApplySubcategory] = useState(false);
+  const [bulkSubcategory, setBulkSubcategory] = useState("");
+  const [bulkApplyMargin, setBulkApplyMargin] = useState(false);
+  const [bulkMargin, setBulkMargin] = useState(50);
+  const [bulkApplyDeadline, setBulkApplyDeadline] = useState(false);
+  const [bulkDeadline, setBulkDeadline] = useState("");
+  const [bulkApplyStatus, setBulkApplyStatus] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState("Ativo");
 
   // Estado para o modal de variações de marketplace
   const [marketplaceModalProduct, setMarketplaceModalProduct] = useState<any>(null);
@@ -78,7 +98,10 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
           *,
           suppliers:supplier_id (name)
         `)
-        .eq("imported_from_supplier", true)
+        // Fonte única: TODO produto de fornecedor (origin = supplier_import),
+        // independente de qual fluxo o importou (imported_from_supplier true/false).
+        // Assim Hub e Produtos enxergam exatamente o mesmo conjunto.
+        .eq("origin", "supplier_import")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
@@ -126,6 +149,9 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
           imported_from_supplier: false,
           supplier_id: null,
           import_status: "manual",
+          // origin passa a "manual": tira o produto do Hub (que agora filtra por
+          // origin) e o converte definitivamente em produto próprio do catálogo.
+          origin: "manual",
           updated_at: new Date().toISOString()
         })
         .eq("id", id);
@@ -143,72 +169,79 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
 
   // Geração de rascunhos de marketplace agora é feita pelo MarketplaceVariationsModal
 
+  // Núcleo reutilizável de sincronização: busca a página do fornecedor, aplica
+  // as regras de mapeamento e grava os campos atualizados. Usado tanto na
+  // sincronização individual quanto na sincronização em massa.
+  const syncProductWithSupplier = async (product: any) => {
+    if (!product.source_url) throw new Error("Este produto não possui link de fornecedor vinculado.");
+
+    // 1. Fetch do HTML atualizado — fetcher seguro (anti-SSRF: HTTPS-only,
+    //    bloqueio de IPs/redes internas, allowlist de domínio, timeout e limite).
+    const htmlRes = await fetchSupplierPage({ data: { url: product.source_url } });
+    if (!htmlRes.success || !htmlRes.html) {
+      throw new Error(htmlRes.error || "Não foi possível obter o conteúdo do fornecedor.");
+    }
+
+    const domain = htmlRes.domain || "";
+
+    // 2. Busca regras de mapeamento para o domínio
+    const { data: rules } = await supabase
+      .from("supplier_mapping_rules")
+      .select("*")
+      .eq("company_id", product.company_id)
+      .eq("supplier_domain", domain);
+
+    // 3. Executa extrator
+    const extracted = extractProductFromHtml(htmlRes.html, rules || []);
+
+    // 4. Calcula sugeridos
+    const baseCost = extracted.current_price || product.cost_price || product.base_cost || 0;
+    const margin = product.margin_percent || product.target_margin || 50;
+    const suggestedPrice = parseFloat((baseCost * (1 + margin / 100)).toFixed(2));
+
+    const updatedFields = {
+      name: extracted.product_name || product.name,
+      commercial_name: extracted.product_name || product.name,
+      type: 'product',
+      origin: 'supplier_import',
+      description: extracted.specifications["Descrição"] || product.description || extracted.product_name || product.name,
+      base_cost: baseCost,
+      cost_price: baseCost,
+      suggested_price: suggestedPrice,
+      sale_price: suggestedPrice,
+      min_price: suggestedPrice * 0.9,
+      avg_production_time: extracted.production_deadline !== "5 dias úteis" ? extracted.production_deadline : (product.avg_production_time || "5 dias úteis"),
+      production_deadline: extracted.production_deadline !== "5 dias úteis" ? extracted.production_deadline : (product.avg_production_time || "5 dias úteis"),
+      supplier_sku: extracted.supplier_sku || product.supplier_sku,
+      main_image_url: extracted.main_image_url || product.main_image_url,
+      image_url: extracted.main_image_url || product.main_image_url,
+      gallery_images: extracted.gallery_images.length > 0 ? extracted.gallery_images : product.gallery_images,
+      specifications: { ...product.specifications, ...extracted.specifications },
+      variations: extracted.variations.length > 0 ? extracted.variations : product.variations,
+      quantity_prices: extracted.quantity_prices.length > 0 ? extracted.quantity_prices : product.quantity_prices,
+      quantity_price_table: extracted.quantity_prices.length > 0 ? extracted.quantity_prices : product.quantity_prices,
+      extra_services: extracted.extra_services.length > 0 ? extracted.extra_services : product.extra_services,
+      template_links: extracted.template_links.length > 0 ? extracted.template_links : product.template_links,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data, error } = await supabase
+      .from("products")
+      .update(updatedFields)
+      .eq("id", product.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data;
+  };
+
   // Mutação para enriquecer/sincronizar produto com o fornecedor
   const [enrichingProductId, setEnrichingProductId] = useState<string | null>(null);
   const enrichMutation = useMutation({
     mutationFn: async (product: any) => {
       setEnrichingProductId(product.id);
-      if (!product.source_url) throw new Error("Este produto não possui link de fornecedor vinculado.");
-
-      // 1. Fetch do HTML atualizado — fetcher seguro (anti-SSRF: HTTPS-only,
-      //    bloqueio de IPs/redes internas, allowlist de domínio, timeout e limite).
-      const htmlRes = await fetchSupplierPage({ data: { url: product.source_url } });
-      if (!htmlRes.success || !htmlRes.html) {
-        throw new Error(htmlRes.error || "Não foi possível obter o conteúdo do fornecedor.");
-      }
-
-      const domain = htmlRes.domain || "";
-
-      // 2. Busca regras de mapeamento para o domínio
-      const { data: rules } = await supabase
-        .from("supplier_mapping_rules")
-        .select("*")
-        .eq("company_id", product.company_id)
-        .eq("supplier_domain", domain);
-
-      // 3. Executa extrator
-      const extracted = extractProductFromHtml(htmlRes.html, rules || []);
-
-      // 4. Calcula sugeridos
-      const baseCost = extracted.current_price || product.cost_price || product.base_cost || 0;
-      const margin = product.margin_percent || product.target_margin || 50;
-      const suggestedPrice = parseFloat((baseCost * (1 + margin / 100)).toFixed(2));
-
-       const updatedFields = {
-        name: extracted.product_name || product.name,
-        commercial_name: extracted.product_name || product.name,
-        type: 'product',
-        origin: 'supplier_import',
-        description: extracted.specifications["Descrição"] || product.description || extracted.product_name || product.name,
-        base_cost: baseCost,
-        cost_price: baseCost,
-        suggested_price: suggestedPrice,
-        sale_price: suggestedPrice,
-        min_price: suggestedPrice * 0.9,
-        avg_production_time: extracted.production_deadline !== "5 dias úteis" ? extracted.production_deadline : (product.avg_production_time || "5 dias úteis"),
-        production_deadline: extracted.production_deadline !== "5 dias úteis" ? extracted.production_deadline : (product.avg_production_time || "5 dias úteis"),
-        supplier_sku: extracted.supplier_sku || product.supplier_sku,
-        main_image_url: extracted.main_image_url || product.main_image_url,
-        image_url: extracted.main_image_url || product.main_image_url,
-        gallery_images: extracted.gallery_images.length > 0 ? extracted.gallery_images : product.gallery_images,
-        specifications: { ...product.specifications, ...extracted.specifications },
-        variations: extracted.variations.length > 0 ? extracted.variations : product.variations,
-        quantity_prices: extracted.quantity_prices.length > 0 ? extracted.quantity_prices : product.quantity_prices,
-        quantity_price_table: extracted.quantity_prices.length > 0 ? extracted.quantity_prices : product.quantity_prices,
-        extra_services: extracted.extra_services.length > 0 ? extracted.extra_services : product.extra_services,
-        template_links: extracted.template_links.length > 0 ? extracted.template_links : product.template_links,
-        updated_at: new Date().toISOString()
-      };
-
-      const { data, error } = await supabase
-        .from("products")
-        .update(updatedFields)
-        .eq("id", product.id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      return data;
+      return syncProductWithSupplier(product);
     },
     onSuccess: (data) => {
       toast.success(`"${data.name}" enriquecido e sincronizado com dados atuais do fornecedor!`);
@@ -276,6 +309,118 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
     }
   });
 
+  // ─── AÇÕES EM MASSA ──────────────────────────────────────────────────────
+
+  // Sincronização em massa: percorre os produtos selecionados sequencialmente
+  // (evita disparar N fetches simultâneos contra o fornecedor) e reporta progresso.
+  const bulkSyncMutation = useMutation({
+    mutationFn: async (productsToSync: any[]) => {
+      let ok = 0;
+      let failed = 0;
+      setBulkSync({ running: true, done: 0, total: productsToSync.length });
+      for (let i = 0; i < productsToSync.length; i++) {
+        try {
+          await syncProductWithSupplier(productsToSync[i]);
+          ok++;
+        } catch {
+          failed++;
+        }
+        setBulkSync({ running: true, done: i + 1, total: productsToSync.length });
+      }
+      return { ok, failed };
+    },
+    onSuccess: ({ ok, failed }) => {
+      if (failed === 0) {
+        toast.success(`${ok} produto(s) sincronizado(s) com o fornecedor!`);
+      } else {
+        toast.warning(`${ok} sincronizado(s), ${failed} com falha (ex.: sem link ou fora da allowlist).`);
+      }
+      queryClient.invalidateQueries({ queryKey: ["imported-products"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      setBulkSync(null);
+      setSelectedIds(new Set());
+    },
+    onError: (err: any) => {
+      toast.error(`Erro na sincronização em massa: ${err.message}`);
+      setBulkSync(null);
+    }
+  });
+
+  // Edição em massa: aplica somente os campos com toggle ativo aos produtos selecionados.
+  const bulkEditMutation = useMutation({
+    mutationFn: async (productsToEdit: any[]) => {
+      const patch: Record<string, any> = { updated_at: new Date().toISOString() };
+      if (bulkApplyCategory) patch.category = bulkCategory;
+      if (bulkApplySubcategory) patch.subcategory = bulkSubcategory;
+      if (bulkApplyDeadline) {
+        patch.avg_production_time = bulkDeadline;
+        patch.production_deadline = bulkDeadline;
+      }
+      if (bulkApplyStatus) patch.status = bulkStatus;
+
+      // Se estiver aplicando margem, cada produto recalcula preço a partir do seu próprio custo.
+      for (const p of productsToEdit) {
+        const rowPatch = { ...patch };
+        if (bulkApplyMargin) {
+          const cost = p.cost_price || p.base_cost || 0;
+          const suggestedPrice = parseFloat((cost * (1 + bulkMargin / 100)).toFixed(2));
+          rowPatch.margin_percent = bulkMargin;
+          rowPatch.target_margin = bulkMargin;
+          rowPatch.suggested_price = suggestedPrice;
+          rowPatch.sale_price = suggestedPrice;
+          rowPatch.min_price = suggestedPrice * 0.9;
+        }
+        const { error } = await supabase.from("products").update(rowPatch as any).eq("id", p.id);
+        if (error) throw error;
+      }
+      return productsToEdit.length;
+    },
+    onSuccess: (count) => {
+      toast.success(`Edição em massa aplicada a ${count} produto(s)!`);
+      queryClient.invalidateQueries({ queryKey: ["imported-products"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      setOpenBulkEditModal(false);
+      setSelectedIds(new Set());
+    },
+    onError: (err: any) => {
+      toast.error(`Erro na edição em massa: ${err.message}`);
+    }
+  });
+
+  // Desvincular / deletar em massa
+  const bulkUnlinkMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase
+        .from("products")
+        .update({ imported_from_supplier: false, supplier_id: null, import_status: "manual", origin: "manual", updated_at: new Date().toISOString() })
+        .in("id", ids);
+      if (error) throw error;
+      return ids.length;
+    },
+    onSuccess: (count) => {
+      toast.success(`${count} produto(s) desvinculado(s) do fornecedor!`);
+      queryClient.invalidateQueries({ queryKey: ["imported-products"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      setSelectedIds(new Set());
+    },
+    onError: (err: any) => toast.error(`Erro ao desvincular: ${err.message}`)
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase.from("products").delete().in("id", ids);
+      if (error) throw error;
+      return ids.length;
+    },
+    onSuccess: (count) => {
+      toast.success(`${count} produto(s) removido(s) do CRM!`);
+      queryClient.invalidateQueries({ queryKey: ["imported-products"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      setSelectedIds(new Set());
+    },
+    onError: (err: any) => toast.error(`Erro ao deletar: ${err.message}`)
+  });
+
   const handleEditClick = (product: any) => {
     setEditingProduct(product);
     setEditName(product.name || "");
@@ -318,6 +463,49 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
     const matchesSupplier = selectedSupplier ? p.supplier_id === selectedSupplier : true;
     return matchesSearch && matchesSupplier;
   });
+
+  // ─── SELEÇÃO EM MASSA (helpers) ──────────────────────────────────────────
+  const selectedProducts = filteredProducts.filter((p) => selectedIds.has(p.id));
+  const allVisibleSelected = filteredProducts.length > 0 && filteredProducts.every((p) => selectedIds.has(p.id));
+  const someVisibleSelected = filteredProducts.some((p) => selectedIds.has(p.id)) && !allVisibleSelected;
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      if (allVisibleSelected) {
+        const next = new Set(prev);
+        filteredProducts.forEach((p) => next.delete(p.id));
+        return next;
+      }
+      const next = new Set(prev);
+      filteredProducts.forEach((p) => next.add(p.id));
+      return next;
+    });
+  };
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const openBulkEdit = () => {
+    // Pré-preenche com valores do primeiro selecionado como ponto de partida
+    const first = selectedProducts[0];
+    setBulkApplyCategory(false);
+    setBulkApplySubcategory(false);
+    setBulkApplyMargin(false);
+    setBulkApplyDeadline(false);
+    setBulkApplyStatus(false);
+    setBulkCategory(first?.category || "Impressos");
+    setBulkSubcategory(first?.subcategory || "Geral");
+    setBulkMargin(first?.margin_percent || first?.target_margin || 50);
+    setBulkDeadline(first?.avg_production_time || first?.production_deadline || "5 dias úteis");
+    setBulkStatus(first?.status || "Ativo");
+    setOpenBulkEditModal(true);
+  };
 
   // Função para exportar os produtos em CSV (Totalmente Funcional!)
   const exportToCSV = () => {
@@ -403,6 +591,86 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
           </select>
         </div>
 
+        {/* BARRA DE AÇÕES EM MASSA */}
+        {selectedIds.size > 0 && (
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border border-violet-500/30 bg-violet-500/5 px-4 py-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-violet-500">
+              <CheckSquare className="h-4 w-4" />
+              {selectedIds.size} selecionado(s)
+            </div>
+
+            {bulkSync?.running ? (
+              <div className="flex items-center gap-3 flex-1 min-w-[200px]">
+                <Progress value={(bulkSync.done / bulkSync.total) * 100} className="h-2 flex-1" />
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  Sincronizando {bulkSync.done}/{bulkSync.total}...
+                </span>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const withLink = selectedProducts.filter((p) => p.source_url);
+                    if (withLink.length === 0) {
+                      toast.error("Nenhum dos produtos selecionados possui link de fornecedor.");
+                      return;
+                    }
+                    bulkSyncMutation.mutate(withLink);
+                  }}
+                  disabled={bulkSyncMutation.isPending}
+                  className="h-8 text-xs text-sky-500 border-sky-500/30 hover:bg-sky-500/10"
+                >
+                  <RefreshCcw className="h-3.5 w-3.5 mr-1.5" /> Sincronizar
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={openBulkEdit}
+                  className="h-8 text-xs text-primary border-primary/30 hover:bg-primary/10"
+                >
+                  <Layers className="h-3.5 w-3.5 mr-1.5" /> Editar em massa
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (window.confirm(`Desvincular ${selectedIds.size} produto(s) do fornecedor? Eles continuam no CRM como produtos manuais.`)) {
+                      bulkUnlinkMutation.mutate(Array.from(selectedIds));
+                    }
+                  }}
+                  disabled={bulkUnlinkMutation.isPending}
+                  className="h-8 text-xs text-amber-500 border-amber-500/30 hover:bg-amber-500/10"
+                >
+                  <Link2Off className="h-3.5 w-3.5 mr-1.5" /> Desvincular
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    if (window.confirm(`Deletar ${selectedIds.size} produto(s) do CRM? Esta ação não pode ser desfeita.`)) {
+                      bulkDeleteMutation.mutate(Array.from(selectedIds));
+                    }
+                  }}
+                  disabled={bulkDeleteMutation.isPending}
+                  className="h-8 text-xs text-destructive border-destructive/30 hover:bg-destructive/10"
+                >
+                  <Trash2 className="h-3.5 w-3.5 mr-1.5" /> Deletar
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setSelectedIds(new Set())}
+                  className="h-8 text-xs text-muted-foreground"
+                >
+                  <X className="h-3.5 w-3.5 mr-1" /> Limpar
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* TABELA DE PRODUTOS */}
         {isLoadingProducts ? (
           <div className="h-48 flex items-center justify-center">
@@ -413,6 +681,13 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-10">
+                    <Checkbox
+                      checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Selecionar todos"
+                    />
+                  </TableHead>
                   <TableHead className="w-16">Preview</TableHead>
                   <TableHead>Produto</TableHead>
                   <TableHead>SKU Fornecedor</TableHead>
@@ -433,7 +708,14 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                   const sale = p.sale_price || p.suggested_price || 0;
 
                   return (
-                    <TableRow key={p.id}>
+                    <TableRow key={p.id} data-state={selectedIds.has(p.id) ? "selected" : undefined}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.has(p.id)}
+                          onCheckedChange={() => toggleSelectOne(p.id)}
+                          aria-label={`Selecionar ${p.name}`}
+                        />
+                      </TableCell>
                       <TableCell>
                         <div className="h-10 w-10 border rounded bg-muted flex items-center justify-center overflow-hidden">
                           {p.main_image_url ? (
@@ -1199,6 +1481,87 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                 {updateProductMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 mr-1.5" />} Salvar Alterações
               </Button>
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL DE EDIÇÃO EM MASSA */}
+      <Dialog open={openBulkEditModal} onOpenChange={setOpenBulkEditModal}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Layers className="h-5 w-5 text-primary" />
+              Edição em Massa
+            </DialogTitle>
+            <DialogDescription>
+              Aplique alterações a <strong>{selectedIds.size}</strong> produto(s) selecionado(s). Marque apenas os campos que deseja sobrescrever — os demais permanecem intactos.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            {/* Categoria */}
+            <div className="flex items-center gap-3 rounded-md border p-3">
+              <Checkbox checked={bulkApplyCategory} onCheckedChange={(v) => setBulkApplyCategory(!!v)} />
+              <Label className="w-28 shrink-0 text-sm">Categoria</Label>
+              <Input value={bulkCategory} onChange={(e) => setBulkCategory(e.target.value)} disabled={!bulkApplyCategory} className="h-8" />
+            </div>
+
+            {/* Subcategoria */}
+            <div className="flex items-center gap-3 rounded-md border p-3">
+              <Checkbox checked={bulkApplySubcategory} onCheckedChange={(v) => setBulkApplySubcategory(!!v)} />
+              <Label className="w-28 shrink-0 text-sm">Subcategoria</Label>
+              <Input value={bulkSubcategory} onChange={(e) => setBulkSubcategory(e.target.value)} disabled={!bulkApplySubcategory} className="h-8" />
+            </div>
+
+            {/* Margem */}
+            <div className="flex items-center gap-3 rounded-md border p-3">
+              <Checkbox checked={bulkApplyMargin} onCheckedChange={(v) => setBulkApplyMargin(!!v)} />
+              <Label className="w-28 shrink-0 text-sm">Margem (%)</Label>
+              <Input type="number" value={bulkMargin} onChange={(e) => setBulkMargin(parseInt(e.target.value) || 0)} disabled={!bulkApplyMargin} className="h-8" />
+            </div>
+            {bulkApplyMargin && (
+              <p className="text-[11px] text-muted-foreground -mt-1 pl-3">
+                O preço de venda de cada produto será recalculado a partir do seu próprio custo base.
+              </p>
+            )}
+
+            {/* Prazo */}
+            <div className="flex items-center gap-3 rounded-md border p-3">
+              <Checkbox checked={bulkApplyDeadline} onCheckedChange={(v) => setBulkApplyDeadline(!!v)} />
+              <Label className="w-28 shrink-0 text-sm">Prazo produção</Label>
+              <Input value={bulkDeadline} onChange={(e) => setBulkDeadline(e.target.value)} disabled={!bulkApplyDeadline} className="h-8" />
+            </div>
+
+            {/* Status */}
+            <div className="flex items-center gap-3 rounded-md border p-3">
+              <Checkbox checked={bulkApplyStatus} onCheckedChange={(v) => setBulkApplyStatus(!!v)} />
+              <Label className="w-28 shrink-0 text-sm">Status</Label>
+              <select
+                value={bulkStatus}
+                onChange={(e) => setBulkStatus(e.target.value)}
+                disabled={!bulkApplyStatus}
+                className="h-8 flex-1 rounded-md border border-input bg-card px-2 text-sm disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <option value="Ativo">Ativo</option>
+                <option value="Inativo">Inativo</option>
+                <option value="Rascunho">Rascunho</option>
+              </select>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setOpenBulkEditModal(false)}>Cancelar</Button>
+            <Button
+              size="sm"
+              disabled={
+                bulkEditMutation.isPending ||
+                !(bulkApplyCategory || bulkApplySubcategory || bulkApplyMargin || bulkApplyDeadline || bulkApplyStatus)
+              }
+              onClick={() => bulkEditMutation.mutate(selectedProducts)}
+            >
+              {bulkEditMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Save className="h-4 w-4 mr-1.5" />}
+              Aplicar a {selectedIds.size} produto(s)
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

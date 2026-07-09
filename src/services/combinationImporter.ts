@@ -280,15 +280,26 @@ export async function importCombinationsFromProduct(
       if (quantity <= 0) continue;
 
       const externalProductId = tier.external_id || (variant.external_id ? `${variant.external_id}-${quantity}` : null);
-      const totalPrice = num(tier.total_price);
-      const oldPrice = num(tier.old_price);
-      // list_price = preço normal; promotional_price = preço promocional efetivo
-      const listPrice = oldPrice != null && oldPrice > 0 ? oldPrice : totalPrice;
-      let promoPrice = num(tier.promotional_price);
-      if (promoPrice == null && oldPrice != null && totalPrice != null && totalPrice < oldPrice) {
-        promoPrice = totalPrice; // total abaixo do de-para indica promoção
+      // "por" = preço de venda atual (pode vir 0 quando o site renderiza por JS);
+      // "de" = preço de referência. Só valores > 0 contam — nunca fabricamos preço.
+      const valid = (x: number | null) => (x != null && x > 0 ? x : null);
+      const por = valid(num(tier.total_price));
+      const de = valid(num(tier.old_price));
+      const explicitPromo = valid(num(tier.promotional_price));
+      let listPrice: number | null;
+      let promoPrice: number | null = null;
+      if (por != null) {
+        // Há preço de venda atual; se houver "de" maior, é promoção real.
+        if (de != null && de > por) { listPrice = de; promoPrice = por; }
+        else { listPrice = por; }
+      } else {
+        // Sem "por" válido: usa o "de"/promo do site como preço (referência real).
+        listPrice = de ?? explicitPromo ?? null;
       }
-      const availability = tier.available !== false && variant.available !== false ? 'available' : 'unavailable';
+      const hasPrice = listPrice != null && listPrice > 0;
+      // Sem preço confirmado → indisponível (a UI mostra "Preço não confirmado").
+      const availability =
+        tier.available !== false && variant.available !== false && hasPrice ? 'available' : 'unavailable';
       const combinationHash = buildCombinationHash(optionValueIds, quantity);
       const completeName = buildCompleteName(product, variant, quantity);
 

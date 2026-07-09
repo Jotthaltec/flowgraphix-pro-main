@@ -18,6 +18,7 @@ import { MarketplaceVariationsModal } from "@/components/hub/marketplace-variati
 import { DialogDescription } from "@/components/ui/dialog";
 import { ProductEditor } from "@/components/products/product-editor";
 import { generateCommercialProducts } from "@/integrations/supabase/combination-client";
+import { normalizeUrlForMatch } from "@/lib/importer-persistence";
 
 export const Route = createFileRoute("/_app/produtos")({ component: ProdutosPage });
 
@@ -127,16 +128,44 @@ function ProdutosPage() {
       const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
       if (!profileData?.company_id) throw new Error("Empresa não identificada.");
 
-      // Verifica se já foi importado (evita duplicar)
-      const { data: existing } = await supabase
-        .from("products")
-        .select("id")
-        .eq("company_id", profileData.company_id)
-        .eq("supplier_sku", item.supplier_sku)
-        .eq("origin", "supplier_import")
-        .maybeSingle();
+      // Dedup robusto (mesma lógica do importador "por link"): casa por source_url
+      // normalizada — a chave mais forte — OU por supplier_sku, em QUALQUER dos dois
+      // fluxos de importação (imported_from_supplier true/false). Evita criar a linha
+      // duplicada que fazia o produto "continuar em Produtos" após excluir do Hub.
+      let existingId: string | null = null;
 
-      if (existing?.id) throw new Error("Este produto já foi importado anteriormente.");
+      const targetUrl = normalizeUrlForMatch(item.source_url);
+      if (targetUrl) {
+        const { data: candidates } = await supabase
+          .from("products")
+          .select("id, source_url")
+          .eq("company_id", profileData.company_id)
+          .not("source_url", "is", null);
+        existingId = (candidates || []).find(
+          (c: any) => normalizeUrlForMatch(c.source_url) === targetUrl,
+        )?.id ?? null;
+      }
+
+      if (!existingId && item.supplier_sku) {
+        const { data: bySku } = await supabase
+          .from("products")
+          .select("id")
+          .eq("company_id", profileData.company_id)
+          .eq("supplier_sku", item.supplier_sku)
+          .eq("origin", "supplier_import")
+          .maybeSingle();
+        existingId = bySku?.id ?? null;
+      }
+
+      // Já existe (importado por qualquer caminho): não duplica. Só garante que o
+      // registro de staging fique marcado como importado e sinaliza para a UI.
+      if (existingId) {
+        await supabase
+          .from("supplier_imports")
+          .update({ extraction_status: "imported" })
+          .eq("id", item.id);
+        return { alreadyExisted: true };
+      }
 
       const margin = 50;
       const cost = Number(item.current_price) || 0;
@@ -173,7 +202,9 @@ function ProdutosPage() {
         extra_services: item.extra_services || null,
         template_links: item.template_links || null,
         production_deadline: item.production_deadline || null,
-        // false: vai direto para Produtos & Serviços. origin "supplier_import" mantém o selo "Fornecedor".
+        // origin "supplier_import" é a fonte única: o produto aparece tanto em
+        // Produtos & Serviços quanto no Hub de Fornecedores. O flag abaixo só
+        // registra por qual fluxo entrou (aqui, via modal); o Hub não depende dele.
         imported_from_supplier: false,
         status: "Ativo"
       };
@@ -186,12 +217,18 @@ function ProdutosPage() {
         .from("supplier_imports")
         .update({ extraction_status: "imported" })
         .eq("id", item.id);
+
+      return { alreadyExisted: false };
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["hub_supplier_imports"] });
       queryClient.invalidateQueries({ queryKey: ["imported-products"] });
-      toast.success("Produto importado com sucesso para Produtos & Serviços!");
+      if (res?.alreadyExisted) {
+        toast.info("Este produto já estava no catálogo — nenhuma cópia duplicada foi criada.");
+      } else {
+        toast.success("Produto importado com sucesso para Produtos & Serviços!");
+      }
     },
     onError: (err) => {
       toast.error("Erro ao importar produto: " + err.message);
@@ -308,6 +345,7 @@ function ProdutosPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["imported-products"] });
       toast.success("Produto duplicado com sucesso!");
     },
     onError: (err) => {
@@ -322,6 +360,7 @@ function ProdutosPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["imported-products"] });
       toast.success("Produto removido!");
     },
     onError: (err) => {
@@ -349,6 +388,7 @@ function ProdutosPage() {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["imported-products"] });
       if (result.errors.length > 0) {
         toast.error("Falha ao gerar combinações: " + result.errors.join("; "));
         return;
@@ -406,6 +446,7 @@ function ProdutosPage() {
     },
     onSuccess: (r) => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
+      queryClient.invalidateQueries({ queryKey: ["imported-products"] });
       toast.success(
         `Catalogação concluída: ${r.ok}/${r.total} produtos · ${r.totalCombos} produtos comerciais` +
           (r.fail ? ` · ${r.fail} falharam` : "") + ".",

@@ -163,8 +163,8 @@ export const fetchImageBytes = createServerFn({ method: "POST" })
     },
   );
 
-const VARIANT_SCAN_MAX = 40;
-const VARIANT_SCAN_DELAY_MS = 600;
+const VARIANT_SCAN_MAX = 150; // cobre matrizes grandes (material × formato × impressão)
+const VARIANT_SCAN_DELAY_MS = 500;
 
 /**
  * Varredura completa de variantes (seção 10): segue, em largura, cada `?id=`

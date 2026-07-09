@@ -356,4 +356,19 @@ describe('calculateQuoteItem', () => {
     const calc = calculateQuoteItem(baseParams, unavailable, null, [], [], 'max_extra');
     expect(calc.price_status).toBe('unconfirmed');
   });
+
+  it('promoção = 0 é ignorada; usa o preço normal (não fabrica R$ 0)', () => {
+    // Cenário do "de/por" com "por" renderizado por JS (0 no HTML): list=1194.99, promo=0
+    const jsRendered = makeProduct({ ...product, list_price: 1194.99, promotional_price: 0 });
+    const calc = calculateQuoteItem(baseParams, jsRendered, null, [], [], 'max_extra');
+    expect(calc.supplier_product_cost).toBe(1194.99);
+    expect(calc.price_status).toBe('confirmed');
+  });
+
+  it('sem preço válido (list e promo 0) → não confirmado', () => {
+    const noPrice = makeProduct({ ...product, list_price: 0, promotional_price: 0 });
+    const calc = calculateQuoteItem(baseParams, noPrice, null, [], [], 'max_extra');
+    expect(calc.supplier_product_cost).toBe(0);
+    expect(calc.price_status).toBe('unconfirmed');
+  });
 });

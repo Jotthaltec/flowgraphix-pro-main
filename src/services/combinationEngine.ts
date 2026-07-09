@@ -262,10 +262,10 @@ export function getAvailableQuantities(
   return matching
     .map(p => {
       const promo = findActivePromotion(p, promotions);
-      const normal = p.list_price;
-      const promoPrice = promo?.promotional_price ?? p.promotional_price;
-      const isPromo = promoPrice != null && normal != null && promoPrice < normal;
-      const effective = promoPrice ?? normal ?? 0;
+      const eff = resolveEffectivePrice(p, promo);
+      const normal = eff.normal;
+      const effective = eff.effective;
+      const isPromo = eff.promo != null;
       return {
         quantity: p.quantity,
         commercial_product_id: p.id,
@@ -273,9 +273,10 @@ export function getAvailableQuantities(
         total_price: effective,
         unit_price_display: p.quantity > 0 ? round2(effective / p.quantity) : 0,
         normal_price: normal,
-        promotional_price: promoPrice ?? null,
+        promotional_price: eff.promo,
         is_promotional: isPromo,
-        available: isProductSellable(p),
+        // Sem preço confirmado (> 0) → não disponível para orçar (§18).
+        available: isProductSellable(p) && eff.has_price,
       } satisfies QuantityOption;
     })
     .sort((a, b) => a.quantity - b.quantity);
@@ -372,6 +373,28 @@ function findActivePromotion(
 }
 
 /**
+ * Preço efetivo de um produto comercial, tratando preço ≤ 0 como INVÁLIDO.
+ *
+ * Regra de segurança (§18): nunca fabrica um preço. Um preço de 0 (comum quando
+ * o fornecedor renderiza o valor por JavaScript e o HTML estático não o traz)
+ * NÃO é considerado válido — nem como promoção, nem como preço normal. Nesse
+ * caso has_price=false e a UI mostra "Preço não confirmado".
+ */
+export function resolveEffectivePrice(
+  product: SupplierCommercialProduct,
+  promotion: ActivePromotion | null,
+): { effective: number; normal: number | null; promo: number | null; has_price: boolean } {
+  const normalRaw = product.list_price;
+  const normal = normalRaw != null && normalRaw > 0 ? normalRaw : null;
+  const promoRaw = promotion?.promotional_price ?? product.promotional_price;
+  // Promoção só vale se > 0 e realmente menor que o preço normal (ou sem normal).
+  const promo =
+    promoRaw != null && promoRaw > 0 && (normal == null || promoRaw < normal) ? promoRaw : null;
+  const effective = promo ?? normal ?? 0;
+  return { effective, normal, promo, has_price: effective > 0 };
+}
+
+/**
  * Preço oficial de um produto comercial (fonte). Usa o promocional quando ativo.
  * NÃO multiplica preço unitário × quantidade.
  */
@@ -379,14 +402,8 @@ export function getOfficialPrice(
   product: SupplierCommercialProduct,
   promotion: ActivePromotion | null,
 ): { total_price: number; normal_price: number | null; promotional_price: number | null } {
-  const normal = product.list_price;
-  const promoPrice = promotion?.promotional_price ?? product.promotional_price;
-  const isPromo = promoPrice != null && (normal == null || promoPrice < normal);
-  return {
-    total_price: (isPromo ? promoPrice : normal) ?? 0,
-    normal_price: normal,
-    promotional_price: isPromo ? promoPrice! : null,
-  };
+  const p = resolveEffectivePrice(product, promotion);
+  return { total_price: p.effective, normal_price: p.normal, promotional_price: p.promo };
 }
 
 // ---------------------------------------------------------------------------
@@ -567,7 +584,9 @@ export function calculateQuoteItem(
 
   const leadTime = calculateLeadTime(product.production_days ?? 0, selectedExtras, leadTimeRule);
   const unitPriceDisplay = params.quantity > 0 ? round2(finalSalePrice / params.quantity) : 0;
-  const priceStatus: PriceStatus = isProductSellable(product) ? 'confirmed' : 'unconfirmed';
+  // Sem preço oficial válido (> 0) → não confirmado, nunca "confirmado a R$ 0" (§18).
+  const priceStatus: PriceStatus =
+    isProductSellable(product) && official.total_price > 0 ? 'confirmed' : 'unconfirmed';
 
   return {
     commercial_product_id: product.id,
