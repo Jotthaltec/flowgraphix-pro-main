@@ -22,6 +22,23 @@ function urlWithExternalId(sourceUrl: string, id: string): string | null {
 }
 
 /**
+ * Torna absoluta uma URL de opção.
+ *
+ * O configurador da FuturaIM traz caminhos RELATIVOS nas opções
+ * (`<option value="/produto/slug?id=123">`). Sem resolver contra a origem, o
+ * validador anti-SSRF rejeita a URL e a varredura descarta silenciosamente
+ * todos os eixos (material/formato) — coletando só a combinação inicial.
+ */
+function absolutize(url: string, sourceUrl: string): string | null {
+  try {
+    const base = new URL(sourceUrl, "https://www.futuraim.com.br");
+    return new URL(url, base).toString();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * URLs de variantes a visitar a partir de um produto.
  *
  * Na FuturaIM cada `?id=` é UM produto comercial (combinação + quantidade) e o
@@ -41,7 +58,11 @@ export function collectVariantUrls(product: ImportedProduct): string[] {
     for (const opt of axis.options) {
       if (!opt.url) continue;
       const id = externalIdFromUrl(opt.url);
-      if (id && id !== product.external_id) urls.add(opt.url);
+      if (!id || id === product.external_id) continue;
+      // As opções vêm como caminho relativo — absolutizar, senão o validador
+      // anti-SSRF as rejeita e a varredura ignora todos os eixos.
+      const absolute = absolutize(opt.url, product.source_url);
+      if (absolute) urls.add(absolute);
     }
   }
 

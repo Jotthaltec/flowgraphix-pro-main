@@ -23,6 +23,22 @@ describe("variantScan", () => {
     expect(urls.every((u) => /\?id=\d+/.test(u))).toBe(true);
   });
 
+  it("TODAS as URLs são absolutas (o site traz as opções como caminho relativo)", () => {
+    // Regressão: as options do configurador vêm como "/produto/slug?id=123".
+    // Se collectVariantUrls devolver caminho relativo, validateSupplierUrl rejeita
+    // e a varredura descarta silenciosamente material/formato — coletando só a
+    // combinação inicial (1 material, 1 formato) em várias quantidades.
+    const p = parseFuturaImProduct(
+      fx("futuraim-cartao-de-visita.html"),
+      "https://www.futuraim.com.br/produto/cartao-de-visita-em-couche-fosco-com-laminacao-fosca-e-verniz-localizado?id=4627",
+    );
+    const urls = collectVariantUrls(p);
+    expect(urls.length).toBeGreaterThan(0);
+    expect(urls.every((u) => u.startsWith("https://"))).toBe(true);
+    // e continuam parseáveis pelo construtor de URL (o que o validador faz)
+    expect(() => urls.forEach((u) => new URL(u))).not.toThrow();
+  });
+
   it("collectVariantUrls também segue os ids das TIRAGENS (preço real por quantidade)", () => {
     const url =
       "https://www.futuraim.com.br/produto/cartao-de-visita-em-couche-fosco-com-laminacao-fosca-e-verniz-localizado?id=4627";
