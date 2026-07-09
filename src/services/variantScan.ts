@@ -10,12 +10,33 @@
 import type { ImportedProduct, ImportedVariantAxis } from "@/types/importedProduct";
 import { externalIdFromUrl } from "@/services/futuraImParser";
 
+/** Reescreve a URL de origem apontando para outro `?id=` (mesmo slug). */
+function urlWithExternalId(sourceUrl: string, id: string): string | null {
+  try {
+    const u = new URL(sourceUrl, "https://www.futuraim.com.br");
+    u.searchParams.set("id", id);
+    return u.toString();
+  } catch {
+    return null;
+  }
+}
+
 /**
- * URLs de variantes a visitar a partir de um produto: as opções de eixo que
- * têm URL com id externo diferente do id atual (combinações ainda não vistas).
+ * URLs de variantes a visitar a partir de um produto.
+ *
+ * Na FuturaIM cada `?id=` é UM produto comercial (combinação + quantidade) e o
+ * preço autoritativo dele vive no `dataLayer` da sua própria página — o JSON-LD
+ * do Product costuma vir estagnado (price 0.00 / OutOfStock). Por isso seguimos:
+ *
+ *  1. as opções de eixo (material/formato/impressão) — cada uma tem seu `?id=`;
+ *  2. os ids das TIRAGENS (`trocarProduto('slug',ID)` de cada linha da tabela),
+ *     único jeito de obter o preço real de cada quantidade.
+ *
+ * Só ids diferentes do atual — nunca um produto cartesiano.
  */
 export function collectVariantUrls(product: ImportedProduct): string[] {
   const urls = new Set<string>();
+
   for (const axis of product.variant_axes) {
     for (const opt of axis.options) {
       if (!opt.url) continue;
@@ -23,6 +44,17 @@ export function collectVariantUrls(product: ImportedProduct): string[] {
       if (id && id !== product.external_id) urls.add(opt.url);
     }
   }
+
+  // Tiragens: cada quantidade tem seu próprio ProdutoId e seu próprio preço.
+  for (const variant of product.variants) {
+    for (const tier of variant.price_tiers) {
+      const id = tier.external_id;
+      if (!id || id === product.external_id) continue;
+      const url = urlWithExternalId(product.source_url, id);
+      if (url) urls.add(url);
+    }
+  }
+
   return [...urls];
 }
 

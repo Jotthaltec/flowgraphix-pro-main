@@ -70,7 +70,16 @@ function codeFromName(name: string): string {
   return normalize(name).toUpperCase().replace(/-/g, '_');
 }
 
+/**
+ * Converte para número preservando a AUSÊNCIA de valor.
+ *
+ * Cuidado: `Number(null)` === 0 e `Number('')` === 0, e ambos são finitos.
+ * Sem o guard abaixo, colunas nulas do banco (old_price, promotional_price,
+ * width_mm, production_days…) viravam 0 — o que fazia um preço promocional
+ * inexistente virar "R$ 0,00" e sequestrar o preço oficial.
+ */
 function num(value: any): number | null {
+  if (value === null || value === undefined || value === '') return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }

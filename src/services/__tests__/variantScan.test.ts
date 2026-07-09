@@ -23,6 +23,24 @@ describe("variantScan", () => {
     expect(urls.every((u) => /\?id=\d+/.test(u))).toBe(true);
   });
 
+  it("collectVariantUrls também segue os ids das TIRAGENS (preço real por quantidade)", () => {
+    const url =
+      "https://www.futuraim.com.br/produto/cartao-de-visita-em-couche-fosco-com-laminacao-fosca-e-verniz-localizado?id=4627";
+    const p = parseFuturaImProduct(fx("futuraim-cartao-de-visita.html"), url);
+    // A tabela de tiragens traz o ProdutoId de cada quantidade (trocarProduto).
+    const tierIds = p.variants
+      .flatMap((v) => v.price_tiers)
+      .map((t) => t.external_id)
+      .filter((id): id is string => !!id && id !== p.external_id);
+    expect(tierIds.length).toBeGreaterThan(0);
+
+    const urls = collectVariantUrls(p);
+    // Cada id de tiragem vira uma URL a visitar (para ler o dataLayer daquele id).
+    for (const id of tierIds) {
+      expect(urls.some((u) => new RegExp(`\\?id=${id}(\\b|&|$)`).test(u))).toBe(true);
+    }
+  });
+
   it("consolidateVariants junta variantes reais e marca scan completo", () => {
     const a = parseFuturaImProduct(fx("futuraim-cartao-de-visita.html"), "https://www.futuraim.com.br/produto/cartao?id=4627");
     const b = parseFuturaImProduct(fx("futuraim-adesivo-vinil.html"), "https://www.futuraim.com.br/produto/adesivo-em-vinil?id=11867");
