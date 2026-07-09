@@ -230,6 +230,19 @@ export async function importCombinationsFromProduct(
   const axes = detectAxes(product, variants);
   const valueIdMap = new Map<string, string>(); // `groupNorm|valueNorm` → value_id
 
+  // Alerta de subcatalogação: `products.variations` guarda TODAS as opções do
+  // configurador, mas só as variantes de fato coletadas viram produto comercial.
+  // Importar sem varredura traz 1 variante — e a cascata do orçamento fica com
+  // uma única escolha por eixo. Melhor avisar do que entregar um catálogo mudo.
+  const maxOptions = axes.reduce((m, a) => Math.max(m, a.values.length), 0);
+  if (variants.length <= 1 && maxOptions > 1) {
+    warnings.push(
+      `Produto importado SEM varredura completa: o configurador oferece até ${maxOptions} opções em um eixo, ` +
+        `mas apenas 1 combinação foi coletada. Reimporte pelo link com a "Varredura de variantes" ligada ` +
+        `para trazer todas as escolhas ao orçamento.`,
+    );
+  }
+
   for (let i = 0; i < axes.length; i++) {
     const axis = axes[i];
     const { data: existingGroup } = await supabase

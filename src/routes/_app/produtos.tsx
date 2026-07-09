@@ -399,10 +399,11 @@ function ProdutosPage() {
         result.price_changes ? `${result.price_changes} preços alterados` : "",
         result.commercial_products_removed ? `${result.commercial_products_removed} removidos` : "",
       ].filter(Boolean);
-      toast.success(
-        `Produtos comerciais: ${parts.join(", ")}.` +
-          (result.warnings.length > 0 ? ` (${result.warnings.length} avisos)` : ""),
-      );
+      toast.success(`Produtos comerciais: ${parts.join(", ")}.`);
+      // Mostra o motivo, não só a contagem — ex.: produto importado sem varredura.
+      if (result.warnings.length > 0) {
+        toast.warning(result.warnings[0], { duration: 8000 });
+      }
     },
     onError: (err: any) => {
       toast.error("Erro ao gerar combinações: " + err.message);
