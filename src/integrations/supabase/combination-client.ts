@@ -44,7 +44,22 @@ export async function generateCommercialProducts(params: {
     .eq('company_id', params.company_id);
 
   if (!variants || variants.length === 0) {
-    throw new Error('Produto sem variantes. Reimporte o produto pelo importador antes de gerar as combinações.');
+    // Armadilha comum: produtos vindos do Hub copiam `products.variations` (as
+    // OPÇÕES do configurador, exibidas na aba "Variações") mas não criam nenhuma
+    // linha em `product_variants` — que são as COMBINAÇÕES reais, com preço e
+    // ?id= próprios. Sem elas o motor não tem o que catalogar.
+    const hasOptions = Array.isArray(product.variations) && product.variations.length > 0;
+    if (hasOptions) {
+      throw new Error(
+        'Este produto tem opções cadastradas, mas nenhuma combinação real foi coletada do fornecedor ' +
+          '(ele veio do Hub, que não coleta variantes). Importe-o em "Importar por link"' +
+          (product.source_url ? ` usando ${product.source_url}` : '') +
+          ', com a "Varredura de variantes" ligada.',
+      );
+    }
+    throw new Error(
+      'Produto sem variantes. Importe o produto pelo link do fornecedor antes de gerar as combinações.',
+    );
   }
 
   const variantIds = variants.map((v: any) => v.id);
