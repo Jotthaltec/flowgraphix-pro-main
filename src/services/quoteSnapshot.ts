@@ -30,12 +30,15 @@ export interface SnapshotBuildParams {
   // Família/produto
   family_id: string | null;
   family_name: string | null;
-  // Combinação
-  external_code: string | null;
-  combination_key: string | null;
+  // Produto comercial
+  external_code: string | null;         // external_product_id do produto comercial
+  combination_hash: string | null;
   selected_options: SnapshotOption[];
   // Cálculo
   calculation: QuoteItemCalculation;
+  // Preços oficiais congelados (§12)
+  normal_price: number | null;
+  promotional_price: number | null;
   // Promoção
   promo_campaign: string | null;
   promo_origin: string | null;
@@ -72,13 +75,13 @@ export function buildPriceSnapshot(
     family_id: params.family_id,
     family_name: params.family_name,
     external_code: params.external_code,
-    combination_key: params.combination_key,
+    combination_hash: params.combination_hash,
     selected_options: params.selected_options,
-    // Preços congelados
+    // Preços congelados (fonte oficial do fornecedor — §12)
     quantity: calc.quantity,
     total_price: calc.supplier_product_cost,
-    normal_price: null,
-    promotional_price: null,
+    normal_price: params.normal_price,
+    promotional_price: params.promotional_price,
     unit_price_display: calc.unit_price_display,
     // Extras congelados
     extras: calc.selected_extras.map(e => ({

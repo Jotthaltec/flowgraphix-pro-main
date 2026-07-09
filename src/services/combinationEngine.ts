@@ -1,19 +1,24 @@
 /**
- * Motor de Combinações de Fornecedores — Lógica pura.
+ * Motor de Combinações de Fornecedores — Lógica pura (arquitetura de PRODUTO COMERCIAL).
+ *
+ * Cada combinação COMPLETA (opções + QUANTIDADE) é um produto comercial
+ * independente com seu próprio external_product_id, preço, promoção e prazo.
+ * A quantidade faz parte da identidade — não é um modificador de preço.
  *
  * Responsável por:
- * - Gerar chaves determinísticas de combinação (combination_key)
+ * - Gerar hash determinístico da combinação (combination_hash)
  * - Filtrar opções compatíveis em cascata (árvore de dependência)
- * - Localizar combinações exatas (nunca aproximadas)
- * - Recuperar preços oficiais por combinação+quantidade
+ * - Listar as quantidades disponíveis (cada uma é um produto comercial)
+ * - Resolver o produto comercial EXATO (nunca aproximado)
  * - Listar extras compatíveis com preço correto
  * - Calcular prazos com regra configurável
- * - Calcular decomposição completa do item de orçamento
+ * - Calcular a decomposição completa do item de orçamento
  *
- * REGRAS DE SEGURANÇA:
- * - Nunca inventa preços quando uma combinação não é encontrada
- * - Nunca usa o preço de uma combinação parecida
- * - O preço total importado do fornecedor é a fonte oficial
+ * REGRAS DE SEGURANÇA (§7):
+ * - Nunca inventa preços quando não há produto comercial correspondente
+ * - Nunca usa preço de produto semelhante, de outra quantidade ou de outro formato
+ * - Nunca aplica média/multiplicação proporcional
+ * - O preço do produto comercial (list/promo) é a fonte oficial
  * - O preço unitário é calculado APENAS para exibição
  */
 
@@ -21,20 +26,16 @@ import type {
   SupplierProductFamily,
   SupplierOptionGroup,
   SupplierOptionValue,
-  SupplierCombination,
-  SupplierCombinationOptionValue,
-  SupplierCombinationPrice,
+  SupplierCommercialProduct,
+  SupplierCommercialProductOption,
   SupplierExtra,
   SupplierExtraCompatibility,
   SupplierExtraPrice,
-  SupplierService,
-  SupplierServicePrice,
   LeadTimeRule,
   PriceStatus,
   CascadeSelection,
   CascadeFilterResult,
-  CombinationLookupResult,
-  CombinationPriceResult,
+  CommercialProductLookupResult,
   QuantityOption,
   ActivePromotion,
   AvailableExtra,
@@ -45,90 +46,138 @@ import type {
 } from '@/types/combinationTypes';
 
 // ---------------------------------------------------------------------------
-// 1. Chave determinística de combinação
+// Normalização e hash determinístico da combinação
 // ---------------------------------------------------------------------------
 
+/** Normaliza texto para o hash (minúsculo, sem acentos, tokens estáveis). */
+export function normalizeForHash(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, '_')
+    .trim();
+}
+
 /**
- * Gera uma combination_key determinística a partir dos IDs das opções selecionadas.
+ * Gera um combination_hash determinístico a partir dos IDs das opções
+ * selecionadas MAIS a quantidade — que faz parte da identidade do produto (§11).
  *
- * A chave é formada ordenando os IDs (UUIDs) em ordem alfabética e juntando
- * com pipe (|). Isso garante que a mesma seleção de opções sempre produz
- * a mesma chave, independente da ordem de seleção.
- *
- * Ex.: "a1b2|c3d4|e5f6" para 3 opções selecionadas.
+ * Ordena os IDs (estável, independente da ordem de seleção) e concatena com a
+ * quantidade. Serve para detectar duplicações e identificar troca de ID externo;
+ * NÃO substitui o external_product_id (§11).
  */
-export function buildCombinationKey(optionValueIds: string[]): string {
-  if (!optionValueIds.length) return '';
+export function buildCombinationHash(optionValueIds: string[], quantity: number): string {
   const sorted = [...optionValueIds].sort();
-  return sorted.join('|');
+  return `q${quantity}|${sorted.join('|')}`;
+}
+
+/**
+ * Gera uma chave apenas das opções (sem quantidade). Usada para agrupar as
+ * quantidades disponíveis de uma mesma configuração de opções.
+ */
+export function buildOptionSetKey(optionValueIds: string[]): string {
+  return [...optionValueIds].sort().join('|');
 }
 
 // ---------------------------------------------------------------------------
-// 2. Filtragem em cascata (árvore de dependência)
+// Dados da família carregados para filtragem local
 // ---------------------------------------------------------------------------
 
 /**
- * Dados completos de uma família carregados para filtragem local.
- * O frontend carrega tudo uma vez e filtra no cliente.
+ * Dados completos de uma família carregados para o seletor.
+ * O frontend carrega tudo uma vez e resolve no cliente.
  */
 export interface FamilyCombinationData {
   family: SupplierProductFamily;
   groups: SupplierOptionGroup[];
   values: SupplierOptionValue[];
-  combinations: SupplierCombination[];
-  combinationOptions: SupplierCombinationOptionValue[];
+  /** Produtos comerciais (1 por combinação completa, incl. quantidade). */
+  products: SupplierCommercialProduct[];
+  /** Junção produto comercial ↔ opções. */
+  productOptions: SupplierCommercialProductOption[];
 }
+
+/** Promoção crua vinda do banco (supplier_promotions). */
+export interface RawPromotion {
+  commercial_product_id: string | null;
+  quantity: number | null;
+  normal_price: number | null;
+  promo_price: number | null;
+  discount_percent: number | null;
+  campaign: string | null;
+  origin: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  status: string;
+}
+
+// ---------------------------------------------------------------------------
+// Índices auxiliares
+// ---------------------------------------------------------------------------
+
+/** Mapa product_id → Set<option_value_id>. */
+function buildProductOptionMap(
+  productOptions: SupplierCommercialProductOption[],
+): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
+  for (const po of productOptions) {
+    if (!map.has(po.commercial_product_id)) {
+      map.set(po.commercial_product_id, new Set());
+    }
+    map.get(po.commercial_product_id)!.add(po.option_value_id);
+  }
+  return map;
+}
+
+/** Produto comercial é vendável? */
+function isProductSellable(p: SupplierCommercialProduct): boolean {
+  return p.availability === 'available';
+}
+
+/**
+ * Um produto é compatível com a seleção quando seu conjunto de opções contém
+ * TODAS as opções já escolhidas.
+ */
+function productMatchesSelection(
+  optSet: Set<string> | undefined,
+  selectedOptionIds: Set<string>,
+): boolean {
+  if (!optSet) return false;
+  for (const id of selectedOptionIds) {
+    if (!optSet.has(id)) return false;
+  }
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// 1. Filtragem em cascata (árvore de dependência)
+// ---------------------------------------------------------------------------
 
 /**
  * Filtra as opções compatíveis após cada seleção em cascata.
  *
- * Para cada grupo (na ordem do fornecedor):
- * 1. Se ainda não foi selecionado, mostra apenas os valores que levam a
- *    pelo menos uma combinação válida considerando as seleções anteriores.
- * 2. Se já foi selecionado, marca como locked.
- *
- * Nunca exibe opções que não levem a uma combinação válida.
+ * Para cada grupo (na ordem do fornecedor): mostra apenas os valores que levam a
+ * pelo menos um produto comercial vendável considerando as seleções anteriores.
+ * Nunca exibe opções que não levem a um produto comercial real (§6, §7).
  */
 export function getCompatibleValues(
   data: FamilyCombinationData,
   selection: CascadeSelection,
 ): CascadeFilterResult[] {
-  const { groups, values, combinations, combinationOptions } = data;
+  const { groups, values, products, productOptions } = data;
 
-  // Ordenar grupos pela ordem do fornecedor
   const sortedGroups = [...groups].sort((a, b) => a.order_index - b.order_index);
-
-  // IDs das opções já selecionadas
   const selectedOptionIds = new Set(selection.values());
+  const productOptionMap = buildProductOptionMap(productOptions);
+  const valueToGroup = new Map(values.map(v => [v.id, v.group_id]));
 
-  // Pré-computar: para cada combinação, o set de option_value_ids
-  const combOptionMap = new Map<string, Set<string>>();
-  for (const co of combinationOptions) {
-    if (!combOptionMap.has(co.combination_id)) {
-      combOptionMap.set(co.combination_id, new Set());
-    }
-    combOptionMap.get(co.combination_id)!.add(co.option_value_id);
-  }
-
-  // Pré-computar: para cada option_value_id, a que grupo pertence
-  const valueToGroup = new Map<string, string>();
-  for (const v of values) {
-    valueToGroup.set(v.id, v.group_id);
-  }
-
-  // Filtrar combinações que são compatíveis com as seleções atuais
-  // Uma combinação é compatível se contém TODAS as opções selecionadas
-  const compatibleCombinations = combinations.filter(c => {
-    if (!c.available) return false;
-    const optSet = combOptionMap.get(c.id);
-    if (!optSet) return false;
-    for (const selectedId of selectedOptionIds) {
-      if (!optSet.has(selectedId)) return false;
-    }
-    return true;
+  // Produtos comerciais compatíveis com a seleção atual
+  const compatibleProducts = products.filter(p => {
+    if (!isProductSellable(p)) return false;
+    return productMatchesSelection(productOptionMap.get(p.id), selectedOptionIds);
   });
 
-  // Para cada grupo, determinar os valores compatíveis
   const results: CascadeFilterResult[] = [];
 
   for (const group of sortedGroups) {
@@ -136,7 +185,6 @@ export function getCompatibleValues(
     const groupValues = values.filter(v => v.group_id === group.id && v.is_active);
 
     if (selectedValueId) {
-      // Grupo já selecionado — mostrar apenas o valor selecionado, locked
       const selectedValue = groupValues.find(v => v.id === selectedValueId);
       results.push({
         group,
@@ -145,19 +193,14 @@ export function getCompatibleValues(
         is_locked: true,
       });
     } else {
-      // Grupo não selecionado — filtrar valores que levam a combinações válidas
       const compatibleValueIds = new Set<string>();
-
-      for (const combo of compatibleCombinations) {
-        const optSet = combOptionMap.get(combo.id);
+      for (const product of compatibleProducts) {
+        const optSet = productOptionMap.get(product.id);
         if (!optSet) continue;
         for (const optId of optSet) {
-          if (valueToGroup.get(optId) === group.id) {
-            compatibleValueIds.add(optId);
-          }
+          if (valueToGroup.get(optId) === group.id) compatibleValueIds.add(optId);
         }
       }
-
       const filteredValues = groupValues
         .filter(v => compatibleValueIds.has(v.id))
         .sort((a, b) => a.order_index - b.order_index);
@@ -175,264 +218,224 @@ export function getCompatibleValues(
 }
 
 // ---------------------------------------------------------------------------
-// 3. Localizar combinação exata
+// 2. Quantidades disponíveis (cada quantidade é um produto comercial)
 // ---------------------------------------------------------------------------
 
 /**
- * Localiza a combinação EXATA para uma seleção completa de opções.
+ * Quando todos os grupos obrigatórios foram escolhidos, retorna as quantidades
+ * disponíveis — cada uma correspondendo a um produto comercial próprio.
  *
- * Nunca retorna uma combinação parecida ou aproximada.
- * Se a combinação não existe, retorna found=false com mensagem clara.
+ * Só considera produtos cujo conjunto de opções corresponde EXATAMENTE à
+ * seleção (uma opção por grupo). Nunca mistura formatos/materiais diferentes.
  */
-export function findCombination(
+export function getAvailableQuantities(
   data: FamilyCombinationData,
   selection: CascadeSelection,
-): CombinationLookupResult {
-  if (selection.size === 0) {
-    return { found: false, combination: null, error_message: 'Nenhuma opção selecionada.' };
-  }
+  promotions?: RawPromotion[],
+): QuantityOption[] {
+  const { products, productOptions } = data;
+  const selectedOptionIds = new Set(selection.values());
+  if (selectedOptionIds.size === 0) return [];
 
-  const selectedOptionIds = [...selection.values()];
-  const searchKey = buildCombinationKey(selectedOptionIds);
+  const productOptionMap = buildProductOptionMap(productOptions);
 
-  // Buscar pela combination_key determinística
-  const combination = data.combinations.find(
-    c => c.combination_key === searchKey && c.available,
-  );
-
-  if (combination) {
-    return { found: true, combination, error_message: null };
-  }
-
-  // Busca alternativa: verificar se alguma combinação contém exatamente esses option values
-  const { combinationOptions } = data;
-  const combOptionMap = new Map<string, Set<string>>();
-  for (const co of combinationOptions) {
-    if (!combOptionMap.has(co.combination_id)) {
-      combOptionMap.set(co.combination_id, new Set());
-    }
-    combOptionMap.get(co.combination_id)!.add(co.option_value_id);
-  }
-
-  const selectedSet = new Set(selectedOptionIds);
-  const match = data.combinations.find(c => {
-    if (!c.available) return false;
-    const optSet = combOptionMap.get(c.id);
-    if (!optSet || optSet.size !== selectedSet.size) return false;
-    for (const id of selectedSet) {
-      if (!optSet.has(id)) return false;
-    }
-    return true;
+  const matching = products.filter(p => {
+    const optSet = productOptionMap.get(p.id);
+    if (!optSet) return false;
+    // Correspondência EXATA: mesmo tamanho e contém todas as opções da seleção
+    if (optSet.size !== selectedOptionIds.size) return false;
+    return productMatchesSelection(optSet, selectedOptionIds);
   });
 
-  if (match) {
-    return { found: true, combination: match, error_message: null };
-  }
-
-  return {
-    found: false,
-    combination: null,
-    error_message: 'Preço não confirmado pelo fornecedor. Necessária consulta ou revisão.',
-  };
+  return matching
+    .map(p => {
+      const promo = findActivePromotion(p, promotions);
+      const normal = p.list_price;
+      const promoPrice = promo?.promotional_price ?? p.promotional_price;
+      const isPromo = promoPrice != null && normal != null && promoPrice < normal;
+      const effective = promoPrice ?? normal ?? 0;
+      return {
+        quantity: p.quantity,
+        commercial_product_id: p.id,
+        external_product_id: p.external_product_id,
+        total_price: effective,
+        unit_price_display: p.quantity > 0 ? round2(effective / p.quantity) : 0,
+        normal_price: normal,
+        promotional_price: promoPrice ?? null,
+        is_promotional: isPromo,
+        available: isProductSellable(p),
+      } satisfies QuantityOption;
+    })
+    .sort((a, b) => a.quantity - b.quantity);
 }
 
 // ---------------------------------------------------------------------------
-// 4. Preço por combinação + quantidade
+// 3. Resolver o produto comercial EXATO
 // ---------------------------------------------------------------------------
 
 /**
- * Recupera o preço oficial de uma combinação para uma quantidade específica.
+ * Resolve o produto comercial EXATO para uma seleção completa de opções + quantidade.
  *
- * O total importado do fornecedor é a fonte oficial.
- * NÃO multiplica preço unitário × quantidade.
- * O preço unitário é calculado APENAS para exibição.
+ * NUNCA retorna produto semelhante, de outra quantidade, outro formato, média
+ * ou regra aproximada (§7). Se não houver correspondência exata, retorna
+ * found=false com a mensagem padrão de revisão de mapeamento.
  */
-export function getCombinationPrice(
-  combinationId: string,
+export function resolveCommercialProduct(
+  data: FamilyCombinationData,
+  selection: CascadeSelection,
   quantity: number,
-  allPrices: SupplierCombinationPrice[],
-  promotions?: Array<{
-    combination_id: string | null;
-    quantity: number | null;
-    normal_price: number | null;
-    promo_price: number | null;
-    discount_percent: number | null;
-    campaign: string | null;
-    origin: string | null;
-    starts_at: string | null;
-    ends_at: string | null;
-    status: string;
-  }>,
-): CombinationPriceResult {
-  // Filtrar preços desta combinação
-  const comboPrices = allPrices
-    .filter(p => p.combination_id === combinationId && p.available)
-    .sort((a, b) => a.quantity - b.quantity);
-
-  if (comboPrices.length === 0) {
+  promotions?: RawPromotion[],
+): CommercialProductLookupResult {
+  if (selection.size === 0) {
     return {
       found: false,
-      price: null,
-      available_quantities: [],
+      product: null,
       active_promotion: null,
-      error_message: 'Nenhum preço disponível para esta combinação.',
+      error_message: 'Nenhuma opção selecionada.',
+    };
+  }
+  if (!quantity || quantity <= 0) {
+    return {
+      found: false,
+      product: null,
+      active_promotion: null,
+      error_message: 'Selecione uma quantidade válida.',
     };
   }
 
-  // Buscar preço exato para a quantidade
-  const exactPrice = comboPrices.find(p => p.quantity === quantity);
+  const selectedOptionIds = new Set(selection.values());
+  const productOptionMap = buildProductOptionMap(data.productOptions);
 
-  if (!exactPrice) {
-    // Montar lista de quantidades disponíveis para o seletor
-    const available_quantities: QuantityOption[] = comboPrices.map(p => ({
-      quantity: p.quantity,
-      total_price: p.promotional_price ?? p.total_price,
-      unit_price_display: p.unit_price_display ?? (p.quantity > 0 ? (p.promotional_price ?? p.total_price) / p.quantity : 0),
-      normal_price: p.normal_price,
-      promotional_price: p.promotional_price,
-      is_promotional: p.promotional_price != null && p.promotional_price < (p.normal_price ?? p.total_price),
-      available: p.available,
-    }));
+  const product = data.products.find(p => {
+    if (!isProductSellable(p)) return false;
+    if (p.quantity !== quantity) return false;
+    const optSet = productOptionMap.get(p.id);
+    if (!optSet || optSet.size !== selectedOptionIds.size) return false;
+    return productMatchesSelection(optSet, selectedOptionIds);
+  });
 
+  if (!product) {
     return {
       found: false,
-      price: null,
-      available_quantities,
+      product: null,
       active_promotion: null,
-      error_message: `Quantidade ${quantity} não disponível. Selecione uma quantidade válida.`,
+      error_message:
+        'Produto correspondente não encontrado no fornecedor. Necessária atualização ou revisão do mapeamento.',
     };
   }
-
-  // Verificar promoção ativa
-  let active_promotion: ActivePromotion | null = null;
-  if (promotions) {
-    const now = new Date().toISOString();
-    const promo = promotions.find(p =>
-      p.status === 'active' &&
-      (p.combination_id === combinationId || p.combination_id === null) &&
-      (p.quantity === quantity || p.quantity === null) &&
-      (!p.starts_at || p.starts_at <= now) &&
-      (!p.ends_at || p.ends_at >= now),
-    );
-    if (promo && promo.promo_price != null) {
-      active_promotion = {
-        normal_price: promo.normal_price ?? exactPrice.total_price,
-        promotional_price: promo.promo_price,
-        discount_percent: promo.discount_percent ?? null,
-        campaign: promo.campaign ?? null,
-        origin: promo.origin ?? null,
-        starts_at: promo.starts_at ?? null,
-        ends_at: promo.ends_at ?? null,
-      };
-    }
-  }
-
-  // Usar preço promocional se disponível na própria tabela de preços
-  const effectivePrice = exactPrice.promotional_price ?? exactPrice.total_price;
-
-  // Montar quantidades disponíveis
-  const available_quantities: QuantityOption[] = comboPrices.map(p => ({
-    quantity: p.quantity,
-    total_price: p.promotional_price ?? p.total_price,
-    unit_price_display: p.unit_price_display ?? (p.quantity > 0 ? (p.promotional_price ?? p.total_price) / p.quantity : 0),
-    normal_price: p.normal_price,
-    promotional_price: p.promotional_price,
-    is_promotional: p.promotional_price != null && p.promotional_price < (p.normal_price ?? p.total_price),
-    available: p.available,
-  }));
 
   return {
     found: true,
-    price: { ...exactPrice, total_price: effectivePrice },
-    available_quantities,
-    active_promotion,
+    product,
+    active_promotion: findActivePromotion(product, promotions),
     error_message: null,
   };
 }
 
+/** Localiza uma promoção ativa aplicável a um produto comercial. */
+function findActivePromotion(
+  product: SupplierCommercialProduct,
+  promotions?: RawPromotion[],
+): ActivePromotion | null {
+  if (!promotions?.length) return null;
+  const now = new Date().toISOString();
+  const promo = promotions.find(
+    p =>
+      p.status === 'active' &&
+      (p.commercial_product_id === product.id || p.commercial_product_id === null) &&
+      (p.quantity === product.quantity || p.quantity === null) &&
+      (!p.starts_at || p.starts_at <= now) &&
+      (!p.ends_at || p.ends_at >= now),
+  );
+  if (!promo || promo.promo_price == null) return null;
+  return {
+    normal_price: promo.normal_price ?? product.list_price ?? 0,
+    promotional_price: promo.promo_price,
+    discount_percent: promo.discount_percent ?? null,
+    campaign: promo.campaign ?? null,
+    origin: promo.origin ?? null,
+    starts_at: promo.starts_at ?? null,
+    ends_at: promo.ends_at ?? null,
+  };
+}
+
+/**
+ * Preço oficial de um produto comercial (fonte). Usa o promocional quando ativo.
+ * NÃO multiplica preço unitário × quantidade.
+ */
+export function getOfficialPrice(
+  product: SupplierCommercialProduct,
+  promotion: ActivePromotion | null,
+): { total_price: number; normal_price: number | null; promotional_price: number | null } {
+  const normal = product.list_price;
+  const promoPrice = promotion?.promotional_price ?? product.promotional_price;
+  const isPromo = promoPrice != null && (normal == null || promoPrice < normal);
+  return {
+    total_price: (isPromo ? promoPrice : normal) ?? 0,
+    normal_price: normal,
+    promotional_price: isPromo ? promoPrice! : null,
+  };
+}
+
 // ---------------------------------------------------------------------------
-// 5. Extras compatíveis
+// 4. Extras compatíveis
 // ---------------------------------------------------------------------------
 
 /**
- * Lista os extras compatíveis com uma combinação e quantidade,
- * com o preço correto para cada um.
- *
- * Extras sem preço para a quantidade exata não são retornados
- * (nunca inventa preço).
+ * Lista os extras compatíveis com um produto comercial e quantidade, com o
+ * preço correto. Extras sem preço para a quantidade exata não são retornados
+ * (nunca inventa preço). Vínculo prioritário por commercial_product_id (§9).
  */
 export function getCompatibleExtras(
-  combinationId: string,
+  commercialProductId: string,
   quantity: number,
   extras: SupplierExtra[],
   compatibility: SupplierExtraCompatibility[],
   extraPrices: SupplierExtraPrice[],
-  combinationOptionIds?: Set<string>,
+  productOptionIds?: Set<string>,
 ): AvailableExtra[] {
   const result: AvailableExtra[] = [];
 
   for (const extra of extras) {
     if (!extra.is_active) continue;
 
-    // Verificar compatibilidade
     const rules = compatibility.filter(c => c.extra_id === extra.id && c.is_active);
-
-    // Se não há regras, o extra é compatível com todas as combinações da família
-    let isCompatible = rules.length === 0;
+    let isCompatible = rules.length === 0; // sem regras = compatível com toda a família
 
     if (!isCompatible) {
       for (const rule of rules) {
-        // Regra com combination_id específico
-        if (rule.combination_id) {
-          if (rule.combination_id === combinationId) {
+        if (rule.commercial_product_id) {
+          if (rule.commercial_product_id === commercialProductId) {
             isCompatible = true;
             break;
           }
           continue;
         }
-
-        // Regra com filtros por material/formato/impressão
-        if (combinationOptionIds) {
-          let matchesMaterial = true;
-          let matchesFormat = true;
-          let matchesPrint = true;
-
-          if (rule.material_filter && Array.isArray(rule.material_filter)) {
-            matchesMaterial = rule.material_filter.some(id => combinationOptionIds.has(id));
-          }
-          if (rule.format_filter && Array.isArray(rule.format_filter)) {
-            matchesFormat = rule.format_filter.some(id => combinationOptionIds.has(id));
-          }
-          if (rule.print_filter && Array.isArray(rule.print_filter)) {
-            matchesPrint = rule.print_filter.some(id => combinationOptionIds.has(id));
-          }
-
-          if (matchesMaterial && matchesFormat && matchesPrint) {
+        // Regra por filtros de material/formato/impressão (option_value_ids)
+        if (productOptionIds) {
+          const matchMaterial =
+            !rule.material_filter?.length || rule.material_filter.some(id => productOptionIds.has(id));
+          const matchFormat =
+            !rule.format_filter?.length || rule.format_filter.some(id => productOptionIds.has(id));
+          const matchPrint =
+            !rule.print_filter?.length || rule.print_filter.some(id => productOptionIds.has(id));
+          if (matchMaterial && matchFormat && matchPrint) {
             isCompatible = true;
             break;
           }
         } else {
-          // Sem option IDs da combinação, regra sem combination_id = compatível
-          if (!rule.combination_id) {
-            isCompatible = true;
-            break;
-          }
+          isCompatible = true;
+          break;
         }
       }
     }
 
     if (!isCompatible) continue;
 
-    // Buscar preço para a quantidade exata
-    const compatRuleIds = new Set(
-      rules.filter(r => r.is_active).map(r => r.id),
-    );
+    const compatRuleIds = new Set(rules.map(r => r.id));
 
     // Prioridade: preço com compatibility_id específico > preço genérico (null)
-    let priceEntry: SupplierExtraPrice | undefined;
-
-    // 1) Preço com regra de compatibilidade específica para esta quantidade
-    priceEntry = extraPrices.find(
+    let priceEntry = extraPrices.find(
       p =>
         p.extra_id === extra.id &&
         p.quantity === quantity &&
@@ -440,20 +443,13 @@ export function getCompatibleExtras(
         p.compatibility_id != null &&
         compatRuleIds.has(p.compatibility_id),
     );
-
-    // 2) Preço genérico para esta quantidade
     if (!priceEntry) {
       priceEntry = extraPrices.find(
         p =>
-          p.extra_id === extra.id &&
-          p.quantity === quantity &&
-          p.available &&
-          p.compatibility_id == null,
+          p.extra_id === extra.id && p.quantity === quantity && p.available && p.compatibility_id == null,
       );
     }
-
-    // Se não há preço para esta quantidade, não retorna o extra
-    if (!priceEntry) continue;
+    if (!priceEntry) continue; // sem preço p/ a quantidade exata → não retorna
 
     result.push({
       extra,
@@ -467,19 +463,15 @@ export function getCompatibleExtras(
 }
 
 // ---------------------------------------------------------------------------
-// 6. Cálculo de prazo
+// 5. Cálculo de prazo
 // ---------------------------------------------------------------------------
 
 /**
- * Calcula o prazo de produção total.
- *
- * prazo = prazo base da combinação + acréscimo dos extras (conforme regra)
- *
- * Regras disponíveis:
- * - max_extra: prazo base + maior acréscimo entre os extras selecionados
- * - sum_extras: prazo base + soma de todos os acréscimos
- * - replace: usa o maior prazo (base ou extra) — substitui
- * - custom: prazo base (sem cálculo automático — manual)
+ * prazo = prazo base do produto comercial + acréscimo dos extras (conforme regra):
+ * - max_extra: base + maior acréscimo
+ * - sum_extras: base + soma dos acréscimos
+ * - replace: maior entre base e acréscimo
+ * - custom: base (manual)
  */
 export function calculateLeadTime(
   baseDays: number,
@@ -489,47 +481,37 @@ export function calculateLeadTime(
   if (!selectedExtras.length || rule === 'custom') {
     return { base: baseDays, extras: 0, total: baseDays };
   }
-
   const extraDays = selectedExtras.map(e => e.additional_days).filter(d => d > 0);
-
-  if (extraDays.length === 0) {
-    return { base: baseDays, extras: 0, total: baseDays };
-  }
-
-  let extrasContribution: number;
+  if (extraDays.length === 0) return { base: baseDays, extras: 0, total: baseDays };
 
   switch (rule) {
-    case 'sum_extras':
-      extrasContribution = extraDays.reduce((sum, d) => sum + d, 0);
-      return { base: baseDays, extras: extrasContribution, total: baseDays + extrasContribution };
-
+    case 'sum_extras': {
+      const c = extraDays.reduce((s, d) => s + d, 0);
+      return { base: baseDays, extras: c, total: baseDays + c };
+    }
     case 'replace': {
       const maxExtra = Math.max(...extraDays);
-      const total = Math.max(baseDays, maxExtra);
-      return { base: baseDays, extras: maxExtra, total };
+      return { base: baseDays, extras: maxExtra, total: Math.max(baseDays, maxExtra) };
     }
-
     case 'max_extra':
     default: {
-      extrasContribution = Math.max(...extraDays);
-      return { base: baseDays, extras: extrasContribution, total: baseDays + extrasContribution };
+      const c = Math.max(...extraDays);
+      return { base: baseDays, extras: c, total: baseDays + c };
     }
   }
 }
 
 // ---------------------------------------------------------------------------
-// 7. Cálculo completo do item de orçamento
+// 6. Cálculo completo do item de orçamento
 // ---------------------------------------------------------------------------
 
 /**
  * Motor de cálculo completo do item de orçamento.
  *
- * Decomposição:
- *   custoProdutoFornecedor = preço oficial da combinação
+ *   custoProdutoFornecedor = preço oficial do produto comercial
  *   custoExtrasFornecedor  = Σ extras selecionados e compatíveis
  *   custoServiçosFornecedor = Σ serviços contratados
  *   custoFornecedor = produto + extras + serviços + frete
- *
  *   preçoVenda = custoFornecedor + operacionais + serviços internos
  *                + impostos + margem de segurança + lucro
  *
@@ -537,87 +519,55 @@ export function calculateLeadTime(
  */
 export function calculateQuoteItem(
   params: QuoteItemCalculationParams,
-  combination: SupplierCombination,
-  price: SupplierCombinationPrice,
+  product: SupplierCommercialProduct,
+  promotion: ActivePromotion | null,
   selectedExtras: SelectedExtra[],
   selectedServices: SelectedService[],
   leadTimeRule: LeadTimeRule,
 ): QuoteItemCalculation {
-  // 1. Custo do produto (fonte oficial do fornecedor)
-  const supplierProductCost = price.total_price;
+  const official = getOfficialPrice(product, promotion);
 
-  // 2. Custo dos extras
-  const supplierExtrasCost = selectedExtras.reduce((sum, e) => sum + e.price, 0);
-
-  // 3. Custo dos serviços
-  const supplierServicesCost = selectedServices.reduce((sum, s) => sum + s.price, 0);
-
-  // 4. Frete
+  const supplierProductCost = official.total_price;
+  const supplierExtrasCost = selectedExtras.reduce((s, e) => s + e.price, 0);
+  const supplierServicesCost = selectedServices.reduce((s, e) => s + e.price, 0);
   const supplierFreightCost = params.freight_cost;
 
-  // 5. Total do fornecedor
   const totalSupplierCost =
     supplierProductCost + supplierExtrasCost + supplierServicesCost + supplierFreightCost;
 
-  // 6. Custos internos
   const internalOperationsCost = params.internal_operations_cost;
   const internalServicesCost = params.internal_services_cost;
-
-  // 7. Base para cálculo de impostos e margens
   const baseForMargins = totalSupplierCost + internalOperationsCost + internalServicesCost;
 
-  // 8. Impostos
-  const taxAmount = roundCurrency(baseForMargins * (params.tax_percent / 100));
+  const taxAmount = round2(baseForMargins * (params.tax_percent / 100));
+  const safetyMarginAmount = round2(baseForMargins * (params.safety_margin_percent / 100));
+  const profitAmount = round2(baseForMargins * (params.profit_margin_percent / 100));
 
-  // 9. Margem de segurança
-  const safetyMarginAmount = roundCurrency(baseForMargins * (params.safety_margin_percent / 100));
+  let finalSalePrice = params.mirror_supplier_mode
+    ? totalSupplierCost // §14 modo espelhar: sem margem de venda
+    : baseForMargins + taxAmount + safetyMarginAmount + profitAmount;
+  finalSalePrice = round2(finalSalePrice);
 
-  // 10. Lucro
-  const profitAmount = roundCurrency(baseForMargins * (params.profit_margin_percent / 100));
-
-  // 11. Preço final de venda
-  let finalSalePrice: number;
-
-  if (params.mirror_supplier_mode) {
-    // Modo espelhar: preço = custo do fornecedor (sem margem de venda)
-    finalSalePrice = totalSupplierCost;
-  } else {
-    finalSalePrice = baseForMargins + taxAmount + safetyMarginAmount + profitAmount;
-  }
-
-  finalSalePrice = roundCurrency(finalSalePrice);
-
-  // 12. Margem
   const marginPercent =
     finalSalePrice > 0
-      ? roundPercent(((finalSalePrice - totalSupplierCost) / finalSalePrice) * 100)
+      ? round1(((finalSalePrice - totalSupplierCost) / finalSalePrice) * 100)
       : 0;
 
-  // 13. Prazo
-  const leadTime = calculateLeadTime(
-    combination.base_lead_time_days ?? 0,
-    selectedExtras,
-    leadTimeRule,
-  );
-
-  // 14. Preço unitário (apenas exibição)
-  const unitPriceDisplay =
-    params.quantity > 0 ? roundCurrency(finalSalePrice / params.quantity) : 0;
-
-  // 15. Status do preço
-  const priceStatus: PriceStatus = price.available ? 'confirmed' : 'unconfirmed';
+  const leadTime = calculateLeadTime(product.production_days ?? 0, selectedExtras, leadTimeRule);
+  const unitPriceDisplay = params.quantity > 0 ? round2(finalSalePrice / params.quantity) : 0;
+  const priceStatus: PriceStatus = isProductSellable(product) ? 'confirmed' : 'unconfirmed';
 
   return {
-    combination_id: combination.id,
-    combination_key: combination.combination_key,
-    external_code: combination.external_code,
-    supplier_product_cost: roundCurrency(supplierProductCost),
-    supplier_extras_cost: roundCurrency(supplierExtrasCost),
-    supplier_services_cost: roundCurrency(supplierServicesCost),
-    supplier_freight_cost: roundCurrency(supplierFreightCost),
-    total_supplier_cost: roundCurrency(totalSupplierCost),
-    internal_operations_cost: roundCurrency(internalOperationsCost),
-    internal_services_cost: roundCurrency(internalServicesCost),
+    commercial_product_id: product.id,
+    combination_hash: product.combination_hash,
+    external_product_id: product.external_product_id,
+    supplier_product_cost: round2(supplierProductCost),
+    supplier_extras_cost: round2(supplierExtrasCost),
+    supplier_services_cost: round2(supplierServicesCost),
+    supplier_freight_cost: round2(supplierFreightCost),
+    total_supplier_cost: round2(totalSupplierCost),
+    internal_operations_cost: round2(internalOperationsCost),
+    internal_services_cost: round2(internalServicesCost),
     tax_amount: taxAmount,
     safety_margin_amount: safetyMarginAmount,
     profit_amount: profitAmount,
@@ -638,12 +588,10 @@ export function calculateQuoteItem(
 // Utilitários
 // ---------------------------------------------------------------------------
 
-/** Arredonda para 2 casas decimais (moeda). */
-function roundCurrency(value: number): number {
+function round2(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
-/** Arredonda para 1 casa decimal (percentual). */
-function roundPercent(value: number): number {
+function round1(value: number): number {
   return Math.round(value * 10) / 10;
 }

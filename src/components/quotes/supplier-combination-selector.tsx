@@ -27,26 +27,16 @@ import { Switch } from '@/components/ui/switch';
 import { StatusBadge } from '@/components/status-badge';
 
 import {
-  buildCombinationKey,
   getCompatibleValues,
-  findCombination,
-  getCombinationPrice,
+  getAvailableQuantities,
+  resolveCommercialProduct,
   getCompatibleExtras,
-  calculateLeadTime,
   calculateQuoteItem,
   type FamilyCombinationData,
+  type RawPromotion,
 } from '@/services/combinationEngine';
 
 import type {
-  SupplierProductFamily,
-  SupplierOptionGroup,
-  SupplierOptionValue,
-  SupplierCombination,
-  SupplierCombinationPrice,
-  CascadeSelection,
-  CascadeFilterResult,
-  AvailableExtra,
-  QuantityOption,
   QuoteItemCalculation,
   PriceStatus,
   SelectedExtra,
@@ -62,13 +52,12 @@ const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' 
 export interface SupplierCombinationSelectorProps {
   /** Dados da família carregados pelo parent (via getFamilyCombinationData). */
   familyData: FamilyCombinationData & {
-    prices: SupplierCombinationPrice[];
     extras?: any[];
     extraCompatibility?: any[];
     extraPrices?: any[];
     services?: any[];
     servicePrices?: any[];
-    promotions?: any[];
+    promotions?: RawPromotion[];
   };
   /** Callback quando o cálculo muda (cada seleção recalcula). */
   onCalculationChange: (calc: QuoteItemCalculation | null) => void;
@@ -122,53 +111,49 @@ export function SupplierCombinationSelector({
     [familyData, selection],
   );
 
-  // Tentar localizar combinação
-  const combinationResult = useMemo(
-    () => findCombination(familyData, selection),
-    [familyData, selection],
+  // Todas as opções obrigatórias escolhidas?
+  const allOptionsSelected = useMemo(
+    () => cascadeResults.every(r => r.selected_value_id != null || !r.group.is_required),
+    [cascadeResults],
   );
 
-  // Buscar preço quando temos combinação
-  const priceResult = useMemo(() => {
-    if (!combinationResult.found || !combinationResult.combination) return null;
-    return getCombinationPrice(
-      combinationResult.combination.id,
-      selectedQuantity,
-      familyData.prices,
-      familyData.promotions,
-    );
-  }, [combinationResult, selectedQuantity, familyData.prices, familyData.promotions]);
+  // Quantidades disponíveis (cada uma é um produto comercial próprio)
+  const availableQuantities = useMemo(() => {
+    if (!allOptionsSelected) return [];
+    return getAvailableQuantities(familyData, selection, familyData.promotions);
+  }, [allOptionsSelected, familyData, selection]);
 
-  // Extras compatíveis
+  // Resolver o produto comercial EXATO (opções + quantidade)
+  const productResult = useMemo(
+    () => resolveCommercialProduct(familyData, selection, selectedQuantity, familyData.promotions),
+    [familyData, selection, selectedQuantity],
+  );
+
+  // Extras compatíveis com o produto comercial
   const availableExtras = useMemo(() => {
-    if (!combinationResult.found || !combinationResult.combination) return [];
+    if (!productResult.found || !productResult.product) return [];
     if (!familyData.extras?.length) return [];
+    const optionIds = new Set(selection.values());
     return getCompatibleExtras(
-      combinationResult.combination.id,
+      productResult.product.id,
       selectedQuantity,
       familyData.extras,
       familyData.extraCompatibility || [],
       familyData.extraPrices || [],
+      optionIds,
     );
-  }, [combinationResult, selectedQuantity, familyData]);
+  }, [productResult, selectedQuantity, familyData, selection]);
 
-  // Auto-selecionar primeira quantidade quando combinação é encontrada
+  // Auto-selecionar primeira quantidade quando as opções ficam completas
   useEffect(() => {
-    if (priceResult && !priceResult.found && priceResult.available_quantities.length > 0) {
-      setSelectedQuantity(priceResult.available_quantities[0].quantity);
+    if (allOptionsSelected && selectedQuantity === 0 && availableQuantities.length > 0) {
+      setSelectedQuantity(availableQuantities[0].quantity);
     }
-  }, [priceResult]);
+  }, [allOptionsSelected, selectedQuantity, availableQuantities]);
 
-  // Calcular item quando temos combinação + preço
+  // Calcular item quando o produto comercial é resolvido
   const calculation = useMemo((): QuoteItemCalculation | null => {
-    if (
-      !combinationResult.found ||
-      !combinationResult.combination ||
-      !priceResult?.found ||
-      !priceResult.price
-    ) {
-      return null;
-    }
+    if (!productResult.found || !productResult.product) return null;
 
     const selectedExtras: SelectedExtra[] = availableExtras
       .filter(e => selectedExtraIds.has(e.extra.id))
@@ -182,19 +167,13 @@ export function SupplierCombinationSelector({
     const selectedServices: SelectedService[] = (familyData.services || [])
       .filter((s: any) => selectedServiceIds.has(s.id))
       .map((s: any) => {
-        const sp = (familyData.servicePrices || []).find(
-          (p: any) => p.service_id === s.id,
-        );
-        return {
-          service_id: s.id,
-          name: s.name,
-          price: sp?.price || 0,
-        };
+        const sp = (familyData.servicePrices || []).find((p: any) => p.service_id === s.id);
+        return { service_id: s.id, name: s.name, price: sp?.price || 0 };
       });
 
     return calculateQuoteItem(
       {
-        combination_id: combinationResult.combination.id,
+        commercial_product_id: productResult.product.id,
         quantity: selectedQuantity,
         selected_extra_ids: [...selectedExtraIds],
         selected_service_ids: [...selectedServiceIds],
@@ -206,14 +185,14 @@ export function SupplierCombinationSelector({
         profit_margin_percent: profitMarginPercent,
         mirror_supplier_mode: mirrorMode,
       },
-      combinationResult.combination,
-      priceResult.price,
+      productResult.product,
+      productResult.active_promotion,
       selectedExtras,
       selectedServices,
       family.lead_time_rule,
     );
   }, [
-    combinationResult, priceResult, selectedExtraIds, selectedServiceIds,
+    productResult, selectedExtraIds, selectedServiceIds,
     mirrorMode, freightCost, profitMarginPercent, taxPercent,
     safetyMarginPercent, internalOperationsCost, internalServicesCost,
     availableExtras, familyData, selectedQuantity, family.lead_time_rule,
@@ -248,11 +227,16 @@ export function SupplierCombinationSelector({
     setSelection(prev => {
       const next = new Map(prev);
       next.set(groupId, valueId);
+      // Limpar grupos posteriores (a árvore muda) para nunca montar combinação inválida
+      const sortedGroups = [...familyData.groups].sort((a, b) => a.order_index - b.order_index);
+      const idx = sortedGroups.findIndex(g => g.id === groupId);
+      for (let i = idx + 1; i < sortedGroups.length; i++) next.delete(sortedGroups[i].id);
       return next;
     });
-    // Reset extras ao mudar combinação
+    // Reset extras e quantidade ao mudar a combinação
     setSelectedExtraIds(new Set());
-  }, []);
+    setSelectedQuantity(0);
+  }, [familyData.groups]);
 
   const handleClearSelection = useCallback((groupId: string) => {
     setSelection(prev => {
@@ -390,15 +374,15 @@ export function SupplierCombinationSelector({
         })}
       </div>
 
-      {/* Quantidade (quando combinação encontrada) */}
-      {combinationResult.found && priceResult && (
+      {/* Quantidade — cada quantidade é um produto comercial próprio */}
+      {allOptionsSelected && availableQuantities.length > 0 && (
         <div className="space-y-2">
           <Label className="text-xs font-medium flex items-center gap-1.5">
             <Package className="h-3 w-3 text-sky-600" />
             Quantidade
           </Label>
           <div className="flex flex-wrap gap-1.5">
-            {priceResult.available_quantities.map(q => (
+            {availableQuantities.map(q => (
               <button
                 key={q.quantity}
                 onClick={() => setSelectedQuantity(q.quantity)}
@@ -615,9 +599,9 @@ export function SupplierCombinationSelector({
               </span>
             </div>
             {/* Código externo */}
-            {calculation.external_code && (
+            {calculation.external_product_id && (
               <div className="text-[10px] text-muted-foreground">
-                Cód. fornecedor: {calculation.external_code} · Chave: {calculation.combination_key.substring(0, 20)}...
+                ID produto fornecedor: {calculation.external_product_id} · Hash: {calculation.combination_hash.substring(0, 20)}...
               </div>
             )}
           </div>
@@ -649,13 +633,13 @@ export function SupplierCombinationSelector({
         </Card>
       )}
 
-      {/* Mensagem quando combinação não encontrada */}
-      {!combinationResult.found && selection.size > 0 && combinationResult.error_message && (
+      {/* Mensagem quando o produto comercial não é encontrado (§7) */}
+      {allOptionsSelected && selectedQuantity > 0 && !productResult.found && productResult.error_message && (
         <div className="p-3 rounded-md bg-red-50 border border-red-200 flex items-start gap-2">
           <XCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-medium text-red-700">Combinação não disponível</p>
-            <p className="text-xs text-red-600 mt-0.5">{combinationResult.error_message}</p>
+            <p className="text-sm font-medium text-red-700">Produto não confirmado</p>
+            <p className="text-xs text-red-600 mt-0.5">{productResult.error_message}</p>
           </div>
         </div>
       )}

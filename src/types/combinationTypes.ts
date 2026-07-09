@@ -50,6 +50,7 @@ export interface SupplierProductFamily {
   external_id: string | null;
   name: string;
   slug: string | null;
+  category: string | null;
   source_url: string | null;
   image_url: string | null;
   description: string | null;
@@ -90,43 +91,80 @@ export interface SupplierOptionValue {
   created_at: string;
 }
 
-/** Combinação válida do fornecedor (1 configuração comercializável). */
-export interface SupplierCombination {
+/** Disponibilidade de um produto comercial. */
+export type CommercialProductAvailability = 'available' | 'unavailable' | 'removed';
+
+/**
+ * PRODUTO COMERCIAL — 1 combinação COMPLETA e comercializável, INCLUINDO a
+ * quantidade, com seu próprio external_product_id, preço, promoção e prazo.
+ *
+ * A quantidade faz parte da identidade: quando o fornecedor dá um ID diferente
+ * por quantidade, cada quantidade é um produto comercial separado.
+ * Chave única (por fornecedor): external_product_id.
+ */
+export interface SupplierCommercialProduct {
   id: string;
   company_id: string;
+  supplier_id: string;
   family_id: string;
-  external_code: string | null;
-  combination_key: string;
+  // Identificação externa
+  external_product_id: string | null;
+  external_sku: string | null;
+  complete_name: string | null;
+  // Quantidade FAZ PARTE da identidade
+  quantity: number;
+  quantity_unit: string | null;
+  // Atributos denormalizados da combinação (matriz / consulta direta)
+  model: string | null;
+  type: string | null;
+  size: string | null;
+  material: string | null;
+  grammage: string | null;
+  format: string | null;
+  width: number | null;
+  height: number | null;
+  print_color: string | null;
+  enhancement: string | null;
+  finishing: string | null;
+  // Comercial
+  production_days: number | null;
+  availability: CommercialProductAvailability;
+  list_price: number | null;
+  promotional_price: number | null;
+  currency: string;
+  // Chaves / rastreabilidade
+  combination_hash: string;
   source_url: string | null;
-  available: boolean;
-  base_lead_time_days: number | null;
+  raw_source_data: Record<string, unknown>;
   version: number;
   last_synced_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
-/** Junção combinação ↔ opção. */
-export interface SupplierCombinationOptionValue {
+/** Junção produto comercial ↔ opção (reconstrói a árvore de variações). */
+export interface SupplierCommercialProductOption {
   id: string;
-  combination_id: string;
+  commercial_product_id: string;
   option_value_id: string;
 }
 
-/** Preço por combinação + quantidade (fonte oficial). */
-export interface SupplierCombinationPrice {
+/** Registro de histórico de preço por external_product_id. */
+export interface SupplierProductPriceHistory {
   id: string;
   company_id: string;
-  combination_id: string;
-  quantity: number;
-  total_price: number;
-  normal_price: number | null;
+  supplier_id: string;
+  commercial_product_id: string | null;
+  external_product_id: string | null;
+  old_price: number | null;
+  new_price: number | null;
   promotional_price: number | null;
-  unit_price_display: number | null;
-  currency: string;
-  available: boolean;
-  version: number;
-  collected_at: string;
+  availability: string | null;
+  production_days: number | null;
+  change_percent: number | null;
+  source: string | null;
+  captured_at: string;
+  executed_by: string | null;
   created_at: string;
 }
 
@@ -150,7 +188,7 @@ export interface SupplierExtraCompatibility {
   id: string;
   company_id: string;
   extra_id: string;
-  combination_id: string | null;
+  commercial_product_id: string | null;
   material_filter: string[] | null;
   format_filter: string[] | null;
   print_filter: string[] | null;
@@ -191,7 +229,7 @@ export interface SupplierServicePrice {
   company_id: string;
   service_id: string;
   family_id: string | null;
-  combination_id: string | null;
+  commercial_product_id: string | null;
   price: number;
   currency: string;
   collected_at: string;
@@ -241,7 +279,7 @@ export interface SupplierPriceSnapshot {
   family_id: string | null;
   family_name: string | null;
   external_code: string | null;
-  combination_key: string | null;
+  combination_hash: string | null;
   selected_options: SnapshotOption[];
   quantity: number;
   total_price: number;
@@ -321,28 +359,25 @@ export interface CascadeFilterResult {
   is_locked: boolean;
 }
 
-/** Resultado da busca de combinação. */
-export interface CombinationLookupResult {
+/**
+ * Resultado da resolução de um produto comercial exato.
+ * NUNCA retorna produto aproximado, semelhante ou de outra quantidade.
+ */
+export interface CommercialProductLookupResult {
   found: boolean;
-  combination: SupplierCombination | null;
+  product: SupplierCommercialProduct | null;
+  /** Promoção ativa, se houver. */
+  active_promotion: ActivePromotion | null;
   /** Quando found=false, mensagem de erro descritiva. */
   error_message: string | null;
 }
 
-/** Resultado de preço de uma combinação. */
-export interface CombinationPriceResult {
-  found: boolean;
-  price: SupplierCombinationPrice | null;
-  /** Todas as quantidades disponíveis com seus preços (para seletor). */
-  available_quantities: QuantityOption[];
-  /** Promoção ativa, se houver. */
-  active_promotion: ActivePromotion | null;
-  error_message: string | null;
-}
-
-/** Opção de quantidade com preço oficial. */
+/** Opção de quantidade — cada quantidade é um produto comercial próprio. */
 export interface QuantityOption {
   quantity: number;
+  /** ID do produto comercial que representa esta quantidade. */
+  commercial_product_id: string;
+  external_product_id: string | null;
   total_price: number;
   unit_price_display: number;
   normal_price: number | null;
@@ -373,9 +408,9 @@ export interface AvailableExtra {
 /** Resultado completo do cálculo de um item de orçamento. */
 export interface QuoteItemCalculation {
   // Identificação
-  combination_id: string;
-  combination_key: string;
-  external_code: string | null;
+  commercial_product_id: string;
+  combination_hash: string;
+  external_product_id: string | null;
   // Decomposição do custo do fornecedor
   supplier_product_cost: number;
   supplier_extras_cost: number;
@@ -421,7 +456,7 @@ export interface SelectedService {
 
 /** Parâmetros de entrada para o cálculo do item. */
 export interface QuoteItemCalculationParams {
-  combination_id: string;
+  commercial_product_id: string;
   quantity: number;
   selected_extra_ids: string[];
   selected_service_ids: string[];

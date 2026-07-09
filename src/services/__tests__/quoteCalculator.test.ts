@@ -29,9 +29,9 @@ import type { QuoteItemCalculation } from '@/types/combinationTypes';
 
 function makeCalc(overrides?: Partial<QuoteItemCalculation>): QuoteItemCalculation {
   return {
-    combination_id: 'comb-1',
-    combination_key: 'key-1',
-    external_code: '4601',
+    commercial_product_id: 'cp-1',
+    combination_hash: 'hash-1',
+    external_product_id: '4601',
     supplier_product_cost: 78.99,
     supplier_extras_cost: 15.00,
     supplier_services_cost: 16.99,

@@ -1,11 +1,24 @@
 -- ============================================================================
 -- MOTOR DE COMBINAÇÕES E PRECIFICAÇÃO DE FORNECEDORES
--- 
--- Cria a estrutura de dados para reproduzir o comportamento do configurador
--- da FuturaIM: combinações específicas de produto (material+formato+impressão
--- +enobrecimento+acabamento+quantidade) identificadas por código externo,
--- com preço oficial por combinação, extras variáveis, prazo, promoção,
--- snapshot imutável e testes de paridade.
+--
+-- ARQUITETURA (corrigida): reproduz o comportamento REAL do configurador da
+-- FuturaIM, onde cada combinação comercial COMPLETA (material+formato+impressão
+-- +enobrecimento+acabamento+QUANTIDADE) é um PRODUTO INDEPENDENTE com seu
+-- próprio external_product_id.
+--
+--   supplier_product_families  = a página amigável / configurador visual (SEM preço)
+--   supplier_commercial_products = 1 registro por combinação completa (INCLUI a
+--                                  quantidade na identidade) com external_product_id,
+--                                  preço, promoção, prazo, disponibilidade e histórico
+--
+-- A quantidade NÃO é um modificador de preço: é parte da identidade do produto.
+-- Quando o fornecedor dá um ID diferente por quantidade, cada quantidade é um
+-- produto comercial separado.
+--
+-- OBS. de nomenclatura: o §2 do requisito pede a entidade "supplier_products",
+-- porém esse nome já pertence à tabela de crawl cru do universal_supplier_engine
+-- (20260705010000, já aplicada). Para não colidir nem exigir migração destrutiva,
+-- a entidade de produto comercial é `supplier_commercial_products` (mesma semântica).
 --
 -- Multi-tenant (company_id + RLS via user_owns_company). Idempotente.
 -- ============================================================================
@@ -24,8 +37,9 @@ CREATE TABLE IF NOT EXISTS public.supplier_product_families (
   external_id     TEXT,                            -- id no site do fornecedor
   name            TEXT NOT NULL,                   -- nome completo do produto
   slug            TEXT,
+  category        TEXT,                            -- categoria da família (§1)
   source_url      TEXT,                            -- URL original da página
-  image_url       TEXT,
+  image_url       TEXT,                            -- imagem principal
   description     TEXT,
   -- Configuração de cálculo
   lead_time_rule  TEXT NOT NULL DEFAULT 'max_extra' 
@@ -75,57 +89,82 @@ CREATE TABLE IF NOT EXISTS public.supplier_option_values (
 );
 
 -- ---------------------------------------------------------------------------
--- 4. supplier_combinations — Combinações válidas do fornecedor
--- Cada registro = 1 configuração comercializável com código externo
+-- 4. supplier_commercial_products — PRODUTO COMERCIAL (§2, §3)
+-- Cada registro = 1 combinação COMPLETA e comercializável, INCLUINDO a
+-- quantidade, com seu próprio external_product_id, preço, promoção, prazo,
+-- disponibilidade e hash. Chave única: (supplier_id, external_product_id).
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.supplier_combinations (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id      UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
-  family_id       UUID NOT NULL REFERENCES public.supplier_product_families(id) ON DELETE CASCADE,
-  -- Identificação
-  external_code   TEXT,                            -- código do fornecedor (ex.: 4601)
-  combination_key TEXT NOT NULL,                   -- chave determinística (hash dos IDs das opções)
-  source_url      TEXT,                            -- URL específica desta combinação
-  -- Estado
-  available       BOOLEAN NOT NULL DEFAULT TRUE,
-  base_lead_time_days INTEGER,                     -- prazo base em dias úteis
-  version         INTEGER NOT NULL DEFAULT 1,
-  last_synced_at  TIMESTAMPTZ,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS public.supplier_commercial_products (
+  id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id          UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  supplier_id         UUID NOT NULL REFERENCES public.suppliers(id) ON DELETE CASCADE,
+  family_id           UUID NOT NULL REFERENCES public.supplier_product_families(id) ON DELETE CASCADE,
+  -- Identificação externa
+  external_product_id TEXT,                        -- ID do produto comercial no fornecedor (ex.: 4601)
+  external_sku        TEXT,
+  complete_name       TEXT,                        -- resumo completo da combinação
+  -- Quantidade FAZ PARTE da identidade (§3)
+  quantity            INTEGER NOT NULL,
+  quantity_unit       TEXT DEFAULT 'un',
+  -- Atributos da combinação (denormalizados p/ matriz e consulta direta — §5)
+  model               TEXT,
+  type                TEXT,
+  size                TEXT,
+  material            TEXT,
+  grammage            TEXT,
+  format              TEXT,
+  width               NUMERIC,
+  height              NUMERIC,
+  print_color         TEXT,                        -- impressão (ex.: 4x0, 4x4)
+  enhancement         TEXT,                        -- enobrecimento
+  finishing           TEXT,                        -- acabamento
+  -- Comercial
+  production_days     INTEGER,                     -- prazo base em dias úteis
+  availability        TEXT NOT NULL DEFAULT 'available', -- available | unavailable | removed
+  list_price          NUMERIC,                     -- preço normal (fonte oficial)
+  promotional_price   NUMERIC,                     -- preço promocional quando ativo
+  currency            TEXT NOT NULL DEFAULT 'BRL',
+  -- Chaves / rastreabilidade
+  combination_hash    TEXT NOT NULL,               -- hash normalizado da combinação (§11)
+  source_url          TEXT,
+  raw_source_data     JSONB NOT NULL DEFAULT '{}'::JSONB,
+  version             INTEGER NOT NULL DEFAULT 1,
+  last_synced_at      TIMESTAMPTZ,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- ---------------------------------------------------------------------------
--- 5. supplier_combination_option_values — Junção N:N combinação ↔ opções
+-- 5. supplier_commercial_product_options — Junção produto comercial ↔ opções
+-- Permite reconstruir a árvore de variações e resolver em cascata (§6).
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.supplier_combination_option_values (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  combination_id  UUID NOT NULL REFERENCES public.supplier_combinations(id) ON DELETE CASCADE,
-  option_value_id UUID NOT NULL REFERENCES public.supplier_option_values(id) ON DELETE CASCADE,
-  UNIQUE (combination_id, option_value_id)
+CREATE TABLE IF NOT EXISTS public.supplier_commercial_product_options (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  commercial_product_id UUID NOT NULL REFERENCES public.supplier_commercial_products(id) ON DELETE CASCADE,
+  option_value_id       UUID NOT NULL REFERENCES public.supplier_option_values(id) ON DELETE CASCADE,
+  UNIQUE (commercial_product_id, option_value_id)
 );
 
 -- ---------------------------------------------------------------------------
--- 6. supplier_combination_prices — Preço por combinação + quantidade
--- O total importado do fornecedor é a fonte oficial.
--- unit_price_display é calculado apenas para apresentação.
+-- 6. supplier_product_price_history — Histórico por external_product_id (§8)
+-- A alteração de preço de um ID NÃO altera outros produtos da família.
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS public.supplier_combination_prices (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id      UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
-  combination_id  UUID NOT NULL REFERENCES public.supplier_combinations(id) ON DELETE CASCADE,
-  -- Preços oficiais
-  quantity        INTEGER NOT NULL,
-  total_price     NUMERIC NOT NULL,                -- preço total oficial (fonte)
-  normal_price    NUMERIC,                         -- preço normal (sem promoção)
-  promotional_price NUMERIC,                       -- preço promocional quando ativo
-  unit_price_display NUMERIC,                      -- total_price / quantity (exibição)
-  currency        TEXT NOT NULL DEFAULT 'BRL',
-  -- Estado
-  available       BOOLEAN NOT NULL DEFAULT TRUE,
-  version         INTEGER NOT NULL DEFAULT 1,
-  collected_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS public.supplier_product_price_history (
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id            UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  supplier_id           UUID NOT NULL REFERENCES public.suppliers(id) ON DELETE CASCADE,
+  commercial_product_id UUID REFERENCES public.supplier_commercial_products(id) ON DELETE SET NULL,
+  external_product_id   TEXT,
+  old_price             NUMERIC,
+  new_price             NUMERIC,
+  promotional_price     NUMERIC,
+  availability          TEXT,
+  production_days       INTEGER,
+  change_percent        NUMERIC,
+  source                TEXT,                       -- import | sync | manual
+  captured_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  executed_by           UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- ---------------------------------------------------------------------------
@@ -147,15 +186,16 @@ CREATE TABLE IF NOT EXISTS public.supplier_extras (
 );
 
 -- ---------------------------------------------------------------------------
--- 8. supplier_extra_compatibility — Regras de compatibilidade
--- NULL em combination_id = compatível com TODAS as combinações da família.
+-- 8. supplier_extra_compatibility — Regras de compatibilidade (§9)
+-- Vincula extras PRIORITARIAMENTE ao produto comercial (external_product_id).
+-- NULL em commercial_product_id = compatível com TODOS os produtos da família.
 -- Filtros opcionais por material/formato/impressão.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.supplier_extra_compatibility (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  company_id      UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
-  extra_id        UUID NOT NULL REFERENCES public.supplier_extras(id) ON DELETE CASCADE,
-  combination_id  UUID REFERENCES public.supplier_combinations(id) ON DELETE CASCADE,
+  id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id            UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
+  extra_id              UUID NOT NULL REFERENCES public.supplier_extras(id) ON DELETE CASCADE,
+  commercial_product_id UUID REFERENCES public.supplier_commercial_products(id) ON DELETE CASCADE,
   -- Filtros opcionais (JSONB arrays de option_value_ids)
   material_filter JSONB,                           -- se não null, só compatível com estes materiais
   format_filter   JSONB,
@@ -205,7 +245,7 @@ CREATE TABLE IF NOT EXISTS public.supplier_service_prices (
   company_id      UUID NOT NULL REFERENCES public.companies(id) ON DELETE CASCADE,
   service_id      UUID NOT NULL REFERENCES public.supplier_services(id) ON DELETE CASCADE,
   family_id       UUID REFERENCES public.supplier_product_families(id) ON DELETE CASCADE,
-  combination_id  UUID REFERENCES public.supplier_combinations(id) ON DELETE CASCADE,
+  commercial_product_id UUID REFERENCES public.supplier_commercial_products(id) ON DELETE CASCADE,
   price           NUMERIC NOT NULL,
   currency        TEXT NOT NULL DEFAULT 'BRL',
   collected_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -259,8 +299,8 @@ CREATE TABLE IF NOT EXISTS public.supplier_price_snapshots (
   supplier_name   TEXT,
   family_id       UUID,
   family_name     TEXT,
-  external_code   TEXT,
-  combination_key TEXT,
+  external_code   TEXT,                            -- external_product_id do produto comercial
+  combination_hash TEXT,
   -- Opções selecionadas (snapshot completo)
   selected_options JSONB NOT NULL DEFAULT '[]'::JSONB,
   -- Preços congelados
@@ -311,11 +351,11 @@ CREATE TABLE IF NOT EXISTS public.supplier_price_snapshots (
 );
 
 -- ---------------------------------------------------------------------------
--- 14. supplier_promotions — Expandir com vínculo por combinação
+-- 14. supplier_promotions — Expandir com vínculo por produto comercial
 -- (Já existe; adicionamos colunas para vínculo refinado)
 -- ---------------------------------------------------------------------------
 ALTER TABLE public.supplier_promotions ADD COLUMN IF NOT EXISTS family_id UUID REFERENCES public.supplier_product_families(id) ON DELETE CASCADE;
-ALTER TABLE public.supplier_promotions ADD COLUMN IF NOT EXISTS combination_id UUID REFERENCES public.supplier_combinations(id) ON DELETE CASCADE;
+ALTER TABLE public.supplier_promotions ADD COLUMN IF NOT EXISTS commercial_product_id UUID REFERENCES public.supplier_commercial_products(id) ON DELETE CASCADE;
 ALTER TABLE public.supplier_promotions ADD COLUMN IF NOT EXISTS quantity INTEGER;
 ALTER TABLE public.supplier_promotions ADD COLUMN IF NOT EXISTS campaign TEXT;
 ALTER TABLE public.supplier_promotions ADD COLUMN IF NOT EXISTS origin TEXT;
@@ -376,9 +416,9 @@ CREATE TABLE IF NOT EXISTS public.supplier_calculation_logs (
 -- ---------------------------------------------------------------------------
 -- 17. Alterações em quote_items — Decomposição de custos
 -- ---------------------------------------------------------------------------
-ALTER TABLE public.quote_items ADD COLUMN IF NOT EXISTS combination_id UUID REFERENCES public.supplier_combinations(id) ON DELETE SET NULL;
-ALTER TABLE public.quote_items ADD COLUMN IF NOT EXISTS combination_key TEXT;
-ALTER TABLE public.quote_items ADD COLUMN IF NOT EXISTS external_code TEXT;
+ALTER TABLE public.quote_items ADD COLUMN IF NOT EXISTS commercial_product_id UUID REFERENCES public.supplier_commercial_products(id) ON DELETE SET NULL;
+ALTER TABLE public.quote_items ADD COLUMN IF NOT EXISTS combination_hash TEXT;
+ALTER TABLE public.quote_items ADD COLUMN IF NOT EXISTS external_product_id TEXT;
 
 -- Decomposição do custo
 ALTER TABLE public.quote_items ADD COLUMN IF NOT EXISTS supplier_product_cost NUMERIC DEFAULT 0;
@@ -425,23 +465,24 @@ CREATE INDEX IF NOT EXISTS idx_sog_family ON public.supplier_option_groups (fami
 CREATE INDEX IF NOT EXISTS idx_sov_group ON public.supplier_option_values (group_id, order_index);
 CREATE INDEX IF NOT EXISTS idx_sov_external ON public.supplier_option_values (company_id, external_id);
 
--- Combinações
-CREATE UNIQUE INDEX IF NOT EXISTS uq_sc_key ON public.supplier_combinations (company_id, family_id, combination_key);
-CREATE INDEX IF NOT EXISTS idx_sc_external ON public.supplier_combinations (company_id, external_code);
-CREATE INDEX IF NOT EXISTS idx_sc_family ON public.supplier_combinations (family_id, available);
+-- Produtos comerciais (§2 chave única supplier_id + external_product_id; §11 hash)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_scomm_external ON public.supplier_commercial_products (company_id, supplier_id, external_product_id) WHERE external_product_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_scomm_family ON public.supplier_commercial_products (family_id, availability);
+CREATE INDEX IF NOT EXISTS idx_scomm_hash ON public.supplier_commercial_products (company_id, combination_hash);
+CREATE INDEX IF NOT EXISTS idx_scomm_family_qty ON public.supplier_commercial_products (family_id, quantity);
 
--- Junção combinação ↔ opções (já tem UNIQUE acima)
-CREATE INDEX IF NOT EXISTS idx_scov_combination ON public.supplier_combination_option_values (combination_id);
-CREATE INDEX IF NOT EXISTS idx_scov_option ON public.supplier_combination_option_values (option_value_id);
+-- Junção produto comercial ↔ opções (já tem UNIQUE acima)
+CREATE INDEX IF NOT EXISTS idx_scpo_product ON public.supplier_commercial_product_options (commercial_product_id);
+CREATE INDEX IF NOT EXISTS idx_scpo_option ON public.supplier_commercial_product_options (option_value_id);
 
--- Preços por combinação
-CREATE INDEX IF NOT EXISTS idx_scp_combination ON public.supplier_combination_prices (combination_id, quantity);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_scp_combo_qty ON public.supplier_combination_prices (combination_id, quantity, version);
+-- Histórico de preço por external_product_id
+CREATE INDEX IF NOT EXISTS idx_spph_product ON public.supplier_product_price_history (commercial_product_id, captured_at DESC);
+CREATE INDEX IF NOT EXISTS idx_spph_external ON public.supplier_product_price_history (company_id, supplier_id, external_product_id);
 
 -- Extras
 CREATE INDEX IF NOT EXISTS idx_se_family ON public.supplier_extras (family_id);
 CREATE INDEX IF NOT EXISTS idx_sec_extra ON public.supplier_extra_compatibility (extra_id);
-CREATE INDEX IF NOT EXISTS idx_sec_combination ON public.supplier_extra_compatibility (combination_id);
+CREATE INDEX IF NOT EXISTS idx_sec_product ON public.supplier_extra_compatibility (commercial_product_id);
 CREATE INDEX IF NOT EXISTS idx_sep_extra ON public.supplier_extra_prices (extra_id, quantity);
 
 -- Serviços
@@ -457,13 +498,13 @@ CREATE INDEX IF NOT EXISTS idx_sct_family ON public.supplier_calculation_tests (
 CREATE INDEX IF NOT EXISTS idx_scl_test ON public.supplier_calculation_logs (test_id, executed_at DESC);
 
 -- Quote items (novas colunas)
-CREATE INDEX IF NOT EXISTS idx_qi_combination ON public.quote_items (combination_id);
+CREATE INDEX IF NOT EXISTS idx_qi_commercial_product ON public.quote_items (commercial_product_id);
 CREATE INDEX IF NOT EXISTS idx_qi_snapshot ON public.quote_items (snapshot_id);
 CREATE INDEX IF NOT EXISTS idx_qi_price_status ON public.quote_items (price_status);
 
 -- Promoções (novas colunas)
 CREATE INDEX IF NOT EXISTS idx_sp_family ON public.supplier_promotions (family_id);
-CREATE INDEX IF NOT EXISTS idx_sp_combination ON public.supplier_promotions (combination_id);
+CREATE INDEX IF NOT EXISTS idx_sp_commercial_product ON public.supplier_promotions (commercial_product_id);
 
 -- ---------------------------------------------------------------------------
 -- RLS — Todas as novas tabelas via user_owns_company(company_id)
@@ -475,8 +516,8 @@ BEGIN
     'supplier_product_families',
     'supplier_option_groups',
     'supplier_option_values',
-    'supplier_combinations',
-    'supplier_combination_prices',
+    'supplier_commercial_products',
+    'supplier_product_price_history',
     'supplier_extras',
     'supplier_extra_compatibility',
     'supplier_extra_prices',
@@ -497,22 +538,22 @@ BEGIN
   END LOOP;
 END $$;
 
--- supplier_combination_option_values não tem company_id;
--- RLS via combinação → supplier_combinations.company_id
-ALTER TABLE public.supplier_combination_option_values ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "via combination owner" ON public.supplier_combination_option_values;
-CREATE POLICY "via combination owner" ON public.supplier_combination_option_values
+-- supplier_commercial_product_options não tem company_id;
+-- RLS via produto comercial → supplier_commercial_products.company_id
+ALTER TABLE public.supplier_commercial_product_options ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "via product owner" ON public.supplier_commercial_product_options;
+CREATE POLICY "via product owner" ON public.supplier_commercial_product_options
   FOR ALL USING (
     EXISTS (
-      SELECT 1 FROM public.supplier_combinations sc
-      WHERE sc.id = supplier_combination_option_values.combination_id
-        AND user_owns_company(sc.company_id)
+      SELECT 1 FROM public.supplier_commercial_products cp
+      WHERE cp.id = supplier_commercial_product_options.commercial_product_id
+        AND user_owns_company(cp.company_id)
     )
   )
   WITH CHECK (
     EXISTS (
-      SELECT 1 FROM public.supplier_combinations sc
-      WHERE sc.id = supplier_combination_option_values.combination_id
-        AND user_owns_company(sc.company_id)
+      SELECT 1 FROM public.supplier_commercial_products cp
+      WHERE cp.id = supplier_commercial_product_options.commercial_product_id
+        AND user_owns_company(cp.company_id)
     )
   );

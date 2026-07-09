@@ -17,6 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { MarketplaceVariationsModal } from "@/components/hub/marketplace-variations-modal";
 import { DialogDescription } from "@/components/ui/dialog";
 import { ProductEditor } from "@/components/products/product-editor";
+import { importProductCombinations } from "@/integrations/supabase/combination-actions";
 
 export const Route = createFileRoute("/_app/produtos")({ component: ProdutosPage });
 
@@ -328,6 +329,45 @@ function ProdutosPage() {
     }
   });
 
+  const generateCombinationsMutation = useMutation({
+    mutationFn: async (product: Product) => {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('user_id', (await supabase.auth.getUser()).data.user?.id || "")
+        .single();
+      if (!profileData?.company_id) throw new Error("Empresa não identificada.");
+
+      return await importProductCombinations({
+        data: {
+          product_id: product.id,
+          company_id: profileData.company_id,
+          supplier_id: product.supplier_id || undefined,
+        },
+      });
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      if (result.errors.length > 0) {
+        toast.error("Falha ao gerar combinações: " + result.errors.join("; "));
+        return;
+      }
+      const parts = [
+        `${result.commercial_products_created} criados`,
+        result.commercial_products_updated ? `${result.commercial_products_updated} atualizados` : "",
+        result.price_changes ? `${result.price_changes} preços alterados` : "",
+        result.commercial_products_removed ? `${result.commercial_products_removed} removidos` : "",
+      ].filter(Boolean);
+      toast.success(
+        `Produtos comerciais: ${parts.join(", ")}.` +
+          (result.warnings.length > 0 ? ` (${result.warnings.length} avisos)` : ""),
+      );
+    },
+    onError: (err: any) => {
+      toast.error("Erro ao gerar combinações: " + err.message);
+    },
+  });
+
   function handleEdit(product: Product) {
     setEditingProduct(product);
     setIsModalOpen(true);
@@ -555,6 +595,14 @@ function ProdutosPage() {
                           <DropdownMenuItem onClick={() => setMarketplaceProduct(p)}>
                             <Store className="h-4 w-4 mr-2" /> Rascunho Marketplace
                           </DropdownMenuItem>
+                          {(p.supplier_id || p.imported_from_supplier) && (
+                            <DropdownMenuItem
+                              onClick={() => generateCombinationsMutation.mutate(p)}
+                              disabled={generateCombinationsMutation.isPending}
+                            >
+                              <Layers className="h-4 w-4 mr-2" /> Gerar Combinações do Fornecedor
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuSeparator />
                           <DropdownMenuItem 
                             className="text-destructive focus:text-destructive"
