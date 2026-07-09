@@ -35,6 +35,10 @@ import {
   type FamilyCombinationData,
   type RawPromotion,
 } from '@/services/combinationEngine';
+import { getSupplierFreight } from '@/integrations/supabase/importer-actions';
+import { isValidCep, type FreightOption } from '@/services/futuraImFreight';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 
 import type {
   QuoteItemCalculation,
@@ -102,6 +106,13 @@ export function SupplierCombinationSelector({
   const [selectedServiceIds, setSelectedServiceIds] = useState<Set<string>>(new Set());
   // Modo espelhar fornecedor
   const [mirrorMode, setMirrorMode] = useState(false);
+  // Frete real do fornecedor (§11) — sempre separado do preço-base do produto.
+  const [cep, setCep] = useState('');
+  const [freightOptions, setFreightOptions] = useState<FreightOption[] | null>(null);
+  const [freightIdx, setFreightIdx] = useState<number | null>(null);
+  const [freightLoading, setFreightLoading] = useState(false);
+  const [freightError, setFreightError] = useState<string | null>(null);
+  const [freightQuotedAt, setFreightQuotedAt] = useState<string | null>(null);
 
   const { family } = familyData;
 
@@ -151,6 +162,48 @@ export function SupplierCombinationSelector({
     }
   }, [allOptionsSelected, selectedQuantity, availableQuantities]);
 
+  // Frete efetivo: a cotação escolhida do fornecedor tem prioridade sobre o
+  // valor vindo do parent. Nunca é embutido no preço-base do produto (§11).
+  const effectiveFreight =
+    freightIdx != null && freightOptions?.[freightIdx] ? freightOptions[freightIdx].cost : freightCost;
+
+  // Trocar produto/quantidade invalida a cotação (frete depende do SKU + qtd).
+  useEffect(() => {
+    setFreightOptions(null);
+    setFreightIdx(null);
+    setFreightError(null);
+    setFreightQuotedAt(null);
+  }, [productResult.product?.id, selectedQuantity]);
+
+  const handleQuoteFreight = useCallback(async () => {
+    const product = productResult.product;
+    if (!product?.source_url || !isValidCep(cep)) return;
+    setFreightLoading(true);
+    setFreightError(null);
+    try {
+      const res = await getSupplierFreight({
+        data: { url: product.source_url, cep, quantidade: selectedQuantity },
+      });
+      if (!res.success) {
+        setFreightOptions(null);
+        setFreightError(res.error);
+        return;
+      }
+      if (!res.options.length) {
+        setFreightOptions([]);
+        setFreightError('Fornecedor não cotou frete para este CEP.');
+        return;
+      }
+      setFreightOptions(res.options);
+      setFreightIdx(0);
+      setFreightQuotedAt(res.quoted_at);
+    } catch (e: any) {
+      setFreightError(e?.message || 'Erro ao cotar o frete.');
+    } finally {
+      setFreightLoading(false);
+    }
+  }, [productResult.product, cep, selectedQuantity]);
+
   // Calcular item quando o produto comercial é resolvido
   const calculation = useMemo((): QuoteItemCalculation | null => {
     if (!productResult.found || !productResult.product) return null;
@@ -177,7 +230,7 @@ export function SupplierCombinationSelector({
         quantity: selectedQuantity,
         selected_extra_ids: [...selectedExtraIds],
         selected_service_ids: [...selectedServiceIds],
-        freight_cost: freightCost,
+        freight_cost: effectiveFreight,
         internal_operations_cost: internalOperationsCost,
         internal_services_cost: internalServicesCost,
         tax_percent: taxPercent,
@@ -193,7 +246,7 @@ export function SupplierCombinationSelector({
     );
   }, [
     productResult, selectedExtraIds, selectedServiceIds,
-    mirrorMode, freightCost, profitMarginPercent, taxPercent,
+    mirrorMode, effectiveFreight, profitMarginPercent, taxPercent,
     safetyMarginPercent, internalOperationsCost, internalServicesCost,
     availableExtras, familyData, selectedQuantity, family.lead_time_rule,
   ]);
@@ -501,6 +554,76 @@ export function SupplierCombinationSelector({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Frete real do fornecedor (§11) — cotado por CEP + SKU + quantidade */}
+      {productResult.found && (
+        <div className="space-y-2">
+          <Label className="text-xs font-medium flex items-center gap-1.5">
+            <Truck className="h-3 w-3 text-muted-foreground" />
+            Frete do fornecedor
+          </Label>
+          <div className="flex items-center gap-2">
+            <Input
+              value={cep}
+              onChange={e => setCep(e.target.value)}
+              placeholder="CEP de entrega"
+              inputMode="numeric"
+              className="h-9 text-xs"
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleQuoteFreight}
+              disabled={!isValidCep(cep) || freightLoading}
+            >
+              {freightLoading ? 'Cotando...' : 'Cotar'}
+            </Button>
+          </div>
+
+          {freightError && (
+            <p className="text-xs text-amber-600 flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3" /> {freightError}
+            </p>
+          )}
+
+          {freightOptions && freightOptions.length > 0 && (
+            <div className="space-y-1">
+              {freightOptions.map((opt, idx) => (
+                <label
+                  key={`${opt.carrier}-${idx}`}
+                  className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors ${
+                    freightIdx === idx ? 'border-primary bg-primary/5' : 'hover:bg-secondary/50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="freight-option"
+                    checked={freightIdx === idx}
+                    onChange={() => setFreightIdx(idx)}
+                    className="h-3.5 w-3.5"
+                  />
+                  <span className="flex-1 text-xs">{opt.carrier}</span>
+                  {opt.days != null && (
+                    <span className="text-[9px] text-muted-foreground flex items-center gap-0.5">
+                      <Clock className="h-2.5 w-2.5" />
+                      {opt.days}d
+                    </span>
+                  )}
+                  <span className={`text-xs font-semibold ${opt.free ? 'text-emerald-600' : 'text-sky-600'}`}>
+                    {opt.free ? 'Grátis' : fmt.format(opt.cost)}
+                  </span>
+                </label>
+              ))}
+              {freightQuotedAt && (
+                <p className="text-[10px] text-muted-foreground">
+                  Cotado em {new Date(freightQuotedAt).toLocaleString('pt-BR')} · não incluído no preço-base
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 

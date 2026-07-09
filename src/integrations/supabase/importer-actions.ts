@@ -2,6 +2,13 @@ import { createServerFn } from "@tanstack/react-start";
 import { parseFuturaImProduct, externalIdFromUrl } from "@/services/futuraImParser";
 import { collectVariantUrls, consolidateVariants } from "@/services/variantScan";
 import { validateSupplierUrl } from "@/services/urlValidator";
+import {
+  buildFreightPath,
+  extractAntiForgeryToken,
+  isValidCep,
+  parseFuturaImFreight,
+  type FreightOption,
+} from "@/services/futuraImFreight";
 import type { ImportedProduct } from "@/types/importedProduct";
 
 /**
@@ -220,6 +227,121 @@ export const scanProductVariants = createServerFn({ method: "POST" })
 
       const product = consolidateVariants(collected);
       return { success: true, product, scanned: collected.length };
+    },
+  );
+
+/**
+ * Cotação de FRETE REAL do fornecedor (seção 11).
+ *
+ * A FuturaIM exige, além dos parâmetros, o par (cookie antiforgery + token) que
+ * só existe depois de carregar a página do produto. Por isso a cotação é feita
+ * em dois passos, sempre server-side:
+ *
+ *   1. GET da página do produto  → captura `Set-Cookie` e o `__RequestVerificationToken`;
+ *   2. POST /produtos/frete-sku/?cep=&produtoId=&quantidade=  com cookie + token.
+ *
+ * Nunca inventa frete: se o fornecedor não cotar, devolve `options: []` e o
+ * chamador trata como "frete não cotado" (o orçamento não assume custo zero).
+ */
+export const getSupplierFreight = createServerFn({ method: "POST" })
+  .inputValidator((data: { url: string; cep: string; quantidade: number }) => data)
+  .handler(
+    async ({
+      data,
+    }): Promise<
+      | { success: true; options: FreightOption[]; produto_id: string; cep: string; quoted_at: string }
+      | { success: false; error: string }
+    > => {
+      const validation = validateSupplierUrl(data?.url);
+      if (!validation.ok || !validation.url) {
+        return { success: false, error: validation.reason || "URL não permitida." };
+      }
+      if (!isValidCep(data?.cep)) {
+        return { success: false, error: "CEP inválido — informe 8 dígitos." };
+      }
+      const produtoId = externalIdFromUrl(validation.url);
+      if (!produtoId) {
+        return { success: false, error: "Não foi possível identificar o produto (?id=) na URL." };
+      }
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      const origin = new URL(validation.url).origin;
+
+      try {
+        // 1. Página do produto: cookie antiforgery + token.
+        const pageRes = await fetch(validation.url, {
+          method: "GET",
+          redirect: "follow",
+          signal: controller.signal,
+          headers: {
+            "User-Agent": "PrintFlowCRM-Importer/1.0 (+contato via painel)",
+            Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "pt-BR,pt;q=0.9",
+          },
+        });
+        if (!pageRes.ok) {
+          return { success: false, error: `Falha ao abrir a página do produto (HTTP ${pageRes.status}).` };
+        }
+
+        // `getSetCookie` preserva múltiplos Set-Cookie; fallback para o header simples.
+        const rawCookies: string[] =
+          typeof (pageRes.headers as any).getSetCookie === "function"
+            ? (pageRes.headers as any).getSetCookie()
+            : [pageRes.headers.get("set-cookie") || ""].filter(Boolean);
+        const cookieHeader = rawCookies.map((c) => c.split(";")[0]).filter(Boolean).join("; ");
+
+        const html = await pageRes.text();
+        const token = extractAntiForgeryToken(html);
+        if (!token) {
+          return { success: false, error: "Token de segurança do fornecedor não encontrado na página." };
+        }
+
+        // 2. Cotação do frete.
+        const freightUrl = origin + buildFreightPath(data.cep, produtoId, data.quantidade);
+        const freightRes = await fetch(freightUrl, {
+          method: "POST",
+          redirect: "manual", // 302 => rejeição (token/cookie inválidos)
+          signal: controller.signal,
+          headers: {
+            "User-Agent": "PrintFlowCRM-Importer/1.0 (+contato via painel)",
+            Accept: "text/html,*/*;q=0.8",
+            "Accept-Language": "pt-BR,pt;q=0.9",
+            "X-Requested-With": "XMLHttpRequest",
+            RequestVerificationToken: token,
+            Referer: validation.url,
+            ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+          },
+        });
+
+        if (freightRes.status !== 200) {
+          return {
+            success: false,
+            error: `Fornecedor não cotou o frete (HTTP ${freightRes.status}).`,
+          };
+        }
+
+        const buf = await freightRes.arrayBuffer();
+        if (buf.byteLength > MAX_BYTES) {
+          return { success: false, error: "Resposta de frete excede o tamanho permitido." };
+        }
+        const fragment = new TextDecoder("utf-8").decode(buf);
+
+        return {
+          success: true,
+          options: parseFuturaImFreight(fragment),
+          produto_id: produtoId,
+          cep: data.cep.replace(/\D/g, ""),
+          quoted_at: new Date().toISOString(),
+        };
+      } catch (err: any) {
+        if (err?.name === "AbortError") {
+          return { success: false, error: "Tempo limite excedido ao cotar o frete." };
+        }
+        return { success: false, error: err?.message || "Erro ao cotar o frete." };
+      } finally {
+        clearTimeout(timeout);
+      }
     },
   );
 
