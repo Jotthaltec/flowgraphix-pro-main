@@ -167,10 +167,22 @@ export function getCompatibleValues(
 ): CascadeFilterResult[] {
   const { groups, values, products, productOptions } = data;
 
-  const sortedGroups = [...groups].sort((a, b) => a.order_index - b.order_index);
   const selectedOptionIds = new Set(selection.values());
   const productOptionMap = buildProductOptionMap(productOptions);
   const valueToGroup = new Map(values.map(v => [v.id, v.group_id]));
+
+  // Grupos "usados": só os que têm ao menos um valor referenciado por algum
+  // produto comercial. Grupos órfãos (ex.: eixo importado do configurador mas
+  // sem nenhuma combinação real) são ignorados para não travar a cascata.
+  const usedGroupIds = new Set<string>();
+  for (const po of productOptions) {
+    const gid = valueToGroup.get(po.option_value_id);
+    if (gid) usedGroupIds.add(gid);
+  }
+
+  const sortedGroups = [...groups]
+    .filter(g => usedGroupIds.has(g.id))
+    .sort((a, b) => a.order_index - b.order_index);
 
   // Produtos comerciais compatíveis com a seleção atual
   const compatibleProducts = products.filter(p => {

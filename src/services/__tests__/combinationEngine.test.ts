@@ -147,6 +147,25 @@ describe('getCompatibleValues', () => {
     expect(mat.is_locked).toBe(true);
     expect(mat.selected_value_id).toBe('v-c300');
   });
+
+  it('ignora grupo "morto" (sem nenhum valor usado por produto comercial)', () => {
+    // Grupo "Cor" importado do configurador, mas nenhum produto tem valor de cor
+    const withDeadGroup: FamilyCombinationData = {
+      ...familyData,
+      groups: [
+        ...groups,
+        { id: 'g-cor', company_id: 'co-1', family_id: 'fam-1', name: 'Cor', normalized_name: 'cor', code: 'COR', order_index: 3, is_required: true, created_at: '', updated_at: '' },
+      ],
+      values: [
+        ...values,
+        { id: 'v-azul', company_id: 'co-1', group_id: 'g-cor', name: 'Azul', normalized_name: 'azul', code: 'AZUL', external_id: null, order_index: 0, is_active: true, created_at: '' },
+      ],
+    };
+    const results = getCompatibleValues(withDeadGroup, new Map());
+    // O grupo "Cor" não deve travar a cascata — não aparece nos resultados
+    expect(results.find(r => r.group.id === 'g-cor')).toBeUndefined();
+    expect(results.map(r => r.group.id)).toEqual(['g-mat', 'g-fmt', 'g-imp']);
+  });
 });
 
 describe('getAvailableQuantities', () => {

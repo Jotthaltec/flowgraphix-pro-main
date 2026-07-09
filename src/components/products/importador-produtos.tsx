@@ -39,7 +39,8 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { analyzeSupplierLink, discoverCatalogLinks, scanProductVariants } from "@/integrations/supabase/importer-actions";
 import { validateImportUrl, parseBatchUrls } from "@/services/productImporterService";
-import { persistImportedProduct } from "@/lib/importer-persistence";
+import { persistImportedProduct, findExistingProduct, type ExistingProductMatch } from "@/lib/importer-persistence";
+import { generateCommercialProducts } from "@/integrations/supabase/combination-client";
 import {
   createCatalogJob,
   loadOpenJobs,
@@ -69,6 +70,8 @@ interface QueueItem {
   /** Nossos dias de produção (somados aos do fornecedor). */
   editOurProductionDays?: number;
   saved?: "created" | "updated" | "skipped";
+  /** Produto já existente na base, reconhecido durante a análise. */
+  existing?: ExistingProductMatch | null;
 }
 
 interface ImporterOptions {
@@ -152,9 +155,19 @@ export function ImportadorProdutos() {
     }
     const product = res.product;
     const status: ImportItemStatus = product.classification.review_required ? "revisao_necessaria" : "extraido";
+    // Reconhece se o produto já existe na base (evita duplicar; permite atualizar).
+    let existing: ExistingProductMatch | null = null;
+    if (profile?.company_id) {
+      try {
+        existing = await findExistingProduct(product, profile.company_id);
+      } catch {
+        existing = null;
+      }
+    }
     patch(item.id, {
       status,
       product,
+      existing,
       selected: product.errors.length === 0,
       editName: product.original_name,
       editCategory: product.classification.category,
@@ -291,12 +304,28 @@ export function ImportadorProdutos() {
     const toSave = queue.filter((it) => it.selected && it.product);
     if (!toSave.length) return toast.error("Selecione ao menos um produto para salvar.");
 
+    // Reconhece produtos já existentes na base e pergunta se deve atualizá-los
+    // (em vez de duplicar). Quem já vem com updateExisting ligado não pergunta.
+    let updateExistingForRun = options.updateExisting;
+    const existingItems = toSave.filter((it) => it.existing);
+    if (existingItems.length > 0 && !options.updateExisting) {
+      const names = existingItems
+        .map((it) => `• ${it.existing?.name || it.editName || it.product?.original_name || it.url}`)
+        .join("\n");
+      updateExistingForRun = window.confirm(
+        `${existingItems.length} produto(s) já existe(m) na base:\n${names}\n\n` +
+          `Deseja ATUALIZAR esses produtos (não cria duplicados)?\n\n` +
+          `OK = Atualizar · Cancelar = Pular os existentes`,
+      );
+    }
+
     setIsSaving(true);
     let created = 0,
       updated = 0,
       skipped = 0,
       failed = 0,
-      structuredWarn = 0;
+      structuredWarn = 0,
+      combos = 0;
 
     for (const item of toSave) {
       try {
@@ -306,7 +335,7 @@ export function ImportadorProdutos() {
           companyId: profile.company_id,
           marginPercent: margin,
           supplierName: options.saveAsExternalSupplier ? product.supplier : null,
-          updateExisting: options.updateExisting,
+          updateExisting: updateExistingForRun,
           descriptionInternalOnly: options.descriptionInternalOnly,
           copyImages: options.copyImagesToStorage,
         });
@@ -318,6 +347,21 @@ export function ImportadorProdutos() {
         patch(item.id, { status: finalStatus, saved: result.action });
         if (result.structuredWarnings?.length) structuredWarn += result.structuredWarnings.length;
         if (item.dbId) await updateImportItem(item.dbId, { status: finalStatus, product_id: result.productId });
+
+        // Motor técnico: gera automaticamente os produtos comerciais (combinações
+        // do fornecedor) para cada produto importado/atualizado. Best-effort —
+        // nunca derruba a importação nem a categorização já feita.
+        if (result.action !== "skipped" && result.productId) {
+          try {
+            const gen = await generateCommercialProducts({
+              product_id: result.productId,
+              company_id: profile.company_id,
+            });
+            combos += gen.commercial_products_created + gen.commercial_products_updated;
+          } catch {
+            /* segue sem as combinações; podem ser geradas depois pelo menu do produto */
+          }
+        }
 
         // Registra histórico (best-effort, não bloqueia a importação).
         if (result.action !== "skipped") {
@@ -350,7 +394,8 @@ export function ImportadorProdutos() {
       refreshOpenJobs();
     }
     toast.success(
-      `Importação concluída: ${created} criados, ${updated} atualizados, ${skipped} ignorados${failed ? `, ${failed} com erro` : ""}.`,
+      `Importação concluída: ${created} criados, ${updated} atualizados, ${skipped} ignorados${failed ? `, ${failed} com erro` : ""}` +
+        `${combos > 0 ? ` · ${combos} produtos comerciais gerados` : ""}.`,
     );
     if (structuredWarn > 0) {
       toast.warning(`${structuredWarn} aviso(s) ao gravar dados estruturados (variantes/atributos). Produto salvo mesmo assim.`);

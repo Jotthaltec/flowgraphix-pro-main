@@ -29,28 +29,102 @@ export interface PersistResult {
   structuredWarnings?: string[];
 }
 
-/** Localiza um produto existente por (source_url) ou (supplier_sku) dentro da empresa. */
-async function findExisting(product: ImportedProduct, companyId: string): Promise<string | null> {
-  if (product.source_url) {
-    const { data } = await supabase
-      .from("products")
-      .select("id")
-      .eq("company_id", companyId)
-      .eq("source_url", product.source_url)
-      .maybeSingle();
-    if (data?.id) return data.id;
+/**
+ * Normaliza uma URL para comparação de identidade do produto.
+ * Remove protocolo, "www.", barra final e parâmetros de rastreamento (utm_*, fbclid, …),
+ * MAS preserva os demais query params — muitos fornecedores (ex.: FuturaIM ?id=4627)
+ * usam o query string como identidade do produto.
+ */
+export function normalizeUrlForMatch(raw?: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const u = new URL(raw.trim());
+    const TRACKING = /^(utm_|fbclid|gclid|gclsrc|mc_|_hs|ref|source)$/i;
+    const params = [...u.searchParams.entries()]
+      .filter(([k]) => !TRACKING.test(k))
+      .sort(([a], [b]) => a.localeCompare(b));
+    const host = u.host.replace(/^www\./i, "").toLowerCase();
+    const path = u.pathname.replace(/\/+$/, "").toLowerCase();
+    const query = params.map(([k, v]) => `${k}=${v}`).join("&");
+    return `${host}${path}${query ? `?${query}` : ""}`;
+  } catch {
+    return raw.trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
   }
+}
+
+/** Normaliza um nome para comparação (minúsculo, sem acentos, espaços colapsados). */
+function normalizeName(name?: string | null): string {
+  return (name || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export interface ExistingProductMatch {
+  id: string;
+  name: string | null;
+  matched_by: "source_url" | "supplier_sku" | "name_supplier";
+}
+
+/**
+ * Localiza um produto já existente na base (mesma empresa), reconhecendo-o por:
+ *   1. source_url normalizada (barra final / www / http-https / tracking não importam);
+ *   2. supplier_sku (external_id) em produtos de fornecedor;
+ *   3. fallback: mesmo nome + mesmo fornecedor (evita duplicar quando o link mudou).
+ * Retorna o produto correspondente ou null.
+ */
+export async function findExistingProduct(
+  product: ImportedProduct,
+  companyId: string,
+): Promise<ExistingProductMatch | null> {
+  // 1. Por source_url normalizada
+  const targetUrl = normalizeUrlForMatch(product.source_url);
+  if (targetUrl) {
+    const { data: candidates } = await supabase
+      .from("products")
+      .select("id, name, source_url")
+      .eq("company_id", companyId)
+      .not("source_url", "is", null);
+    const hit = (candidates || []).find(
+      (c: any) => normalizeUrlForMatch(c.source_url) === targetUrl,
+    );
+    if (hit?.id) return { id: hit.id, name: hit.name ?? null, matched_by: "source_url" };
+  }
+
+  // 2. Por supplier_sku (external_id)
   if (product.external_id) {
     const { data } = await supabase
       .from("products")
-      .select("id")
+      .select("id, name")
       .eq("company_id", companyId)
       .eq("supplier_sku", product.external_id)
       .eq("origin", "supplier_import")
       .maybeSingle();
-    if (data?.id) return data.id;
+    if (data?.id) return { id: data.id, name: data.name ?? null, matched_by: "supplier_sku" };
   }
+
+  // 3. Fallback: mesmo nome + mesmo fornecedor (link pode ter mudado)
+  const targetName = normalizeName(product.original_name);
+  if (targetName && product.supplier) {
+    const { data: byName } = await supabase
+      .from("products")
+      .select("id, name, supplier_name")
+      .eq("company_id", companyId)
+      .eq("origin", "supplier_import")
+      .ilike("supplier_name", product.supplier);
+    const hit = (byName || []).find((c: any) => normalizeName(c.name) === targetName);
+    if (hit?.id) return { id: hit.id, name: hit.name ?? null, matched_by: "name_supplier" };
+  }
+
   return null;
+}
+
+/** Compat: retorna apenas o id do produto existente (ou null). */
+async function findExisting(product: ImportedProduct, companyId: string): Promise<string | null> {
+  const match = await findExistingProduct(product, companyId);
+  return match?.id ?? null;
 }
 
 export async function persistImportedProduct(

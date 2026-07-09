@@ -14,7 +14,7 @@
  * Modo "Espelhar fornecedor" (toggle).
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Package, ChevronRight, Check, AlertTriangle, XCircle,
@@ -198,29 +198,37 @@ export function SupplierCombinationSelector({
     availableExtras, familyData, selectedQuantity, family.lead_time_rule,
   ]);
 
-  // Notificar parent
-  useEffect(() => {
-    onCalculationChange(calculation);
-  }, [calculation, onCalculationChange]);
+  // Callbacks em refs — evita loop de render quando o parent passa funções
+  // inline (nova identidade a cada render). Os efeitos abaixo disparam apenas
+  // quando o VALOR (cálculo/seleção) muda, não quando a função muda.
+  const onCalcRef = useRef(onCalculationChange);
+  const onSelRef = useRef(onSelectionChange);
+  useEffect(() => { onCalcRef.current = onCalculationChange; });
+  useEffect(() => { onSelRef.current = onSelectionChange; });
 
+  // Notificar parent quando o cálculo muda
   useEffect(() => {
-    if (onSelectionChange) {
-      const snap: Record<string, any> = {};
-      for (const [groupId, valueId] of selection.entries()) {
-        const group = familyData.groups.find(g => g.id === groupId);
-        const value = familyData.values.find(v => v.id === valueId);
-        if (group && value) {
-          snap[group.code] = {
-            group_name: group.name,
-            value_name: value.name,
-            value_id: value.id,
-            external_id: value.external_id,
-          };
-        }
+    onCalcRef.current(calculation);
+  }, [calculation]);
+
+  // Notificar parent quando a seleção em cascata muda
+  useEffect(() => {
+    if (!onSelRef.current) return;
+    const snap: Record<string, any> = {};
+    for (const [groupId, valueId] of selection.entries()) {
+      const group = familyData.groups.find(g => g.id === groupId);
+      const value = familyData.values.find(v => v.id === valueId);
+      if (group && value) {
+        snap[group.code] = {
+          group_name: group.name,
+          value_name: value.name,
+          value_id: value.id,
+          external_id: value.external_id,
+        };
       }
-      onSelectionChange(snap);
     }
-  }, [selection, onSelectionChange, familyData]);
+    onSelRef.current(snap);
+  }, [selection, familyData]);
 
   // Handlers
   const handleOptionSelect = useCallback((groupId: string, valueId: string) => {
@@ -270,6 +278,20 @@ export function SupplierCombinationSelector({
       return next;
     });
   }, []);
+
+  // Auto-selecionar grupos de valor único (ex.: DTF tem 1 opção por eixo → resolve
+  // sozinho). Seleciona um grupo por vez; o efeito re-roda após cada seleção.
+  useEffect(() => {
+    const next = cascadeResults.find(r => !r.selected_value_id && r.values.length === 1);
+    if (next) {
+      setSelection(prev => {
+        if (prev.get(next.group.id)) return prev;
+        const m = new Map(prev);
+        m.set(next.group.id, next.values[0].id);
+        return m;
+      });
+    }
+  }, [cascadeResults]);
 
   // Status do preço
   const priceStatus: PriceStatus = calculation

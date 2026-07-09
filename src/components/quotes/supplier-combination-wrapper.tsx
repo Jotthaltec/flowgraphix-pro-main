@@ -1,8 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { SupplierCombinationSelector } from './supplier-combination-selector';
-import { getFamilyCombinationData, getCompatibleExtrasServer, getServicesForSupplier } from '@/integrations/supabase/combination-actions';
-import { getActivePromotions } from '@/integrations/supabase/combination-actions';
+import { getFamilyCombinationDataClient } from '@/integrations/supabase/combination-client';
 
 interface SupplierCombinationWrapperProps {
   familyId: string;
@@ -19,31 +18,12 @@ export function SupplierCombinationWrapper({
   onCalculationChange,
   onSelectionChange,
 }: SupplierCombinationWrapperProps) {
-  // Buscar todos os dados em cascata via Server Action
+  // Carrega os dados da família (cascata + produtos comerciais + promoções)
+  // client-side, com o client autenticado (RLS via user_owns_company).
   const { data, isLoading, error } = useQuery({
     queryKey: ['familyCombinationData', familyId, companyId],
     queryFn: async () => {
-      // 1. Dados básicos (cascata + preços de combinacao)
-      const baseData = await getFamilyCombinationData({ data: { family_id: familyId, company_id: companyId } });
-      
-      // 2. Extras (pega extras compatíveis) - como estamos só renderizando o componente, 
-      // precisaremos carregar a lista completa de extras dessa familia
-      // Na vdd, podemos passar para o SupplierCombinationSelector apenas um objeto enriquecido.
-      // O ideal é a action getFamilyCombinationData já trazer extras/serviços,
-      // mas como dividimos as actions, vamos buscar extras também
-      
-      // Para não sobrecarregar, pegamos as promoções
-      const promotions = await getActivePromotions({ data: { family_id: familyId, company_id: companyId } });
-      
-      return {
-        ...baseData,
-        promotions: promotions,
-        // Como o componente SupplierCombinationSelector tenta calcular compatibilidade local,
-        // mas na vdd getCompatibleExtrasServer depende da quantidade selecionada,
-        // precisariamos passar a lista global. 
-        // Vamos inicializar vazio por simplicidade, e caso o componente precise de extras, 
-        // ele mesmo fará sua busca (se necessário refatorar).
-      };
+      return await getFamilyCombinationDataClient(familyId, companyId);
     },
   });
 

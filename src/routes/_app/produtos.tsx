@@ -17,7 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { MarketplaceVariationsModal } from "@/components/hub/marketplace-variations-modal";
 import { DialogDescription } from "@/components/ui/dialog";
 import { ProductEditor } from "@/components/products/product-editor";
-import { importProductCombinations } from "@/integrations/supabase/combination-actions";
+import { generateCommercialProducts } from "@/integrations/supabase/combination-client";
 
 export const Route = createFileRoute("/_app/produtos")({ component: ProdutosPage });
 
@@ -331,19 +331,20 @@ function ProdutosPage() {
 
   const generateCombinationsMutation = useMutation({
     mutationFn: async (product: Product) => {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id || "";
       const { data: profileData } = await supabase
         .from('profiles')
         .select('company_id')
-        .eq('user_id', (await supabase.auth.getUser()).data.user?.id || "")
+        .eq('user_id', userId)
         .single();
       if (!profileData?.company_id) throw new Error("Empresa não identificada.");
 
-      return await importProductCombinations({
-        data: {
-          product_id: product.id,
-          company_id: profileData.company_id,
-          supplier_id: product.supplier_id || undefined,
-        },
+      return await generateCommercialProducts({
+        product_id: product.id,
+        company_id: profileData.company_id,
+        supplier_id: product.supplier_id || undefined,
+        executed_by: userId || null,
       });
     },
     onSuccess: (result) => {
@@ -365,6 +366,53 @@ function ProdutosPage() {
     },
     onError: (err: any) => {
       toast.error("Erro ao gerar combinações: " + err.message);
+    },
+  });
+
+  // Backfill em massa: gera as combinações de TODOS os produtos de fornecedor
+  // já importados (catalogação do motor técnico para o que já existe).
+  const generateAllMutation = useMutation({
+    mutationFn: async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id || "";
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('user_id', userId)
+        .single();
+      if (!profileData?.company_id) throw new Error("Empresa não identificada.");
+
+      const supplierProducts = (dbProducts || []).filter(
+        (p) => p.supplier_id || p.imported_from_supplier,
+      );
+      if (supplierProducts.length === 0) throw new Error("Nenhum produto de fornecedor para catalogar.");
+
+      let ok = 0, fail = 0, totalCombos = 0;
+      for (const p of supplierProducts) {
+        try {
+          const gen = await generateCommercialProducts({
+            product_id: p.id,
+            company_id: profileData.company_id,
+            supplier_id: p.supplier_id || undefined,
+            executed_by: userId || null,
+          });
+          totalCombos += gen.commercial_products_created + gen.commercial_products_updated;
+          ok++;
+        } catch {
+          fail++;
+        }
+      }
+      return { ok, fail, totalCombos, total: supplierProducts.length };
+    },
+    onSuccess: (r) => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      toast.success(
+        `Catalogação concluída: ${r.ok}/${r.total} produtos · ${r.totalCombos} produtos comerciais` +
+          (r.fail ? ` · ${r.fail} falharam` : "") + ".",
+      );
+    },
+    onError: (err: any) => {
+      toast.error("Erro na catalogação em massa: " + err.message);
     },
   });
 
@@ -403,6 +451,22 @@ function ProdutosPage() {
               <Truck className="h-4 w-4 mr-2 text-muted-foreground" /> Hub
             </Button>
             
+            <Button
+              variant="outline"
+              disabled={generateAllMutation.isPending}
+              onClick={() => {
+                if (window.confirm("Gerar as combinações do fornecedor para TODOS os produtos importados? Isso cria/atualiza os produtos comerciais e não duplica.")) {
+                  generateAllMutation.mutate();
+                }
+              }}
+              className="shadow-sm hover:shadow-md transition-all"
+            >
+              {generateAllMutation.isPending
+                ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                : <Layers className="h-4 w-4 mr-2 text-muted-foreground" />}
+              Catalogar combinações
+            </Button>
+
             <Button variant="outline" onClick={() => navigate({ to: "/motor-produtos" })} className="shadow-sm hover:shadow-md transition-all">
               <Settings2 className="h-4 w-4 mr-2 text-muted-foreground" /> Motor Técnico
             </Button>
