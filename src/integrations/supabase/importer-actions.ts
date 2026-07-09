@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { parseFuturaImProduct, externalIdFromUrl } from "@/services/futuraImParser";
-import { collectVariantUrls, consolidateVariants } from "@/services/variantScan";
+import { collectAxisUrls, collectUnpricedTierUrls, consolidateVariants } from "@/services/variantScan";
 import { validateSupplierUrl } from "@/services/urlValidator";
 import {
   buildFreightPath,
@@ -198,10 +198,15 @@ export const scanProductVariants = createServerFn({ method: "POST" })
 
       const collected: ImportedProduct[] = [];
       const visited = new Set<string>();
-      const toVisit: string[] = [validation.url];
+      // Duas filas: os EIXOS (material/formato/impressão) abrem novas combinações
+      // e são drenados primeiro. As tiragens sem preço só entram depois — assim o
+      // limite da varredura nunca é consumido por quantidades antes de cobrir os
+      // materiais e formatos (um produto com 19 tiragens geraria centenas de URLs).
+      const axisQueue: string[] = [validation.url];
+      const tierQueue: string[] = [];
 
-      while (toVisit.length && collected.length < VARIANT_SCAN_MAX) {
-        const current = toVisit.shift()!;
+      while ((axisQueue.length || tierQueue.length) && collected.length < VARIANT_SCAN_MAX) {
+        const current = (axisQueue.shift() ?? tierQueue.shift())!;
         const v = validateSupplierUrl(current);
         if (!v.ok || !v.url) continue;
         const id = externalIdFromUrl(v.url) || v.url;
@@ -219,12 +224,16 @@ export const scanProductVariants = createServerFn({ method: "POST" })
         }
         collected.push(product);
 
-        for (const next of collectVariantUrls(product)) {
+        const enqueue = (queue: string[], next: string) => {
           const nid = externalIdFromUrl(next);
-          if (nid && !visited.has(nid)) toVisit.push(next);
-        }
+          if (nid && !visited.has(nid)) queue.push(next);
+        };
+        for (const next of collectAxisUrls(product)) enqueue(axisQueue, next);
+        for (const next of collectUnpricedTierUrls(product)) enqueue(tierQueue, next);
 
-        if (toVisit.length && collected.length < VARIANT_SCAN_MAX) await sleep(VARIANT_SCAN_DELAY_MS);
+        if ((axisQueue.length || tierQueue.length) && collected.length < VARIANT_SCAN_MAX) {
+          await sleep(VARIANT_SCAN_DELAY_MS);
+        }
       }
 
       if (!collected.length) {

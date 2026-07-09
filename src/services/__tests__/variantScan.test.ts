@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { parseFuturaImProduct } from "@/services/futuraImParser";
-import { collectVariantUrls, consolidateVariants, attachVariantPrices } from "@/services/variantScan";
+import { collectAxisUrls, collectVariantUrls, collectUnpricedTierUrls, consolidateVariants, attachVariantPrices } from "@/services/variantScan";
 import type { ImportedProduct } from "@/types/importedProduct";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -39,22 +39,39 @@ describe("variantScan", () => {
     expect(() => urls.forEach((u) => new URL(u))).not.toThrow();
   });
 
-  it("collectVariantUrls também segue os ids das TIRAGENS (preço real por quantidade)", () => {
+  it("NÃO visita tiragens que já têm preço (evita estourar o limite da varredura)", () => {
     const url =
       "https://www.futuraim.com.br/produto/cartao-de-visita-em-couche-fosco-com-laminacao-fosca-e-verniz-localizado?id=4627";
     const p = parseFuturaImProduct(fx("futuraim-cartao-de-visita.html"), url);
-    // A tabela de tiragens traz o ProdutoId de cada quantidade (trocarProduto).
-    const tierIds = p.variants
-      .flatMap((v) => v.price_tiers)
-      .map((t) => t.external_id)
-      .filter((id): id is string => !!id && id !== p.external_id);
-    expect(tierIds.length).toBeGreaterThan(0);
 
-    const urls = collectVariantUrls(p);
-    // Cada id de tiragem vira uma URL a visitar (para ler o dataLayer daquele id).
-    for (const id of tierIds) {
-      expect(urls.some((u) => new RegExp(`\\?id=${id}(\\b|&|$)`).test(u))).toBe(true);
-    }
+    const pricedTiers = p.variants.flatMap((v) => v.price_tiers).filter((t) => t.total_price > 0);
+    expect(pricedTiers.length).toBeGreaterThan(0);
+
+    // Nenhuma tiragem precisa ser visitada: todas já têm preço na tabela estática.
+    expect(collectUnpricedTierUrls(p)).toEqual([]);
+    // Logo, a varredura visita exatamente os eixos — nada a mais.
+    expect(collectVariantUrls(p)).toEqual(collectAxisUrls(p));
+  });
+
+  it("segue a tiragem SEM preço (única fonte do valor real)", () => {
+    const url = "https://www.futuraim.com.br/produto/x?id=100";
+    const p = parseFuturaImProduct(fx("futuraim-cartao-de-visita.html"), url);
+    // Simula a tabela renderizada por JS: tiragem com id mas sem preço.
+    const doctored: ImportedProduct = {
+      ...p,
+      external_id: "100",
+      source_url: url,
+      variants: [
+        {
+          ...p.variants[0],
+          price_tiers: [
+            { quantity: 500, unit: "unidade", total_price: 0, unit_price: 0, currency: "BRL", external_id: "555", collected_at: "x" },
+          ],
+        },
+      ],
+    };
+    const urls = collectUnpricedTierUrls(doctored);
+    expect(urls).toEqual(["https://www.futuraim.com.br/produto/x?id=555"]);
   });
 
   it("consolidateVariants junta variantes reais e marca scan completo", () => {

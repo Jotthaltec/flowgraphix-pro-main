@@ -39,44 +39,57 @@ function absolutize(url: string, sourceUrl: string): string | null {
 }
 
 /**
- * URLs de variantes a visitar a partir de um produto.
+ * URLs das OPÇÕES DE EIXO (material/formato/impressão) — cada uma tem seu `?id=`.
  *
- * Na FuturaIM cada `?id=` é UM produto comercial (combinação + quantidade) e o
- * preço autoritativo dele vive no `dataLayer` da sua própria página — o JSON-LD
- * do Product costuma vir estagnado (price 0.00 / OutOfStock). Por isso seguimos:
- *
- *  1. as opções de eixo (material/formato/impressão) — cada uma tem seu `?id=`;
- *  2. os ids das TIRAGENS (`trocarProduto('slug',ID)` de cada linha da tabela),
- *     único jeito de obter o preço real de cada quantidade.
- *
- * Só ids diferentes do atual — nunca um produto cartesiano.
+ * São as que abrem novas combinações; têm prioridade absoluta na varredura.
+ * O configurador entrega caminhos relativos: absolutizamos, senão o validador
+ * anti-SSRF as rejeita e a varredura ignora todos os eixos.
  */
-export function collectVariantUrls(product: ImportedProduct): string[] {
+export function collectAxisUrls(product: ImportedProduct): string[] {
   const urls = new Set<string>();
-
   for (const axis of product.variant_axes) {
     for (const opt of axis.options) {
       if (!opt.url) continue;
       const id = externalIdFromUrl(opt.url);
       if (!id || id === product.external_id) continue;
-      // As opções vêm como caminho relativo — absolutizar, senão o validador
-      // anti-SSRF as rejeita e a varredura ignora todos os eixos.
       const absolute = absolutize(opt.url, product.source_url);
       if (absolute) urls.add(absolute);
     }
   }
+  return [...urls];
+}
 
-  // Tiragens: cada quantidade tem seu próprio ProdutoId e seu próprio preço.
+/**
+ * URLs das TIRAGENS que ainda NÃO têm preço.
+ *
+ * A tabela de tiragens quase sempre já traz o preço de cada quantidade no HTML.
+ * Quando traz, visitar o `?id=` da tiragem é redundante — e caríssimo: um produto
+ * com 19 quantidades × 32 combinações geraria ~600 páginas, estourando o limite
+ * da varredura e impedindo a cobertura dos eixos.
+ *
+ * Só seguimos a tiragem quando o preço não veio (tabela renderizada por JS): aí
+ * a página daquele `?id=` é a única fonte do valor real (via dataLayer).
+ */
+export function collectUnpricedTierUrls(product: ImportedProduct): string[] {
+  const urls = new Set<string>();
   for (const variant of product.variants) {
     for (const tier of variant.price_tiers) {
+      if (tier.total_price > 0) continue; // preço já conhecido — não precisa visitar
       const id = tier.external_id;
       if (!id || id === product.external_id) continue;
       const url = urlWithExternalId(product.source_url, id);
       if (url) urls.add(url);
     }
   }
-
   return [...urls];
+}
+
+/**
+ * Todas as URLs a visitar: eixos primeiro (abrem combinações), depois as
+ * tiragens sem preço. Só ids diferentes do atual — nunca um produto cartesiano.
+ */
+export function collectVariantUrls(product: ImportedProduct): string[] {
+  return [...new Set([...collectAxisUrls(product), ...collectUnpricedTierUrls(product)])];
 }
 
 /**
