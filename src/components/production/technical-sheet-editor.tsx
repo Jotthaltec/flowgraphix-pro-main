@@ -105,7 +105,7 @@ export function TechnicalSheetEditor({ productionOrderItemId, onSaved }: Technic
   useEffect(() => {
     if (savedAttributes && savedAttributes.length > 0 && motorData?.attributes) {
       const initialData: Record<string, any> = {};
-      savedAttributes.forEach(sa => {
+      savedAttributes.forEach((sa: { attribute_id: string; attribute_value: string | null }) => {
         const attr = motorData.attributes.find(a => a.id === sa.attribute_id);
         if (attr) initialData[attr.code] = sa.attribute_value;
       });

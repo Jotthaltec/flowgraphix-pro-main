@@ -167,7 +167,7 @@ function ProducaoPage() {
             <div className="overflow-x-auto pb-4">
               <div className="flex gap-3 min-w-max">
                 {COLUMNS_FACTORY.map((col) => {
-                  const colItems = factoryItems?.filter(i => (i.status || "aguardando") === col.id) || [];
+                  const colItems = factoryItems?.filter((i: { status: string | null }) => (i.status || "aguardando") === col.id) || [];
                   return (
                     <div 
                       key={col.id} 
