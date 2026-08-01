@@ -1,37 +1,72 @@
-name: Deploy to HostGator via FTP
+name: Deploy HostGator
+
+# Todo push na main constrói o app e envia por FTPS explícito (porta 21) para a
+# hospedagem. Lá o "Configurar Aplicativo Node.js" (Passenger) roda o SSR via
+# app.cjs. Ver deploy/hostgator/README.md para a configuração inicial no cPanel.
 
 on:
   push:
-    branches:
-      - main # ou master, dependendo da sua branch principal
+    branches: [main]
+  workflow_dispatch:
+
+# Dois deploys simultâneos no mesmo FTP corrompem o estado de sync do servidor.
+concurrency:
+  group: hostgator-deploy
+  cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout do código
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Configurar Bun
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
 
       - name: Instalar dependências
-        run: bun install
+        run: bun install --frozen-lockfile
 
-      - name: Build do projeto
+      - name: Build
+        # As VITE_* são inlineadas no bundle do cliente em tempo de build — sem
+        # elas o app sobe sem conseguir falar com o Supabase.
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_PUBLISHABLE_KEY }}
+          VITE_SUPABASE_PROJECT_ID: ${{ secrets.VITE_SUPABASE_PROJECT_ID }}
+          VITE_LOJA_URL: ${{ secrets.VITE_LOJA_URL }}
         run: bun run build
 
-      - name: Deploy via FTP (HostGator)
+      - name: Montar pacote de deploy
+        run: |
+          set -euo pipefail
+          rm -rf deploy-out
+          mkdir -p deploy-out/tmp
+          cp -r dist deploy-out/dist
+          cp package.json package-lock.json deploy-out/
+          cp deploy/hostgator/app.cjs deploy-out/app.cjs
+          cp deploy/hostgator/.npmrc deploy-out/.npmrc
+          # Passenger reinicia quando o mtime de tmp/restart.txt muda; subir o
+          # arquivo a cada deploy é o que faz o código novo entrar no ar.
+          date -u +"%Y-%m-%dT%H:%M:%SZ commit ${GITHUB_SHA}" > deploy-out/tmp/restart.txt
+
+      - name: Enviar por FTPS
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          # Mude para "dist/client" se você for servir os arquivos estáticos,
-          # ou "dist" se o HostGator for configurado para rodar o app Node.js (SSR)
-          local-dir: ./dist/
-          # Opcional: a pasta remota do HostGator (ex: public_html/)
-          server-dir: /public_html/
+          protocol: ftps
+          port: 21
+          local-dir: ./deploy-out/
+          server-dir: ${{ vars.FTP_SERVER_DIR || '/' }}
+          # node_modules vive só no servidor (instalado pelo cPanel) e nunca
+          # deve ser tocado pelo sync.
+          exclude: |
+            **/node_modules/**
+            **/.git*
+            **/.git*/**
