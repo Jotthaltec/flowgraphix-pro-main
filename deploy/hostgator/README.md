@@ -26,8 +26,9 @@ tmp/restart.txt      mtime novo a cada deploy => Passenger reinicia sozinho
 2. Preencha:
    - **Node.js version:** 20 ou superior (o adaptador usa `Readable.toWeb`)
    - **Application mode:** Production
-   - **Application root:** a mesma pasta em que o FTP entrega os arquivos
-     (por padrão a home do usuário FTP — veja `FTP_SERVER_DIR` abaixo)
+   - **Application root:** `printiflow.nexusprinti.com.br/Printiflow`
+     (caminho completo `/home2/jonat825/printiflow.nexusprinti.com.br/Printiflow`
+     — é a home do usuário FTP, que loga chrootado nela)
    - **Application URL:** `printiflow.nexusprinti.com.br`
    - **Application startup file:** `app.cjs`
 3. Em **Environment variables**, adicione as chaves de runtime — elas **não** vêm
@@ -64,7 +65,15 @@ Variável opcional (**aba Variables**):
 
 | Variável | Padrão | Quando mexer |
 | --- | --- | --- |
-| `FTP_SERVER_DIR` | `/` | Se o usuário FTP cair acima da pasta do app. Ex.: `/printiflow.nexusprinti.com.br/`. Precisa terminar com `/`. |
+| `FTP_SERVER_DIR` | `/` | Só se a conta de FTP mudar. Hoje o usuário loga chrootado (`230 OK. Current restricted directory is /`), então `/` já é a pasta do app. Precisa terminar com `/`. |
+
+## Se o FTP começar a recusar com 530
+
+O cPHulk trava a conta por alguns minutos depois de algumas tentativas falhas
+seguidas — e trava por conta, não por IP, então CI e sua máquina caem juntos.
+Se a senha estiver certa e mesmo assim vier `530 Login authentication failed`,
+espere alguns minutos antes de rodar o workflow de novo em vez de sair trocando
+as credenciais.
 
 ## O host de FTP que o painel mostra não funciona
 
