@@ -54,6 +54,8 @@ jobs:
           cp package.json package-lock.json deploy-out/
           cp deploy/hostgator/app.cjs deploy-out/app.cjs
           cp deploy/hostgator/.npmrc deploy-out/.npmrc
+          # app.cjs carrega a ponte por caminho relativo a si mesmo.
+          cp deploy/shared/node-web-bridge.mjs deploy-out/node-web-bridge.mjs
           # Passenger reinicia quando o mtime de tmp/restart.txt muda; subir o
           # arquivo a cada deploy é o que faz o código novo entrar no ar.
           date -u +"%Y-%m-%dT%H:%M:%SZ commit ${GITHUB_SHA}" > deploy-out/tmp/restart.txt

@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 deploy-out
+.vercel
 .output
 .vinxi
 .tanstack/**
