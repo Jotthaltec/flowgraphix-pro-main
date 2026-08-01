@@ -22,13 +22,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configurar Bun
-        uses: oven-sh/setup-bun@v2
+      # npm, e não bun: o bun.lock está parado desde 01/06 enquanto o
+      # package-lock.json acompanha o package.json — e é ele que o cPanel usa
+      # para instalar no servidor, então CI e produção resolvem igual.
+      - name: Configurar Node
+        uses: actions/setup-node@v4
         with:
-          bun-version: latest
+          node-version: 20
+          cache: npm
 
       - name: Instalar dependências
-        run: bun install --frozen-lockfile
+        run: npm ci
 
       - name: Build
         # As VITE_* são inlineadas no bundle do cliente em tempo de build — sem
