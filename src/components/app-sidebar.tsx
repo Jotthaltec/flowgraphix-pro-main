@@ -1,12 +1,35 @@
 import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import {
-  LayoutDashboard, Users, MapPin, FileText, FileSignature, ShoppingBag,
-  Workflow, Package, Calculator, Wallet, FolderOpen, BarChart3, Settings,
-  LogOut, Printer, Globe, ShoppingCart,
+  LayoutDashboard,
+  Users,
+  MapPin,
+  FileText,
+  FileSignature,
+  ShoppingBag,
+  Workflow,
+  Package,
+  Calculator,
+  Wallet,
+  FolderOpen,
+  BarChart3,
+  Settings,
+  LogOut,
+  Printer,
+  Globe,
+  ShoppingCart,
+  Store,
 } from "lucide-react";
 import {
-  Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarGroupLabel,
-  SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarFooter, SidebarHeader,
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarFooter,
+  SidebarHeader,
   useSidebar,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/use-auth";
@@ -23,6 +46,7 @@ const items = [
   { title: "Pedidos de Compra", url: "/pedidos-compra", icon: ShoppingCart },
   { title: "Produção", url: "/producao", icon: Workflow },
   { title: "Produtos & Serviços", url: "/produtos", icon: Package },
+  { title: "Catálogo do site", url: "/produtos-site", icon: Store },
   { title: "Hub de Fornecedores", url: "/hub-fornecedores", icon: Globe },
   { title: "Custos & Lucro", url: "/custos", icon: Calculator },
   { title: "Financeiro", url: "/financeiro", icon: Wallet },
@@ -39,7 +63,11 @@ export function AppSidebar() {
   const navigate = useNavigate();
 
   const initials = (profile?.full_name || user?.email || "U")
-    .split(" ").map((s) => s[0]).slice(0, 2).join("").toUpperCase();
+    .split(" ")
+    .map((s) => s[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
   async function handleSignOut() {
     await signOut();
@@ -50,13 +78,18 @@ export function AppSidebar() {
     <Sidebar collapsible="icon" className="border-sidebar-border">
       <SidebarHeader className="border-b border-sidebar-border">
         <Link to="/dashboard" className="flex items-center gap-2 px-2 py-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg" style={{ background: "var(--gradient-brand)" }}>
+          <div
+            className="flex h-9 w-9 items-center justify-center rounded-lg"
+            style={{ background: "var(--gradient-brand)" }}
+          >
             <Printer className="h-5 w-5 text-white" />
           </div>
           {!collapsed && (
             <div className="flex flex-col leading-tight">
               <span className="text-sm font-bold text-sidebar-foreground">PrintFlow</span>
-              <span className="text-[10px] uppercase tracking-wider text-sidebar-foreground/60">CRM</span>
+              <span className="text-[10px] uppercase tracking-wider text-sidebar-foreground/60">
+                CRM
+              </span>
             </div>
           )}
         </Link>
@@ -103,7 +136,12 @@ export function AppSidebar() {
             </div>
           )}
           {!collapsed && (
-            <Button size="icon" variant="ghost" onClick={handleSignOut} className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent">
+            <Button
+              size="icon"
+              variant="ghost"
+              onClick={handleSignOut}
+              className="h-8 w-8 text-sidebar-foreground hover:bg-sidebar-accent"
+            >
               <LogOut className="h-4 w-4" />
             </Button>
           )}

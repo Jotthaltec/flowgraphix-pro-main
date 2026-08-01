@@ -17,6 +17,7 @@ import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PrintOpItemIdRouteImport } from './routes/print-op.$itemId'
 import { Route as AppRelatoriosRouteImport } from './routes/_app/relatorios'
+import { Route as AppProdutosSiteRouteImport } from './routes/_app/produtos-site'
 import { Route as AppProdutosRouteImport } from './routes/_app/produtos'
 import { Route as AppProducaoRouteImport } from './routes/_app/producao'
 import { Route as AppPedidosCompraRouteImport } from './routes/_app/pedidos-compra'
@@ -72,6 +73,11 @@ const PrintOpItemIdRoute = PrintOpItemIdRouteImport.update({
 const AppRelatoriosRoute = AppRelatoriosRouteImport.update({
   id: '/relatorios',
   path: '/relatorios',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProdutosSiteRoute = AppProdutosSiteRouteImport.update({
+  id: '/produtos-site',
+  path: '/produtos-site',
   getParentRoute: () => AppRoute,
 } as any)
 const AppProdutosRoute = AppProdutosRouteImport.update({
@@ -182,6 +188,7 @@ export interface FileRoutesByFullPath {
   '/pedidos-compra': typeof AppPedidosCompraRoute
   '/producao': typeof AppProducaoRoute
   '/produtos': typeof AppProdutosRoute
+  '/produtos-site': typeof AppProdutosSiteRoute
   '/relatorios': typeof AppRelatoriosRoute
   '/print-op/$itemId': typeof PrintOpItemIdRoute
   '/produtos/importar': typeof AppProdutosImportarRoute
@@ -208,6 +215,7 @@ export interface FileRoutesByTo {
   '/pedidos-compra': typeof AppPedidosCompraRoute
   '/producao': typeof AppProducaoRoute
   '/produtos': typeof AppProdutosRoute
+  '/produtos-site': typeof AppProdutosSiteRoute
   '/relatorios': typeof AppRelatoriosRoute
   '/print-op/$itemId': typeof PrintOpItemIdRoute
   '/produtos/importar': typeof AppProdutosImportarRoute
@@ -236,6 +244,7 @@ export interface FileRoutesById {
   '/_app/pedidos-compra': typeof AppPedidosCompraRoute
   '/_app/producao': typeof AppProducaoRoute
   '/_app/produtos': typeof AppProdutosRoute
+  '/_app/produtos-site': typeof AppProdutosSiteRoute
   '/_app/relatorios': typeof AppRelatoriosRoute
   '/print-op/$itemId': typeof PrintOpItemIdRoute
   '/_app/produtos_/importar': typeof AppProdutosImportarRoute
@@ -264,6 +273,7 @@ export interface FileRouteTypes {
     | '/pedidos-compra'
     | '/producao'
     | '/produtos'
+    | '/produtos-site'
     | '/relatorios'
     | '/print-op/$itemId'
     | '/produtos/importar'
@@ -290,6 +300,7 @@ export interface FileRouteTypes {
     | '/pedidos-compra'
     | '/producao'
     | '/produtos'
+    | '/produtos-site'
     | '/relatorios'
     | '/print-op/$itemId'
     | '/produtos/importar'
@@ -317,6 +328,7 @@ export interface FileRouteTypes {
     | '/_app/pedidos-compra'
     | '/_app/producao'
     | '/_app/produtos'
+    | '/_app/produtos-site'
     | '/_app/relatorios'
     | '/print-op/$itemId'
     | '/_app/produtos_/importar'
@@ -388,6 +400,13 @@ declare module '@tanstack/react-router' {
       path: '/relatorios'
       fullPath: '/relatorios'
       preLoaderRoute: typeof AppRelatoriosRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/produtos-site': {
+      id: '/_app/produtos-site'
+      path: '/produtos-site'
+      fullPath: '/produtos-site'
+      preLoaderRoute: typeof AppProdutosSiteRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/produtos': {
@@ -529,6 +548,7 @@ interface AppRouteChildren {
   AppPedidosCompraRoute: typeof AppPedidosCompraRoute
   AppProducaoRoute: typeof AppProducaoRoute
   AppProdutosRoute: typeof AppProdutosRoute
+  AppProdutosSiteRoute: typeof AppProdutosSiteRoute
   AppRelatoriosRoute: typeof AppRelatoriosRoute
   AppProdutosImportarRoute: typeof AppProdutosImportarRoute
 }
@@ -550,6 +570,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppPedidosCompraRoute: AppPedidosCompraRoute,
   AppProducaoRoute: AppProducaoRoute,
   AppProdutosRoute: AppProdutosRoute,
+  AppProdutosSiteRoute: AppProdutosSiteRoute,
   AppRelatoriosRoute: AppRelatoriosRoute,
   AppProdutosImportarRoute: AppProdutosImportarRoute,
 }

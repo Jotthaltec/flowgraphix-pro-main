@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -7,36 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
-  __InternalSupabase: {
-    PostgrestVersion: "14.5"
-  }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       clients: {
@@ -5755,6 +5725,28 @@ export type Database = {
       }
     }
     Views: {
+      site_products: {
+        Row: {
+          categoria: string | null
+          destaque: boolean | null
+          em_promocao: boolean | null
+          exclusivo_revenda: boolean | null
+          id: string | null
+          imagem: string | null
+          name: string | null
+          novidade: boolean | null
+          prazo_producao_dias: number | null
+          preco_base: number | null
+          preco_promocional: number | null
+          preco_revenda: number | null
+          quantidade_minima: number | null
+          sku: string | null
+          slug: string | null
+          unidade_preco: string | null
+          updated_at: string | null
+        }
+        Relationships: []
+      }
       supplier_accounts_safe: {
         Row: {
           company_id: string | null
@@ -5853,7 +5845,13 @@ export type Database = {
       }
     }
     Functions: {
+      crm_default_company: { Args: never; Returns: string }
       get_auth_company_id: { Args: never; Returns: string }
+      map_client_type_back: { Args: { p_type: string }; Returns: string }
+      map_customer_type: { Args: { p_type: string }; Returns: string }
+      map_payment_status: { Args: { p_status: string }; Returns: string }
+      map_production_status: { Args: { p_status: string }; Returns: string }
+      unaccent: { Args: { "": string }; Returns: string }
       upsert_supplier_account: {
         Args: {
           p_company_id: string
@@ -6043,10 +6041,8 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },
 } as const
+
