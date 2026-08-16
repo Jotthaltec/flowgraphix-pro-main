@@ -42,6 +42,8 @@ De runtime — usadas pelas server functions dentro da Serverless Function:
   `SUPABASE_SERVICE_ROLE_KEY` continua aceita temporariamente para migração
 - `SUPABASE_PUBLISHABLE_KEY`
 - `ANTHROPIC_API_KEY`
+- `RESEND_API_KEY` e `RESEND_FROM` — envio de orçamentos e contratos ao cliente.
+  Ver [`deploy/resend/README.md`](../resend/README.md)
 
 ## Único destino de deploy
 
