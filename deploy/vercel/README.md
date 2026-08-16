@@ -43,12 +43,16 @@ De runtime — usadas pelas server functions dentro da Serverless Function:
 - `SUPABASE_PUBLISHABLE_KEY`
 - `ANTHROPIC_API_KEY`
 
-## Relação com o deploy da HostGator
+## Único destino de deploy
 
-Os dois destinos coexistem e saem do mesmo build. A tradução entre o `req`/`res`
-do Node e o contrato Web mora em [`deploy/shared/node-web-bridge.mjs`](../shared/node-web-bridge.mjs),
-usada tanto aqui quanto pelo `app.cjs` do Passenger — se mexer nela, mexe nos dois.
+O CRM sai só pela Vercel. Havia um segundo destino (Passenger na HostGator, por
+FTPS) que foi removido em 15/08/2026: o domínio e o subdomínio já apontavam para
+a Vercel, então aquele workflow publicava a cada push para um servidor que
+ninguém alcançava.
 
-Se você decidir ficar só na Vercel, dá para apagar
-[`.github/workflows/hostgator-deploy.yml`](../../.github/workflows/hostgator-deploy.yml)
-e [`deploy/hostgator/`](../hostgator/); o `shared/` continua sendo necessário.
+A tradução entre o `req`/`res` do Node e o contrato Web continua em
+[`deploy/shared/node-web-bridge.mjs`](../shared/node-web-bridge.mjs), separada do
+handler por ser a parte testável.
+
+Para ressuscitar o deploy da HostGator, o commit que o removeu traz o workflow e
+o `deploy/hostgator/` inteiros — basta revertê-lo.

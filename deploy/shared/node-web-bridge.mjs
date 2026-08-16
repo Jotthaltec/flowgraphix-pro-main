@@ -2,9 +2,11 @@
  * Ponte entre o `req`/`res` do Node e o contrato Web (`Request`/`Response`) que
  * o bundle SSR do TanStack Start expõe.
  *
- * Usada pelos dois destinos de deploy, para a tradução não divergir entre eles:
- *  - `deploy/hostgator/app.cjs` — Passenger na hospedagem compartilhada
- *  - `deploy/vercel/handler.mjs` — Serverless Function na Vercel
+ * Usada por `deploy/vercel/handler.mjs` — a Serverless Function na Vercel.
+ *
+ * Vivia em `shared/` porque havia um segundo destino (Passenger na HostGator,
+ * removido em 15/08/2026, quando o CRM passou a servir só pela Vercel). Segue
+ * separada do handler porque é a parte testável e sem dependência de runtime.
  */
 
 import { Readable } from "node:stream";
