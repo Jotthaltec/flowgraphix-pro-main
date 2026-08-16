@@ -22,8 +22,15 @@ import { importCombinationsFromProduct } from '@/services/combinationImporter';
 
 // Supabase server-side client (chaves não expostas ao frontend)
 function getServerSupabase() {
-  const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || '';
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+  if (!url || !key) {
+    throw new Error(
+      'Faltam SUPABASE_URL e/ou SUPABASE_SECRET_KEY (ou a chave legada SUPABASE_SERVICE_ROLE_KEY) nas variáveis de ambiente do servidor.',
+    );
+  }
+
   return createClient(url, key);
 }
 

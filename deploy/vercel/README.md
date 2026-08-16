@@ -38,7 +38,8 @@ com o Supabase:
 De runtime — usadas pelas server functions dentro da Serverless Function:
 
 - `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY` — sem ela o motor de combinações cai no anon e o RLS bloqueia
+- `SUPABASE_SECRET_KEY` — chave secreta moderna, somente no servidor; a antiga
+  `SUPABASE_SERVICE_ROLE_KEY` continua aceita temporariamente para migração
 - `SUPABASE_PUBLISHABLE_KEY`
 - `ANTHROPIC_API_KEY`
 

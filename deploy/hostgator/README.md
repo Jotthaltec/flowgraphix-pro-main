@@ -4,7 +4,7 @@ O workflow [`hostgator-deploy.yml`](../../.github/workflows/hostgator-deploy.yml
 a cada push na `main`: builda o app e envia o resultado por FTPS explícito (porta 21).
 
 Este CRM **não é um site estático**. É um app SSR (TanStack Start) com 19 server
-functions — o motor de combinações usa a `SUPABASE_SERVICE_ROLE_KEY` e o importador
+functions — o motor de combinações usa a `SUPABASE_SECRET_KEY` e o importador
 raspa a FuturaIM server-side. Por isso ele roda no **Configurar Aplicativo Node.js**
 do cPanel, e não solto em `public_html`.
 
@@ -34,7 +34,7 @@ tmp/restart.txt      mtime novo a cada deploy => Passenger reinicia sozinho
 3. Em **Environment variables**, adicione as chaves de runtime — elas **não** vêm
    do GitHub, ficam só aqui:
    - `SUPABASE_URL`
-   - `SUPABASE_SERVICE_ROLE_KEY` (sem ela o motor de combinações cai no anon e o RLS bloqueia)
+   - `SUPABASE_SECRET_KEY` (somente no servidor; nunca use prefixo `VITE_`)
    - `SUPABASE_PUBLISHABLE_KEY`
    - `ANTHROPIC_API_KEY`
    - `NODE_ENV=production`
