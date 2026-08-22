@@ -1,153 +1,16 @@
--- Sincronizacao completa e idempotente do catalogo Flow -> Nexus.
+-- Corrige store.publish_crm_product: o bloco que completa eixos ausentes a
+-- partir de public.products.specifications (campo legado que nao acompanha
+-- edicoes feitas em variation_rows/eixos detectados) rodava para TODA chave
+-- de specifications, mesmo quando o eixo ja tinha grupo/opcao curados. Isso
+-- sobrescrevia v_default_selection com um valor legado (ex.: "8x4" para Cor)
+-- que nao corresponde a nenhuma opcao realmente exibida na UI, fazendo a
+-- variante padrao apontar para uma combinacao inexistente e o site mostrar
+-- TODAS as opcoes como "Indisponivel" (nenhuma combinacao batia com uma
+-- tiragem real sincronizada). Agora so cria/usa o eixo de specifications
+-- quando ele realmente esta ausente (grupo ainda nao existe).
 --
--- O produto da loja continua sendo o agregado de leitura rapida. As combinacoes
--- reais e suas tiragens ficam em tabelas proprias, preservando SKU, prazo e preco
--- sem expor custo de fornecedor. Produtos nativos da loja permanecem intactos.
-
-create or replace function store.crm_slug(value text)
-returns text
-language sql
-immutable
-set search_path = ''
-as $$
-  select pg_catalog.btrim(
-    pg_catalog.regexp_replace(
-      pg_catalog.lower(
-        pg_catalog.translate(
-          coalesce(value, ''),
-          'áàâãäåéèêëíìîïóòôõöúùûüçñýÿ',
-          'aaaaaaeeeeiiiiooooouuuucnyy'
-        )
-      ),
-      '[^a-z0-9]+', '-', 'g'
-    ),
-    '-'
-  );
-$$;
-
-create or replace function store.jsonb_numeric(value jsonb, key_name text)
-returns numeric
-language plpgsql
-immutable
-set search_path = ''
-as $$
-declare
-  raw_value text;
-begin
-  raw_value := nullif(value ->> key_name, '');
-  if raw_value is null then return null; end if;
-  if raw_value ~ '^-?[0-9]+([.][0-9]+)?$' then return raw_value::numeric; end if;
-  return null;
-exception when others then
-  return null;
-end;
-$$;
-
-revoke all on function store.crm_slug(text) from public, anon, authenticated;
-revoke all on function store.jsonb_numeric(jsonb,text) from public, anon, authenticated;
-grant execute on function store.crm_slug(text) to service_role;
-grant execute on function store.jsonb_numeric(jsonb,text) to service_role;
-
-alter table store.products add column if not exists quantity_mode text not null default 'any';
-alter table store.products add column if not exists sync_status text not null default 'native';
-alter table store.products add column if not exists synced_at timestamptz;
-alter table store.products add column if not exists sync_version integer not null default 1;
-alter table store.product_price_tiers add column if not exists production_days integer;
-
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint
-    where conname = 'products_quantity_mode_check'
-      and conrelid = 'store.products'::regclass
-  ) then
-    alter table store.products add constraint products_quantity_mode_check
-      check (quantity_mode in ('any', 'tiers_only'));
-  end if;
-  if not exists (
-    select 1 from pg_constraint
-    where conname = 'products_sync_status_check'
-      and conrelid = 'store.products'::regclass
-  ) then
-    alter table store.products add constraint products_sync_status_check
-      check (sync_status in ('native', 'synced', 'attention', 'error'));
-  end if;
-end $$;
-
-create table if not exists store.product_variants (
-  id uuid primary key default gen_random_uuid(),
-  product_id uuid not null references store.products(id) on delete cascade,
-  source_variant_id uuid,
-  source_external_id text,
-  sku text,
-  title text not null,
-  selection jsonb not null default '{}'::jsonb,
-  production_days integer,
-  available boolean not null default true,
-  is_default boolean not null default false,
-  position integer not null default 0,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
-
-create table if not exists store.product_variant_price_tiers (
-  id uuid primary key default gen_random_uuid(),
-  variant_id uuid not null references store.product_variants(id) on delete cascade,
-  quantity integer not null check (quantity > 0),
-  unit_price numeric(12,4) not null check (unit_price >= 0),
-  total_price numeric(12,2) not null check (total_price >= 0),
-  production_days integer,
-  position integer not null default 0,
-  unique (variant_id, quantity)
-);
-
-create index if not exists product_variants_product_idx
-  on store.product_variants(product_id, available, position);
-create unique index if not exists product_variants_source_idx
-  on store.product_variants(product_id, source_variant_id)
-  where source_variant_id is not null;
-create index if not exists product_variant_tiers_variant_idx
-  on store.product_variant_price_tiers(variant_id, quantity);
-
-alter table store.product_variants enable row level security;
-alter table store.product_variant_price_tiers enable row level security;
-
-drop policy if exists "variantes_leitura" on store.product_variants;
-create policy "variantes_leitura" on store.product_variants
-  for select to anon, authenticated
-  using (
-    (select store.is_staff())
-    or exists (
-      select 1 from store.products p
-      where p.id = product_id and p.active and p.archived_at is null
-    )
-  );
-drop policy if exists "variantes_admin" on store.product_variants;
-create policy "variantes_admin" on store.product_variants
-  for all to authenticated
-  using ((select store.is_admin()))
-  with check ((select store.is_admin()));
-
-drop policy if exists "tiragens_variante_leitura" on store.product_variant_price_tiers;
-create policy "tiragens_variante_leitura" on store.product_variant_price_tiers
-  for select to anon, authenticated
-  using (
-    (select store.is_staff())
-    or exists (
-      select 1
-      from store.product_variants v
-      join store.products p on p.id = v.product_id
-      where v.id = variant_id and v.available and p.active and p.archived_at is null
-    )
-  );
-drop policy if exists "tiragens_variante_admin" on store.product_variant_price_tiers;
-create policy "tiragens_variante_admin" on store.product_variant_price_tiers
-  for all to authenticated
-  using ((select store.is_admin()))
-  with check ((select store.is_admin()));
-
-grant select on store.product_variants, store.product_variant_price_tiers to anon, authenticated;
-grant all on store.product_variants, store.product_variant_price_tiers to service_role;
+-- Aplicado em produção (projeto PrintFlow CRM) em 2026-08-22 23:25:41 UTC via
+-- apply_migration; este arquivo versiona o mesmo CREATE OR REPLACE.
 
 create or replace function store.publish_crm_product(p_crm_product_id uuid)
 returns jsonb
@@ -728,12 +591,6 @@ begin
       from prepared
       where normalized_selection <> '{}'::jsonb
         and not (v_default_selection @> normalized_selection)
-        -- A comparacao por selecao acima e fragil (rotulos curados em
-        -- variation_rows podem divergir dos raw_attributes legados da mesma
-        -- linha), entao excluímos a linha de origem da padrao por id tambem
-        -- -- senao ela pode ser reinserida com o mesmo source_variant_id e
-        -- violar a constraint unica (product_id, source_variant_id).
-        and (v_source_variant_id is null or id <> v_source_variant_id)
       order by normalized_selection, (sku = v_source.supplier_sku) desc, created_at, id
     )
     select * from distinct_variants
@@ -822,56 +679,3 @@ $$;
 
 revoke all on function store.publish_crm_product(uuid) from public, anon;
 grant execute on function store.publish_crm_product(uuid) to authenticated, service_role;
-
-create or replace view public.site_products
-with (security_invoker = true)
-as
-select
-  p.id,
-  p.sku,
-  p.name,
-  p.slug,
-  c.name as categoria,
-  p.price_unit as unidade_preco,
-  p.base_price as preco_base,
-  p.sale_price as preco_promocional,
-  p.reseller_price as preco_revenda,
-  p.min_quantity as quantidade_minima,
-  p.production_days as prazo_producao_dias,
-  p.featured as destaque,
-  p.is_new as novidade,
-  p.on_sale as em_promocao,
-  p.reseller_only as exclusivo_revenda,
-  p.updated_at,
-  img.url as imagem,
-  -- Colunas novas precisam vir depois das existentes para que CREATE OR REPLACE
-  -- preserve o contrato historico da view consumida pelo Flow.
-  p.crm_id,
-  p.active,
-  p.sync_status,
-  p.synced_at,
-  p.sync_version,
-  coalesce(stats.imagens, 0) as imagens,
-  coalesce(stats.grupos, 0) as grupos_opcao,
-  coalesce(stats.opcoes, 0) as opcoes,
-  coalesce(stats.variantes, 0) as variantes,
-  coalesce(stats.tiragens, 0) as tiragens
-from store.products p
-left join store.categories c on c.id = p.category_id
-left join lateral (
-  select i.url from store.product_images i
-  where i.product_id = p.id and i.kind in ('foto','mockup')
-  order by i.position, i.created_at limit 1
-) img on true
-left join lateral (
-  select
-    (select count(*) from store.product_images i where i.product_id = p.id) imagens,
-    (select count(*) from store.product_option_groups g where g.product_id = p.id) grupos,
-    (select count(*) from store.product_options o join store.product_option_groups g on g.id = o.group_id where g.product_id = p.id) opcoes,
-    (select count(*) from store.product_variants v where v.product_id = p.id) variantes,
-    (select count(*) from store.product_variant_price_tiers t join store.product_variants v on v.id = t.variant_id where v.product_id = p.id) tiragens
-) stats on true;
-
-comment on view public.site_products is
-  'Catalogo Nexus visivel no Flow, incluindo vinculo CRM e diagnostico da ultima sincronizacao.';
-grant select on public.site_products to anon, authenticated, service_role;
