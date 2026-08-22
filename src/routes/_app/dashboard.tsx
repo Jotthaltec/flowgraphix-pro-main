@@ -12,6 +12,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { isCivilDatePast } from "@/lib/date";
 
 export const Route = createFileRoute("/_app/dashboard")({
   component: DashboardPage,
@@ -68,7 +69,7 @@ function DashboardPage() {
 
       let orcamentosAbertos = quotes?.filter(q => !['aprovado', 'recusado', 'convertido_pedido'].includes(q.status || '')).length || 0;
       let pedidosProducao = orders?.filter(o => !['entregue', 'cancelado'].includes(o.production_status || '')).length || 0;
-      let pedidosAtrasados = orders?.filter(o => o.deadline && new Date(o.deadline) < now && !['entregue'].includes(o.production_status || '')).length || 0;
+      let pedidosAtrasados = orders?.filter(o => o.deadline && isCivilDatePast(o.deadline) && !['entregue'].includes(o.production_status || '')).length || 0;
 
       // Calculate Sales Chart (Monthly)
       const salesByMonth = Array(12).fill(0);

@@ -63,6 +63,25 @@ type Product = {
   active: boolean | null;
 };
 
+type StoreSync = {
+  crm_id: string | null;
+  slug: string;
+  sync_status: "native" | "synced" | "attention" | "error";
+  synced_at: string | null;
+  imagens: number;
+  grupos_opcao: number;
+  opcoes: number;
+  variantes: number;
+  tiragens: number;
+};
+
+type PublishResult = {
+  action: "insert" | "update";
+  sync_status: "synced" | "attention";
+  counts: { images: number; option_groups: number; options: number; variants: number; tiers: number };
+  warnings: string[];
+};
+
 const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
 function getOriginBadge(origin: string | null, type: string | null, imported_from_supplier?: boolean | null) {
@@ -87,27 +106,40 @@ function ProdutosPage() {
   const { data: dbProducts, isLoading, isError, error } = useQuery({
     queryKey: ["products"],
     queryFn: async () => {
-      console.log("Iniciando busca de produtos no Supabase...");
       const { data, error } = await supabase
         .from("products")
         .select("*")
         .order("created_at", { ascending: false });
       
       if (error) {
-        console.error("Erro na busca de produtos no Supabase:", error);
         throw error;
       }
       
-      console.log("Produtos recebidos do Supabase:", data);
       const mapped = (data || []).map(p => ({
         ...p,
         active: p.status === 'Ativo' || p.status === null
       })) as Product[];
-      console.log("Produtos mapeados:", mapped);
       return mapped;
     },
     enabled: !!profile,
   });
+
+  const { data: storeProducts } = useQuery({
+    queryKey: ["site_products"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("site_products")
+        .select("crm_id,slug,sync_status,synced_at,imagens,grupos_opcao,opcoes,variantes,tiragens");
+      if (error) throw error;
+      return (data ?? []) as StoreSync[];
+    },
+    enabled: !!profile,
+  });
+
+  const storeByCrmId = useMemo(
+    () => new Map((storeProducts ?? []).filter((item) => item.crm_id).map((item) => [item.crm_id as string, item])),
+    [storeProducts],
+  );
 
   // Busca itens do Hub de Fornecedores (supplier_imports)
   const { data: hubCatalogItems, isLoading: isHubLoading } = useQuery({
@@ -368,6 +400,32 @@ function ProdutosPage() {
     }
   });
 
+  const publishToStoreMutation = useMutation({
+    mutationFn: async (product: Product) => {
+      const { data, error } = await (supabase as any)
+        .schema("store")
+        .rpc("publish_crm_product", { p_crm_product_id: product.id });
+      if (error) throw error;
+      return data as PublishResult;
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["site_products"] });
+      const c = result.counts;
+      const summary = `${c.images} mídia(s), ${c.option_groups} grupo(s), ${c.options} opção(ões), ${c.variants} variante(s) e ${c.tiers} tiragem(ns).`;
+      const message = result.action === "insert"
+        ? "Produto publicado e validado na loja Nexus."
+        : "Produto atualizado e validado na loja Nexus.";
+      if (result.warnings?.length) {
+        toast.warning(message, { description: `${summary} ${result.warnings.join(" ")}` });
+      } else {
+        toast.success(message, { description: summary });
+      }
+    },
+    onError: (err: Error) => {
+      toast.error("Falha ao publicar na loja: " + err.message);
+    },
+  });
+
   const generateCombinationsMutation = useMutation({
     mutationFn: async (product: Product) => {
       const { data: userData } = await supabase.auth.getUser();
@@ -469,7 +527,7 @@ function ProdutosPage() {
   }
 
   function handleGenerateQuote(product: Product) {
-    navigate({ to: "/orcamentos", search: { selectProductId: product.id } });
+    navigate({ to: "/novo-orcamento", search: { productId: product.id } });
   }
 
   return (
@@ -616,6 +674,7 @@ function ProdutosPage() {
                 const marginVal = Number(p.margin_percent || p.target_margin || 0);
                 const skuDisplay = p.internal_sku || p.supplier_sku || "—";
                 const isMarginValid = !isNaN(marginVal);
+                const storeSync = storeByCrmId.get(p.id);
 
                 let formattedCost = "R$ 0,00";
                 try {
@@ -655,6 +714,16 @@ function ProdutosPage() {
                             <Truck className="h-2.5 w-2.5" /> {p.supplier_name}
                           </span>
                         )}
+                        {storeSync ? (
+                          <span className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+                            <StatusBadge variant={storeSync.sync_status === "synced" ? "success" : "warning"}>
+                              {storeSync.sync_status === "synced" ? "Loja sincronizada" : "Loja com atenção"}
+                            </StatusBadge>
+                            <span className="text-muted-foreground">
+                              {storeSync.imagens} mídia(s) · {storeSync.opcoes} opção(ões) · {storeSync.tiragens} tiragem(ns)
+                            </span>
+                          </span>
+                        ) : null}
                       </div>
                     </TableCell>
                     {/* Origem */}
@@ -697,6 +766,12 @@ function ProdutosPage() {
                           <DropdownMenuSeparator />
                           <DropdownMenuItem onClick={() => handleGenerateQuote(p)}>
                             <FilePlus2 className="h-4 w-4 mr-2" /> Gerar Orçamento
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => publishToStoreMutation.mutate(p)}
+                            disabled={publishToStoreMutation.isPending}
+                          >
+                            <Store className="h-4 w-4 mr-2" /> {storeSync ? "Ressincronizar loja" : "Publicar na loja"}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setMarketplaceProduct(p)}>
                             <Store className="h-4 w-4 mr-2" /> Rascunho Marketplace

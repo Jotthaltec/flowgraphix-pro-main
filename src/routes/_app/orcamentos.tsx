@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Search, MoreVertical, Loader2, FilePlus2, CheckCircle2, XCircle, FileSignature, Package, Truck, Tag, ChevronDown, X } from "lucide-react";
+import { Search, MoreVertical, Loader2, FilePlus2, CheckCircle2, XCircle, Package, Truck, Tag, ChevronDown, X } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,8 +16,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { createPurchaseOrdersForOrder } from "@/lib/purchase-orders";
-import { generateProductionOrderFromQuote } from "@/services/production";
 
 export const Route = createFileRoute("/_app/orcamentos")({
   component: OrcamentosPage,
@@ -70,6 +68,7 @@ function OrcamentosPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const autoOpenedRef = useRef(false);
+  const modalQuoteKey = useRef(`flow-quick-quote:${crypto.randomUUID()}`);
 
   // Estado do formulário
   const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
@@ -116,7 +115,12 @@ function OrcamentosPage() {
   const { data: clients } = useQuery({
     queryKey: ["clients_list"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("clients").select("id, name").order("name");
+      const { data, error } = await (supabase as any)
+        .schema("store")
+        .from("customers")
+        .select("id, name")
+        .eq("active", true)
+        .order("name");
       if (error) throw error;
       return data;
     },
@@ -148,16 +152,30 @@ function OrcamentosPage() {
   const { data: quotes, isLoading } = useQuery({
     queryKey: ["quotes"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
+        .schema("store")
         .from("quotes")
         .select(`
           *,
-          clients:client_id (name)
+          clients:customer_id (name),
+          quote_items (description, quantity, internal_cost)
         `)
         .order("created_at", { ascending: false });
       
       if (error) throw error;
-      return data;
+      return (data ?? []).map((quote: any) => ({
+        ...quote,
+        quote_number: quote.number,
+        client_id: quote.customer_id,
+        service_desc: quote.title || quote.quote_items?.map((item: any) => item.description).join(", ") || "Orçamento",
+        quantity: quote.quote_items?.reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0) || 0,
+        final_value: Number(quote.total || 0),
+        cost_value: quote.quote_items?.reduce(
+          (sum: number, item: any) => sum + Number(item.internal_cost || 0) * Number(item.quantity || 0),
+          0,
+        ) || 0,
+        status: quote.status === "convertido" ? "convertido_pedido" : quote.status,
+      }));
     },
     enabled: !!profile,
   });
@@ -166,14 +184,15 @@ function OrcamentosPage() {
   const { data: quoteItemsMap } = useQuery({
     queryKey: ["quote_items_all"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
+        .schema("store")
         .from("quote_items")
-        .select("quote_id, source_origin, item_name");
+        .select("quote_id, source_origin, description");
       if (error) throw error;
       const map: Record<string, { source_origin: string; item_name: string }[]> = {};
       data?.forEach(item => {
         if (!map[item.quote_id]) map[item.quote_id] = [];
-        map[item.quote_id].push(item);
+        map[item.quote_id].push({ ...item, item_name: item.description });
       });
       return map;
     },
@@ -251,59 +270,37 @@ function OrcamentosPage() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
-      
-      if (!profileData?.company_id) throw new Error("Empresa não identificada.");
-
-      // Gerar número do orçamento
-      const { count } = await supabase.from("quotes").select("*", { count: "exact", head: true });
-      const qNum = `ORC-${String((count || 0) + 1).padStart(6, '0')}`;
-
-      // 1. Insere o orçamento na tabela quotes
-      const { data: insertedQuote, error: quoteError } = await supabase.from("quotes").insert([{ 
-        company_id: profileData.company_id,
-        client_id: data.client_id || null,
-        quote_number: qNum,
-        service_desc: data.service_desc,
-        quantity: data.quantity,
-        cost_value: data.cost_value * data.quantity,
-        sale_price: data.sale_price * data.quantity,
-        margin_percentage: data.margin_percentage,
-        discount: data.discount,
-        final_value: data.final_value,
-        notes: data.notes || null,
-        status: data.status
-      }]).select("id").single();
-
-      if (quoteError) throw quoteError;
-
-      // 2. Insere o item do orçamento na tabela quote_items (snapshot do produto)
-      if (insertedQuote) {
-        const totalPrice = (data.sale_price || 0) * (data.quantity || 1);
-        const { error: itemError } = await supabase.from("quote_items").insert([{
-          quote_id: insertedQuote.id,
-          product_service_id: selectedProduct?.id || null,
-          item_name: data.service_desc,
-          description: data.notes || null,
+      if (!data.client_id) throw new Error("Selecione o cliente.");
+      const { error } = await (supabase as any).schema("store").rpc("create_quote", {
+        p_quote: {
+          customer_id: data.client_id,
+          title: data.service_desc,
+          discount_total: data.discount,
+          notes: data.notes || null,
+          source: "flow",
+        },
+        p_items: [{
+          product_id: selectedProduct?.id || null,
+          description: data.service_desc,
+          detail: data.notes || null,
           quantity: data.quantity,
           unit_price: data.sale_price,
-          total_price: totalPrice,
-          cost_price: data.cost_value,
-          margin_percent: data.margin_percentage,
-          supplier_id: selectedProduct?.supplier_id || null,
+          base_price: data.sale_price,
+          internal_cost: data.cost_value,
           source_origin: selectedProduct?.origin || "manual",
-          notes: selectedProduct ? `SKU: ${selectedProduct.internal_sku || selectedProduct.supplier_sku || "N/A"}` : null,
-        }]);
-        if (itemError) {
-          console.error("Erro ao criar item do orçamento:", itemError);
-          // Não lança exceção para não bloquear o fluxo principal
-        }
-      }
+          production_days: Number.parseInt(selectedProduct?.production_deadline || "3", 10) || 3,
+          position: 0,
+          options: {},
+        }],
+        p_idempotency_key: modalQuoteKey.current,
+      });
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quotes"] });
       queryClient.invalidateQueries({ queryKey: ["quote_items_all"] });
       toast.success("Orçamento gerado com sucesso!");
+      modalQuoteKey.current = `flow-quick-quote:${crypto.randomUUID()}`;
       setIsModalOpen(false);
       resetForm();
       // Limpa o query param
@@ -316,147 +313,38 @@ function OrcamentosPage() {
 
   const statusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string, status: string }) => {
-      const { error } = await supabase.from("quotes").update({ status }).eq("id", id);
-      if (error) throw error;
-
-      if (status === 'aprovado') {
-        const { data: profileData } = await supabase.from('profiles').select('company_id, user_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
-        if (profileData?.company_id && profileData?.user_id) {
-          try {
-            const opResult = await generateProductionOrderFromQuote(id, profileData.company_id, profileData.user_id);
-            return { converted: false as const, status, opResult };
-          } catch (e) {
-            console.error("Falha ao gerar Ordem de Produção:", e);
-          }
-        }
+      if (status === "convertido_pedido") {
+        const { data, error } = await (supabase as any)
+          .schema("store")
+          .rpc("convert_quote_to_order", { p_quote_id: id });
+        if (error) throw error;
+        return { converted: true as const, reused: Boolean(data?.reused), number: data?.number as string };
       }
 
-      if (status !== 'convertido_pedido') {
-        return { converted: false as const, status };
-      }
-
-      // Conversão real em pedido. Evita duplicar caso já exista pedido para este orçamento.
-      const { data: existingOrder } = await supabase
-        .from("orders")
-        .select("id")
-        .eq("quote_id", id)
-        .maybeSingle();
-      if (existingOrder?.id) {
-        return { converted: true as const, alreadyExisted: true };
-      }
-
-      // Carrega o orçamento completo para montar o pedido.
-      const { data: quote, error: qErr } = await supabase
+      const canonicalStatus = status === "aguardando_cliente" ? "enviado" : status;
+      const { error } = await (supabase as any)
+        .schema("store")
         .from("quotes")
-        .select("*")
-        .eq("id", id)
-        .single();
-      if (qErr) throw qErr;
-      if (!quote.client_id) {
-        throw new Error("Defina um cliente no orçamento antes de convertê-lo em pedido.");
-      }
-
-      // Numeração sequencial coerente com a aba Pedidos (PED-000000).
-      const { count } = await supabase.from("orders").select("*", { count: "exact", head: true });
-      const oNum = `PED-${String((count || 0) + 1).padStart(6, '0')}`;
-      const deadline =
-        quote.deadline ||
-        quote.valid_until ||
-        new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-      const { data: newOrder, error: orderErr } = await supabase.from("orders").insert([{
-        company_id: quote.company_id,
-        client_id: quote.client_id,
-        quote_id: quote.id,
-        order_number: oNum,
-        product_desc: quote.quantity ? `${quote.service_desc} (x${quote.quantity})` : quote.service_desc,
-        total_value: quote.final_value,
-        deadline,
-        priority: "normal",
-        payment_status: 'nao_pago',
-        production_status: 'pedido_criado',
-      }]).select("id").single();
-      if (orderErr) throw orderErr;
-
-      // Fase 4 — gera pedidos de compra por fornecedor (itens do orçamento com supplier_id).
-      // Não bloqueia a conversão: se falhar, o pedido do cliente segue criado.
-      let purchaseOrders = 0;
-      try {
-        const po = await createPurchaseOrdersForOrder({
-          companyId: quote.company_id,
-          quoteId: quote.id,
-          orderId: newOrder.id,
-        });
-        purchaseOrders = po.created;
-      } catch (e) {
-        console.error("Falha ao gerar pedidos de compra:", e);
-      }
-
-      return { converted: true as const, alreadyExisted: false, purchaseOrders };
+        .update({ status: canonicalStatus })
+        .eq("id", id);
+      if (error) throw error;
+      return { converted: false as const, status: canonicalStatus };
     },
     onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: ["quotes"] });
       if (result.converted) {
         queryClient.invalidateQueries({ queryKey: ["orders"] });
-        if (result.alreadyExisted) {
-          toast.success("Este orçamento já possuía um pedido. Abrindo a fila de Pedidos...");
-        } else {
-          queryClient.invalidateQueries({ queryKey: ["purchase_orders"] });
-          const poCount = result.purchaseOrders ?? 0;
-          const poMsg = poCount > 0
-            ? ` ${poCount} pedido(s) de compra ao fornecedor gerado(s).`
-            : "";
-          toast.success(`Pedido criado a partir do orçamento! Produção e Financeiro atualizados.${poMsg}`);
-        }
+        toast.success(
+          result.reused
+            ? `Este orçamento já gerou o pedido ${result.number}.`
+            : `Pedido ${result.number} criado com pagamento e financeiro vinculados.`,
+        );
         navigate({ to: "/pedidos" });
       } else {
-        if (result.status === 'aprovado' && result.opResult) {
-          toast.success(`Orçamento aprovado! Ordem de Produção ${result.opResult.order_number} gerada.`, { duration: 5000 });
-        } else {
-          toast.success(`Orçamento marcado como ${variables.status.replace("_", " ")}`);
-        }
+        toast.success(`Orçamento marcado como ${variables.status.replace("_", " ")}`);
       }
     },
     onError: (err) => toast.error("Erro ao alterar: " + err.message)
-  });
-
-  // Gera um contrato real a partir de um orçamento aprovado (linkado por quote_id).
-  const contractMutation = useMutation({
-    mutationFn: async (q: any) => {
-      if (!q.client_id) {
-        throw new Error("Defina um cliente no orçamento antes de gerar o contrato.");
-      }
-      // Um contrato por orçamento.
-      const { data: existing } = await supabase
-        .from("contracts").select("id").eq("quote_id", q.id).maybeSingle();
-      if (existing?.id) return { alreadyExisted: true as const };
-
-      const { count } = await supabase.from("contracts").select("*", { count: "exact", head: true });
-      const cNum = `CTR-${String((count || 0) + 1).padStart(6, '0')}`;
-
-      const { error } = await supabase.from("contracts").insert([{
-        company_id: q.company_id,
-        client_id: q.client_id,
-        quote_id: q.id,
-        contract_number: cNum,
-        total_value: q.final_value,
-        down_payment: 0,
-        delivery_date: q.deadline || q.valid_until || null,
-        status: "rascunho",
-        notes: q.service_desc,
-        approval_terms: "1. O contratante concorda com as artes enviadas.\n2. Cancelamentos terão multa de 20%.\n3. O prazo inicia após a aprovação da arte final e pagamento da entrada.",
-      }]);
-      if (error) throw error;
-      return { alreadyExisted: false as const };
-    },
-    onSuccess: (r) => {
-      queryClient.invalidateQueries({ queryKey: ["contracts"] });
-      toast.success(r.alreadyExisted
-        ? "Este orçamento já possuía contrato. Abrindo Contratos..."
-        : "Contrato gerado a partir do orçamento!");
-      navigate({ to: "/contratos" });
-    },
-    onError: (err: any) => toast.error("Erro ao gerar contrato: " + err.message),
   });
 
   function resetForm() {
@@ -580,12 +468,6 @@ function OrcamentosPage() {
                         onClick={() => statusMutation.mutate({ id: q.id, status: 'convertido_pedido' })}
                       >
                         <FilePlus2 className="h-4 w-4 mr-2" /> Converter p/ Pedido
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={q.status !== 'aprovado' || contractMutation.isPending}
-                        onClick={() => contractMutation.mutate(q)}
-                      >
-                        <FileSignature className="h-4 w-4 mr-2" /> Gerar Contrato
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

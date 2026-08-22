@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
+import { readQuantityPricingRows, writeQuantityPricingRows } from "@/lib/product-quantity-pricing";
 import {
   Sheet, SheetContent,
 } from "@/components/ui/sheet";
@@ -187,13 +188,9 @@ function fromProduct(p: any): FormState {
   }
   // tabela de quantidade: lê da coluna real quantity_prices (compatível com marketplace modal)
   const qp = Array.isArray(p.quantity_prices) ? p.quantity_prices : [];
-  f.qty_rows = qp.map((q: any) => ({
+  f.qty_rows = readQuantityPricingRows(qp).map((q) => ({
     id: uid(),
-    quantity: num(q.quantity),
-    unitCost: num(q.price ?? q.unitCost),
-    unitPrice: num(q.sellPrice ?? q.unitPrice ?? q.price),
-    deadline: q.deadline || "",
-    active: q.active !== false,
+    ...q,
   }));
 
   f.supplier_id = p.supplier_id || "";
@@ -430,13 +427,7 @@ export function ProductEditor({
       };
 
       // tabela de quantidade -> coluna real (compatível com o modal de marketplace)
-      const quantity_prices = f.qty_rows
-        .filter((r) => num(r.quantity) > 0)
-        .map((r) => ({
-          quantity: num(r.quantity), price: num(r.unitCost),
-          unitPrice: num(r.unitPrice), sellPrice: num(r.unitPrice),
-          total: num(r.unitPrice) * num(r.quantity), deadline: r.deadline, active: r.active,
-        }));
+      const quantity_prices = writeQuantityPricingRows(f.qty_rows);
 
       const corePayload: any = {
         company_id,

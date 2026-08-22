@@ -5727,14 +5727,19 @@ export type Database = {
     Views: {
       site_products: {
         Row: {
+          active: boolean | null
           categoria: string | null
+          crm_id: string | null
           destaque: boolean | null
           em_promocao: boolean | null
           exclusivo_revenda: boolean | null
           id: string | null
           imagem: string | null
+          imagens: number | null
           name: string | null
           novidade: boolean | null
+          opcoes: number | null
+          grupos_opcao: number | null
           prazo_producao_dias: number | null
           preco_base: number | null
           preco_promocional: number | null
@@ -5742,8 +5747,13 @@ export type Database = {
           quantidade_minima: number | null
           sku: string | null
           slug: string | null
+          sync_status: string | null
+          synced_at: string | null
+          sync_version: number | null
+          tiragens: number | null
           unidade_preco: string | null
           updated_at: string | null
+          variantes: number | null
         }
         Relationships: []
       }

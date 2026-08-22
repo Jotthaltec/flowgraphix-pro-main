@@ -29,6 +29,7 @@ export const Route = createFileRoute("/_app/produtos-site")({ component: Produto
 /** Espelha a view public.site_products. */
 type SiteProduct = {
   id: string;
+  crm_id: string | null;
   sku: string;
   name: string;
   slug: string;
@@ -45,6 +46,14 @@ type SiteProduct = {
   exclusivo_revenda: boolean;
   updated_at: string;
   imagem: string | null;
+  active: boolean;
+  sync_status: "native" | "synced" | "attention" | "error";
+  synced_at: string | null;
+  imagens: number;
+  grupos_opcao: number;
+  opcoes: number;
+  variantes: number;
+  tiragens: number;
 };
 
 const LOJA_URL = import.meta.env.VITE_LOJA_URL ?? "http://localhost:3000";
@@ -67,7 +76,7 @@ function ProdutosSitePage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["site_products"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("site_products").select("*").order("name");
+      const { data, error } = await supabase.from("site_products").select("*").eq("active", true).order("name");
       if (error) throw error;
       return (data ?? []) as SiteProduct[];
     },
@@ -202,7 +211,17 @@ function ProdutosSitePage() {
                         {p.exclusivo_revenda ? (
                           <StatusBadge variant="muted">Só revenda</StatusBadge>
                         ) : null}
+                        {p.crm_id ? (
+                          <StatusBadge variant={p.sync_status === "synced" ? "success" : "warning"}>
+                            {p.sync_status === "synced" ? "Flow sincronizado" : "Revisar sincronização"}
+                          </StatusBadge>
+                        ) : null}
                       </div>
+                      {p.crm_id ? (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {p.imagens} mídia(s) · {p.grupos_opcao} grupo(s) · {p.opcoes} opção(ões) · {p.variantes} variante(s) · {p.tiragens} tiragem(ns)
+                        </div>
+                      ) : null}
                     </TableCell>
 
                     <TableCell className="hidden md:table-cell text-sm">

@@ -33,7 +33,7 @@ function SignupPage() {
       password: form.password,
       options: {
         emailRedirectTo: `${window.location.origin}/dashboard`,
-        data: { full_name: form.name, company_name: form.company },
+        data: { app_origin: "flow", full_name: form.name, company_name: form.company },
       },
     });
     setLoading(false);

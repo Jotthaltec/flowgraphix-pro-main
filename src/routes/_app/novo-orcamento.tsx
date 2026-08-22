@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -17,13 +17,17 @@ import {
 } from "lucide-react";
 import { QuoteItemBuilder, QuoteItemData } from "@/components/quotes/quote-item-builder";
 
-export const Route = createFileRoute("/_app/novo-orcamento")({ component: NovoOrcamentoPage });
+export const Route = createFileRoute("/_app/novo-orcamento")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    productId: typeof search.productId === "string" && search.productId.trim() ? search.productId : undefined,
+  }),
+  component: NovoOrcamentoPage,
+});
 
 const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
-const db = supabase as any;
-
 function NovoOrcamentoPage() {
+  const { productId } = Route.useSearch();
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -39,12 +43,18 @@ function NovoOrcamentoPage() {
 
   // Step 3: Discount
   const [globalDiscount, setGlobalDiscount] = useState(0);
+  const idempotencyKey = useRef(`flow-quote:${crypto.randomUUID()}`);
 
   // Buscar clientes
   const { data: clients } = useQuery({
     queryKey: ["clients_list_quote"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("clients").select("id, name, email, whatsapp").order("name");
+      const { data, error } = await (supabase as any)
+        .schema("store")
+        .from("customers")
+        .select("id, name, email, phone")
+        .eq("active", true)
+        .order("name");
       if (error) throw error;
       return data;
     },
@@ -63,87 +73,65 @@ function NovoOrcamentoPage() {
   // Mutation: Salvar
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
-      if (!profileData?.company_id) throw new Error("Empresa não identificada.");
-
-      // Número sequencial
-      const { count } = await supabase.from("quotes").select("*", { count: "exact", head: true });
-      const qNum = `ORC-${String((count || 0) + 1).padStart(6, '0')}`;
-
       const validUntil = new Date();
       validUntil.setDate(validUntil.getDate() + validUntilDays);
-
-      // 1. Inserir o orçamento
-      const { data: insertedQuote, error: quoteError } = await (db).from("quotes").insert([{
-        company_id: profileData.company_id,
-        client_id: clientId || null,
-        quote_number: qNum,
-        service_desc: items.map(i => i.product_name).join(", "),
-        quantity: items.reduce((s, i) => s + i.quantity, 0),
-        cost_value: subtotalCost,
-        sale_price: subtotalPrice,
-        margin_percentage: globalMargin,
-        discount: globalDiscount,
-        final_value: finalValue,
-        notes: notes || null,
-        status: "rascunho",
-        valid_until: validUntil.toISOString().split('T')[0],
-        delivery_days: deliveryDays,
-      }]).select("id").single();
-
-      if (quoteError) throw quoteError;
-
-      // 2. Inserir os itens do orçamento
-      if (insertedQuote) {
-        const itemsPayload = items.map(item => ({
-          quote_id: insertedQuote.id,
-          product_service_id: item.product_id || null,
-          item_name: item.product_name,
-          description: item.notes || null,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          total_price: item.total_price,
-          cost_price: item.is_supplier
-            ? item.unit_cost
-            : item.unit_cost + Object.values(item.attribute_price_impacts).reduce((s, v) => s + (v || 0), 0),
-          margin_percent: item.margin_percent,
-          supplier_id: item.supplier_id || null,
-          source_origin: item.supplier_id || item.is_supplier ? "supplier_import" : "manual",
-          notes: item.notes || null,
-          item_attributes: {
-            values: item.attributes,
-            price_impacts: item.attribute_price_impacts,
-            // Snapshot da configuração no momento do orçamento (seção 19): trava
-            // custo/preço/prazo/opções usados, para uma atualização futura do
-            // fornecedor não alterar silenciosamente um orçamento já enviado.
-            snapshot: {
-              is_supplier: !!item.is_supplier,
-              unit_cost: item.unit_cost,
-              unit_price: item.unit_price,
-              quantity: item.quantity,
-              production_deadline: item.production_deadline || null,
-              source_url: item.source_url || null,
-              selection: item.selection_snapshot || {},
-              override_cost: item.override_unit_cost ?? null,
-              captured_at: new Date().toISOString(),
-              family_id: item.family_id || null,
-              combination_calc: item.calc_snapshot || null,
-            },
+      const validUntilCivil = [
+        validUntil.getFullYear(),
+        String(validUntil.getMonth() + 1).padStart(2, "0"),
+        String(validUntil.getDate()).padStart(2, "0"),
+      ].join("-");
+      const itemsPayload = items.map((item, position) => ({
+        product_id: item.product_id,
+        description: item.product_name,
+        detail: item.notes || null,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        base_price: item.unit_price,
+        internal_cost: item.is_supplier
+          ? item.unit_cost
+          : item.unit_cost + Object.values(item.attribute_price_impacts).reduce((sum, value) => sum + (value || 0), 0),
+        source_origin: item.supplier_id || item.is_supplier ? "supplier_import" : "manual",
+        production_days: Number.parseInt(item.production_deadline || "3", 10) || 3,
+        position,
+        options: {
+          values: item.attributes,
+          price_impacts: item.attribute_price_impacts,
+          snapshot: {
+            is_supplier: !!item.is_supplier,
+            unit_cost: item.unit_cost,
+            unit_price: item.unit_price,
+            quantity: item.quantity,
+            production_deadline: item.production_deadline || null,
+            source_url: item.source_url || null,
+            selection: item.selection_snapshot || {},
+            override_cost: item.override_unit_cost ?? null,
+            captured_at: new Date().toISOString(),
+            family_id: item.family_id || null,
+            combination_calc: item.calc_snapshot || null,
           },
-        }));
-
-        const { error: itemsError } = await (db).from("quote_items").insert(itemsPayload);
-        if (itemsError) {
-          console.error("Erro ao salvar itens:", itemsError);
-        }
-      }
-
-      return { quoteNumber: qNum };
+        },
+      }));
+      const { data, error } = await (supabase as any).schema("store").rpc("create_quote", {
+        p_quote: {
+          customer_id: clientId,
+          title: items.map((item) => item.product_name).join(", "),
+          discount_total: globalDiscount,
+          delivery_days: deliveryDays,
+          valid_until: validUntilCivil,
+          notes: notes || null,
+          source: "flow",
+        },
+        p_items: itemsPayload,
+        p_idempotency_key: idempotencyKey.current,
+      });
+      if (error) throw error;
+      return { quoteNumber: data.number as string };
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["quotes"] });
       queryClient.invalidateQueries({ queryKey: ["quote_items_all"] });
       toast.success(`Orçamento ${result.quoteNumber} criado com sucesso!`);
+      idempotencyKey.current = `flow-quote:${crypto.randomUUID()}`;
       navigate({ to: "/orcamentos", search: { selectProductId: undefined } });
     },
     onError: (err) => toast.error("Erro ao gerar: " + err.message)
@@ -182,7 +170,7 @@ function NovoOrcamentoPage() {
                         <SelectItem key={c.id} value={c.id}>
                           <div className="flex items-center gap-2">
                             <span>{c.name}</span>
-                            {c.whatsapp && <span className="text-[10px] text-muted-foreground">({c.whatsapp})</span>}
+                            {c.phone && <span className="text-[10px] text-muted-foreground">({c.phone})</span>}
                           </div>
                         </SelectItem>
                       ))}
@@ -229,7 +217,7 @@ function NovoOrcamentoPage() {
               </div>
             </div>
 
-            <QuoteItemBuilder items={items} onItemsChange={setItems} />
+            <QuoteItemBuilder items={items} onItemsChange={setItems} initialProductId={productId} />
           </CardContent>
         </Card>
 

@@ -1,7 +1,10 @@
 -- Etapa 4: Schema Inicial do PrintFlow CRM V1
 
 -- Tabelas core
-create table companies (
+-- `companies` e `profiles` já nascem na migração 20260509020821. Este arquivo
+-- amplia o domínio; recriá-las fazia o replay do histórico falhar antes de
+-- chegar às tabelas operacionais.
+create table if not exists companies (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   cnpj text,
@@ -17,7 +20,7 @@ create table companies (
   created_at timestamptz default now()
 );
 
-create table profiles (
+create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   company_id uuid references companies(id) on delete cascade,
   full_name text not null,

@@ -14,13 +14,44 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Loader2, Send, Truck, Store } from "lucide-react";
+import { Loader2, Send, Truck, Store, Share2, Lock } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export const Route = createFileRoute("/_app/configuracoes")({ component: ConfigPage });
 
 // Termos de contrato são uma anotação local (não há coluna no banco ao vivo).
 const CONTRACT_TERMS_KEY = "company_contract_terms";
+
+// Espelho em modo leitura do módulo "Fonte de dados" da loja (store.settings
+// -> public.data_mode). A edição fica sempre no painel da loja: aqui é só
+// para o time do CRM entender de onde vem cada tipo de registro.
+const DATA_SOURCE_ENTITIES = [
+  { key: "produtos", label: "Produtos" },
+  { key: "clientes", label: "Clientes" },
+  { key: "orcamentos", label: "Orçamentos" },
+  { key: "pedidos", label: "Pedidos" },
+] as const;
+
+const DATA_SOURCE_MODE_META: Record<
+  string,
+  { label: string; description: string; variant: "muted" | "info" | "accent" }
+> = {
+  site: {
+    label: "Só a loja",
+    description: "Só o que for cadastrado no painel da loja aparece. Flow Printi não influencia.",
+    variant: "muted",
+  },
+  crm: {
+    label: "Só o Flow Printi",
+    description: "Os registros nascem aqui. A loja reproduz o que estiver cadastrado.",
+    variant: "accent",
+  },
+  ambos: {
+    label: "Os dois lados",
+    description: "Loja e Flow Printi criam livremente. Cada registro pertence a um lado.",
+    variant: "info",
+  },
+};
 
 const emptyCompanyForm = {
   // Dados cadastrais
@@ -129,6 +160,20 @@ function ConfigPage() {
     }
   }, [company, profile]);
 
+  const { data: dataSourceModes, isLoading: dataSourceLoading } = useQuery({
+    queryKey: ["data-source-modes"],
+    queryFn: async () => {
+      const entries = await Promise.all(
+        DATA_SOURCE_ENTITIES.map(async ({ key }) => {
+          const { data, error } = await supabase.rpc("data_mode", { entidade: key });
+          if (error) throw error;
+          return [key, (data as string) || "site"] as const;
+        })
+      );
+      return Object.fromEntries(entries) as Record<string, string>;
+    },
+  });
+
   const { data: team, isLoading: teamLoading } = useQuery({
     queryKey: ["team"],
     queryFn: async () => {
@@ -182,6 +227,7 @@ function ConfigPage() {
           <TabsTrigger value="grafica">Dados da gráfica</TabsTrigger>
           <TabsTrigger value="usuarios">Usuários</TabsTrigger>
           <TabsTrigger value="msg">Templates WhatsApp</TabsTrigger>
+          <TabsTrigger value="fonte-dados">Fonte de dados</TabsTrigger>
         </TabsList>
 
         <TabsContent value="grafica" className="space-y-4">
@@ -452,6 +498,46 @@ function ConfigPage() {
               <div className="flex justify-end pt-4 border-t">
                 <Button onClick={saveTemplates}>Salvar Templates</Button>
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="fonte-dados">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Share2 className="h-5 w-5" /> Fonte de dados
+              </CardTitle>
+              <CardDescription>
+                De onde vêm produtos, clientes, orçamentos e pedidos: só da loja, só daqui (Flow Printi) ou dos dois
+                lados. A edição fica sempre no painel da loja — aqui é só leitura.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {dataSourceLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {DATA_SOURCE_ENTITIES.map(({ key, label }) => {
+                    const modo = dataSourceModes?.[key] ?? "site";
+                    const meta = DATA_SOURCE_MODE_META[modo] ?? DATA_SOURCE_MODE_META.site;
+                    return (
+                      <div key={key} className="space-y-1.5 rounded-lg border p-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold">{label}</span>
+                          <StatusBadge variant={meta.variant}>{meta.label}</StatusBadge>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{meta.description}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <p className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Lock className="h-3 w-3" /> Para alterar, acesse Painel da loja → Integrações → Fonte de dados.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>

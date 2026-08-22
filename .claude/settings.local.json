@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push *)",
+      "Bash(gh auth *)",
+      "PowerShell(cd \"e:\\\\Programas\\\\Nexus Print\\\\flowgraphix-pro-main\"; $out = npx tsc --noEmit 2>&1; \"TOTAL TS errors: \" + \\(\\($out | Select-String -Pattern 'error TS'\\).Count\\); \"--- in files I touched: ---\"; $out | Select-String -Pattern \"produtos\\\\.tsx|importar-link|supplier-extractor\" | ForEach-Object { $_.Line }; \"--- sample of any remaining \\(first 15\\): ---\"; $out | Select-String -Pattern \"error TS\" | Select-Object -First 15 | ForEach-Object { $_.Line })",
+      "PowerShell(cd \"e:\\\\Programas\\\\Nexus Print\\\\flowgraphix-pro-main\"; $o = npx tsc --noEmit 2>&1; \"TS errors: \" + \\(\\($o | Select-String 'error TS'\\).Count\\); npx vitest run 2>&1 | Select-Object -Last 4)",
+      "Bash(node -e ' *)",
+      "PowerShell(cd \"e:\\\\Programas\\\\Nexus Print\\\\flowgraphix-pro-main\"; $o = npx tsc --noEmit 2>&1; \"TS errors: \" + \\(\\($o | Select-String 'error TS'\\).Count\\); npm run build 2>&1 | Select-String -Pattern \"built in|error TS|Transform failed\" | Select-Object -Last 4)",
+      "PowerShell(cd \"e:\\\\Programas\\\\Nexus Print\\\\flowgraphix-pro-main\"; npx tsc --noEmit 2>&1 | Select-String 'error TS' | Select-Object -First 14 | ForEach-Object { $_.Line })",
+      "Bash(git checkout *)",
+      "PowerShell(cd \"e:\\\\Programas\\\\Nexus Print\\\\flowgraphix-pro-main\"; $o = npx tsc --noEmit 2>&1; \"TS errors: \" + \\(\\($o | Select-String 'error TS'\\).Count\\); $o | Select-String 'error TS' | Select-Object -First 8 | ForEach-Object { $_.Line }; \"===== TESTS =====\"; npx vitest run 2>&1 | Select-Object -Last 4)",
+      "PowerShell(cd \"e:\\\\Programas\\\\Nexus Print\\\\flowgraphix-pro-main\"; npx vitest run 2>&1 | Select-Object -Last 6; \"===== TSC =====\"; $o = npx tsc --noEmit 2>&1; \"TS errors: \" + \\(\\($o | Select-String 'error TS'\\).Count\\); $o | Select-String 'error TS' | Select-Object -First 8 | ForEach-Object { $_.Line })"
+    ]
+  }
+}

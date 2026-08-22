@@ -6,7 +6,11 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", ".output", ".vinxi"] },
+  // .vercel/output guarda o bundle de produção minificado do último deploy.
+  // Sem isto, o eslint-plugin-prettier tenta formatar JS minificado de uma
+  // linha só — o pior caso para o algoritmo de diff do Prettier, e é isso
+  // que fazia `npm run lint` levar dezenas de minutos em vez de segundos.
+  { ignores: ["dist", ".output", ".vinxi", ".vercel"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

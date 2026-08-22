@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Package, Search, ChevronDown, X, Truck, Plus, Trash2, Settings2, Loader2 } from "lucide-react";
@@ -65,6 +65,7 @@ export interface QuoteItemData {
 interface QuoteItemBuilderProps {
   items: QuoteItemData[];
   onItemsChange: (items: QuoteItemData[]) => void;
+  initialProductId?: string;
 }
 
 function generateId() {
@@ -133,8 +134,9 @@ function resolveTier(tiers: QuoteTier[], qty: number): QuoteTier | null {
   return lower || tiers[0];
 }
 
-export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps) {
+export function QuoteItemBuilder({ items, onItemsChange, initialProductId }: QuoteItemBuilderProps) {
   const { profile } = useAuth();
+  const initialProductHandled = useRef<string | null>(null);
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [showProductPicker, setShowProductPicker] = useState(false);
   const [productSearch, setProductSearch] = useState("");
@@ -242,6 +244,15 @@ export function QuoteItemBuilder({ items, onItemsChange }: QuoteItemBuilderProps
     setShowProductPicker(false);
     setProductSearch("");
   }
+
+  useEffect(() => {
+    if (!initialProductId || !catalogProducts || initialProductHandled.current === initialProductId) return;
+    initialProductHandled.current = initialProductId;
+    const product = catalogProducts.find((item) => item.id === initialProductId);
+    if (product && !items.some((item) => item.product_id === initialProductId)) addItem(product);
+    // A seleção inicial deve ocorrer uma única vez quando o catálogo terminar de carregar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalogProducts, initialProductId]);
 
   function removeItem(idx: number) {
     const newItems = items.filter((_, i) => i !== idx);
