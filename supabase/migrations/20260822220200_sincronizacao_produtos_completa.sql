@@ -485,14 +485,18 @@ begin
         v_option_value := store.crm_slug(v_option_label);
         v_is_available := coalesce(v_option ->> 'active', 'true') <> 'false';
         v_is_default := v_is_available and v_option_position = 0;
-        v_unit_price := store.jsonb_numeric(v_option, 'price');
+        v_unit_price := coalesce(
+          store.jsonb_numeric(v_option, 'price'),
+          store.jsonb_numeric(v_option, 'unit_price'),
+          store.jsonb_numeric(v_option, 'sell'),
+          store.jsonb_numeric(v_option, 'total_price')
+        );
         insert into store.product_options(
           group_id, label, value, description, modifier_type, modifier_value,
           production_days_delta, position, active, default_selected
         ) values (
-          v_group_id, v_option_label, v_option_value, null, 'percentual',
-          case when coalesce(v_unit_price, 0) > 0 and v_base_price > 0
-            then round((v_unit_price / v_base_price - 1) * 100, 4) else 0 end,
+          v_group_id, v_option_label, v_option_value, null, 'fixo',
+          round(coalesce(v_unit_price, v_base_price) - v_base_price, 4),
           0, v_option_position, v_is_available, v_is_default
         );
         if v_is_default then
@@ -541,13 +545,20 @@ begin
             store.jsonb_numeric(v_option, 'unit_price'), store.jsonb_numeric(v_option, 'total_price'),
             store.jsonb_numeric(v_option, 'sell'), store.jsonb_numeric(v_option, 'cost')
           ) is not null;
+        v_unit_price := coalesce(
+          store.jsonb_numeric(v_option, 'unit_price'),
+          store.jsonb_numeric(v_option, 'total_price'),
+          store.jsonb_numeric(v_option, 'sell'),
+          store.jsonb_numeric(v_option, 'cost'),
+          v_base_price
+        );
         insert into store.product_options(
           group_id, label, value, description, modifier_type, modifier_value,
           production_days_delta, position, active, default_selected
         ) values (
           v_group_id, v_option_label, v_option_value,
           case when v_is_available then null else 'Opcao ainda sem preco sincronizado.' end,
-          'fixo', 0, 0, v_option_position, v_is_available, v_is_default
+          'fixo', round(v_unit_price - v_base_price, 4), 0, v_option_position, v_is_available, v_is_default
         );
         if v_is_default then
           v_default_selection := v_default_selection || pg_catalog.jsonb_build_object(v_axis_key, v_option_value);

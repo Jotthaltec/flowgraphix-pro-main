@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { mapChannelListingToDraft, mapSalesChannelToCredentialRow } from "@/lib/channel-legacy-mapping";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,29 +34,44 @@ export function RascunhosMarketplace() {
 
   // Busca todos os rascunhos de marketplace
   const { data: drafts = [], isLoading: isLoadingDrafts } = useQuery({
-    queryKey: ["marketplace_drafts"],
+    queryKey: ["channel_listings", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("marketplace_drafts")
+        .from("channel_listings")
         .select(`
-          *,
+          id,
+          company_id,
+          product_id,
+          channel_id,
+          external_id,
+          title,
+          description,
+          price,
+          category_externa,
+          status,
+          last_error,
+          created_at,
+          updated_at,
+          sales_channels:channel_id (provider, status, company_id),
           products:product_id (name, main_image_url)
         `)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data;
-    }
+      return (data || []).map(mapChannelListingToDraft);
+    },
+    enabled: !!user,
   });
 
-  // Busca credenciais configuradas para a empresa do usuário atual
+  // Busca canais configurados para a empresa do usuário atual
   const { data: credentials = [] } = useQuery({
-    queryKey: ["marketplace_credentials_check", user?.id],
+    queryKey: ["sales_channels_check", user?.id],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("marketplace_credentials")
-        .select("platform, status");
+        .from("sales_channels")
+        .select("id, company_id, provider, config, status, error_message")
+        .in("provider", ["mercado_livre", "shopee"]);
       if (error) throw error;
-      return data;
+      return (data || []).map(mapSalesChannelToCredentialRow);
     },
     enabled: !!user
   });
@@ -64,7 +80,7 @@ export function RascunhosMarketplace() {
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
-        .from("marketplace_drafts")
+        .from("channel_listings")
         .delete()
         .eq("id", id);
       if (error) throw error;
@@ -83,7 +99,7 @@ export function RascunhosMarketplace() {
     mutationFn: async () => {
       if (!editingDraft) return;
       const { error } = await supabase
-        .from("marketplace_drafts")
+        .from("channel_listings")
         .update({
           title: editTitle,
           price: editPrice,
@@ -120,11 +136,11 @@ export function RascunhosMarketplace() {
       const externalId = `MLB${Math.floor(1e8 + Math.random() * 9e8)}`;
 
       const { data, error } = await supabase
-        .from("marketplace_drafts")
+        .from("channel_listings")
         .update({
-          status: "published",
+          status: "ativo",
           external_id: externalId,
-          error_message: null,
+          last_error: null,
           updated_at: new Date().toISOString()
         })
         .eq("id", id)

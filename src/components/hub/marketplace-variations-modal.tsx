@@ -32,8 +32,6 @@ interface MarketplaceVariationsModalProps {
 const PLATFORMS = [
   { key: "mercado_livre", label: "Mercado Livre", color: "text-yellow-500", bg: "bg-yellow-500/10 border-yellow-500/20" },
   { key: "shopee", label: "Shopee", color: "text-orange-500", bg: "bg-orange-500/10 border-orange-500/20" },
-  { key: "nuvemshop", label: "Nuvemshop", color: "text-blue-500", bg: "bg-blue-500/10 border-blue-500/20" },
-  { key: "woocommerce", label: "WooCommerce", color: "text-purple-500", bg: "bg-purple-500/10 border-purple-500/20" },
 ];
 
 /** Decodifica variações salvas no produto (JSON do banco) */
@@ -91,7 +89,7 @@ export function MarketplaceVariationsModal({
   const [newVarGroupValues, setNewVarGroupValues] = useState("");
 
   // Plataformas selecionadas
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["mercado_livre", "shopee", "nuvemshop", "woocommerce"]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["mercado_livre", "shopee"]);
 
   // Preview expandido
   const [expandedCombo, setExpandedCombo] = useState<string | null>(null);
@@ -193,10 +191,24 @@ export function MarketplaceVariationsModal({
 
       if (!profile?.company_id) throw new Error("Empresa do usuário não identificada.");
 
+      const { data: salesChannels, error: channelError } = await supabase
+        .from("sales_channels")
+        .select("id, provider")
+        .eq("company_id", profile.company_id)
+        .in("provider", selectedPlatforms);
+
+      if (channelError) throw channelError;
+
+      const channelMap = new Map((salesChannels || []).map((channel: any) => [channel.provider, channel]));
       const insertedDrafts = [];
 
       for (const combo of combosToPublish) {
         for (const platform of selectedPlatforms) {
+          const channel = channelMap.get(platform);
+          if (!channel) {
+            throw new Error(`O canal ${PLATFORMS.find(p => p.key === platform)?.label ?? platform} não está conectado. Configure-o em Configurações.`);
+          }
+
           const copy = generateMarketplaceCopy(
             platform,
             product.name || "",
@@ -207,22 +219,22 @@ export function MarketplaceVariationsModal({
             combo
           );
 
-          // Tenta inserir com metadados de variação; se a coluna não existir, cai no fallback
-          const draftPayload: any = {
+          const listingPayload: any = {
             company_id: profile.company_id,
+            channel_id: channel.id,
             product_id: product.id,
-            marketplace: platform,
+            sku: product.internal_sku || product.supplier_sku || product.sku || product.id,
             title: copy.title,
             description: copy.description,
             price: copy.price,
-            category: (product.specifications || {})["Categoria"] || "Produtos Personalizados",
-            keywords: copy.keywords,
-            status: "draft",
+            category_externa: (product.specifications || {})["Categoria"] || "Produtos Personalizados",
+            status: "rascunho",
+            payload: { keywords: copy.keywords, source: "flow-product-variation" },
           };
 
           const { data, error } = await supabase
-            .from("marketplace_drafts")
-            .insert(draftPayload)
+            .from("channel_listings")
+            .insert(listingPayload)
             .select()
             .single();
 

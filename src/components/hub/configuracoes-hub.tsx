@@ -13,15 +13,12 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { mapSalesChannelToCredentialRow } from "@/lib/channel-legacy-mapping";
 
-// Definição das plataformas suportadas
+// Definição das plataformas suportadas pelo schema canônico do projeto.
 const PLATFORMS = [
   { key: "mercado_livre", label: "Mercado Livre", hasSecret: true, secretLabel: "Refresh Token", extraFields: [] },
   { key: "shopee", label: "Shopee API", hasSecret: true, secretLabel: "Partner Key", extraFields: [] },
-  { key: "nuvemshop", label: "Nuvemshop Token", hasSecret: false, secretLabel: "", extraFields: [] },
-  { key: "woocommerce", label: "WooCommerce", hasSecret: true, secretLabel: "Consumer Secret", extraFields: [
-    { key: "store_url", label: "URL da Loja WooCommerce", placeholder: "https://minhagrafica.com.br" }
-  ]},
 ] as const;
 
 type PlatformKey = typeof PLATFORMS[number]["key"];
@@ -77,15 +74,16 @@ export function ConfiguracoesHub() {
 
   // ─── Query: Buscar credenciais do Supabase ────────────────────────────
   const { data: credentials = [], isLoading: credentialsLoading } = useQuery({
-    queryKey: ["marketplace_credentials", profile?.company_id],
+    queryKey: ["sales_channels", profile?.company_id],
     queryFn: async () => {
       if (!profile?.company_id) return [];
       const { data, error } = await supabase
-        .from("marketplace_credentials")
-        .select("*")
-        .eq("company_id", profile.company_id);
+        .from("sales_channels")
+        .select("id, company_id, provider, config, status, last_sync_at, error_message")
+        .eq("company_id", profile.company_id)
+        .in("provider", ["mercado_livre", "shopee"]);
       if (error) throw error;
-      return (data || []) as CredentialRow[];
+      return (data || []).map(mapSalesChannelToCredentialRow) as CredentialRow[];
     },
     enabled: !!profile?.company_id,
   });
@@ -120,30 +118,32 @@ export function ConfiguracoesHub() {
       // Verifica se já existe
       const existing = credentials.find(c => c.platform === platform);
 
+      const config = {
+        ...(form.extraConfig || {}),
+        ...(form.key ? { api_key: form.key } : {}),
+        ...(form.secret ? { secret: form.secret } : {}),
+      };
+
       if (existing) {
-        // Update
         const { error } = await supabase
-          .from("marketplace_credentials")
+          .from("sales_channels")
           .update({
-            credential_key: form.key,
-            credential_secret: form.secret || null,
-            extra_config: form.extraConfig,
-            status: form.key ? "connected" : "pending",
+            config,
+            status: form.key ? "conectado" : "desconectado",
             error_message: null,
+            updated_at: new Date().toISOString(),
           })
           .eq("id", existing.id);
         if (error) throw error;
       } else {
-        // Insert
         const { error } = await supabase
-          .from("marketplace_credentials")
+          .from("sales_channels")
           .insert({
             company_id: profile.company_id,
-            platform,
-            credential_key: form.key,
-            credential_secret: form.secret || null,
-            extra_config: form.extraConfig,
-            status: form.key ? "connected" : "pending",
+            provider: platform,
+            config,
+            status: form.key ? "conectado" : "desconectado",
+            apelido: PLATFORMS.find(p => p.key === platform)?.label ?? platform,
           });
         if (error) throw error;
       }
@@ -168,7 +168,7 @@ export function ConfiguracoesHub() {
       const existing = credentials.find(c => c.platform === platform);
       if (!existing) return;
       const { error } = await supabase
-        .from("marketplace_credentials")
+        .from("sales_channels")
         .delete()
         .eq("id", existing.id);
       if (error) throw error;
