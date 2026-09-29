@@ -403,7 +403,9 @@ function ProdutosPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["imported-products"] });
-      toast.success("Produto removido!");
+      // O gatilho tr_crm_product_deleted tira o produto da loja na mesma transação.
+      queryClient.invalidateQueries({ queryKey: ["site_products"] });
+      toast.success("Produto removido do CRM e da loja.");
     },
     onError: (err) => {
       toast.error("Erro ao remover produto: " + err.message);
