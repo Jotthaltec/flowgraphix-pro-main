@@ -98,7 +98,9 @@ const DEFAULT_OPTIONS: ImporterOptions = {
   // configurador (cada material/formato/impressão tem seu ?id= próprio), não só
   // a variante exibida. Produtos sem eixos só custam 1 requisição.
   scanVariants: true,
-  copyImagesToStorage: false,
+  // A loja publica as imagens do produto: hospedadas no nosso Storage, não
+  // dependem do CDN do fornecedor nem revelam a origem na URL.
+  copyImagesToStorage: true,
 };
 
 const SLEEP = (ms: number) => new Promise((r) => setTimeout(r, ms));

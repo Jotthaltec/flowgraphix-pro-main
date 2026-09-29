@@ -326,10 +326,22 @@ export function parseFuturaImProduct(html: string, sourceUrl: string): ImportedP
 
   const external_id = externalIdFromUrl(sourceUrl) || (productLd?.sku != null ? String(productLd.sku) : undefined);
 
-  // Descrição (seção 18) — não misturamos avaliações/relacionados.
-  const description = productLd?.description ? stripTags(productLd.description) : undefined;
+  // Descrição (seção 18) — não misturamos avaliações/relacionados. A FuturaIM
+  // anexa "<id> - <descritor da combinação>" ao fim: expõe o id do fornecedor
+  // e descreve só a combinação desta página. Esse trecho é removido.
+  const supplierIds = [external_id, productLd?.sku != null ? String(productLd.sku) : undefined].filter(
+    (id): id is string => !!id,
+  );
+  const withoutSupplierTail = (text: string) =>
+    supplierIds
+      .reduce(
+        (acc, id) => acc.replace(new RegExp(`\\s*(?<!\\d)${id.replace(/[^\w]/g, "\\$&")}\\s+-\\s[\\s\\S]*$`), ""),
+        text,
+      )
+      .trim() || undefined;
+  const description = productLd?.description ? withoutSupplierTail(stripTags(productLd.description)) : undefined;
   const metaDesc = html.match(/name=["']?description["']?\s+content=["']([^"']+)["']/i)?.[1];
-  const short_description = metaDesc ? decodeEntities(metaDesc) : undefined;
+  const short_description = metaDesc ? withoutSupplierTail(decodeEntities(metaDesc)) : undefined;
 
   // Preço / disponibilidade.
   // Alguns produtos têm a tabela de tiragens renderizada por JavaScript e um

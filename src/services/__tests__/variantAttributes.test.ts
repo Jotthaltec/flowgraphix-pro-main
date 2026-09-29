@@ -164,4 +164,18 @@ describe("parser em página real", () => {
     expect(v.raw_attributes.Enobrecimento).toBeTruthy();
     expect(v.raw_attributes.Acabamento).toBe("Refile");
   });
+
+  it("descrição não carrega o id do fornecedor nem o descritor de uma única combinação", () => {
+    const cases: Array<[string, string, string, RegExp]> = [
+      ["futuraim-cartao-de-visita.html", "4627", "https://www.futuraim.com.br/produto/cartao?id=4627", /sofistica/i],
+      ["futuraim-rifa.html", "112791", "https://www.futuraim.com.br/produto/rifa-personalizada?id=112791", /pr[eê]mios/i],
+    ];
+    for (const [file, id, url, keeps] of cases) {
+      const p = parseFuturaImProduct(readFileSync(join(__dirname, "fixtures", file), "utf8"), url);
+      expect(p.description, file).toBeTruthy();
+      expect(p.description, file).not.toContain(id);
+      expect(p.description, file).toMatch(keeps); // o texto comercial continua
+      expect(p.short_description ?? "", file).not.toContain(`${id} - `);
+    }
+  });
 });
