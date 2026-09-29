@@ -159,10 +159,17 @@ export function parseDimensions(input: string): ImportedDimensions {
 // Cor de impressão (seção 13)
 // ---------------------------------------------------------------------------
 
+/**
+ * Código de cor isolado (frente x verso, 0–5). Exige que não haja dígito colado
+ * dos dois lados: em "88x48mm" ou "50x50mm" NÃO existe código de cor — sem essa
+ * borda, o "8x4" de 8[8x4]8 era lido como cor e quebrava todas as combinações.
+ */
+export const COLOR_CODE_RE = /(?<![\d.,])(\d)\s*[x×]\s*(\d)(?![\d.,]|\s*(?:mm|cm|m)\b)/i;
+
 /** Interpreta códigos como 1x0, 4x4, 5x0 (5 = colorido + branco). Nada é deduzido sem o código. */
 export function parseColorCode(input: string): ImportedColorSpec {
   const original = cleanText(input);
-  const m = original.match(/(\d)\s*[x×]\s*(\d)/);
+  const m = original.match(COLOR_CODE_RE);
   if (!m) {
     return { original_color_code: original };
   }
@@ -184,7 +191,7 @@ export function parseColorCode(input: string): ImportedColorSpec {
   else parts.push(`${back} cores no verso`);
 
   return {
-    original_color_code: original.match(/\d\s*[x×]\s*\d/)?.[0] || original,
+    original_color_code: `${front}x${back}`,
     front_colors: front,
     back_colors: back,
     front_printed: front > 0,

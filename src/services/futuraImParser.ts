@@ -25,7 +25,9 @@ import type {
   ImportPageType,
 } from "@/types/importedProduct";
 import { classifyProduct } from "@/services/productClassifier";
+import { resolveVariantAttributes } from "@/services/variantAttributes";
 import {
+  COLOR_CODE_RE,
   cleanText,
   discountPercent,
   normalizeKey,
@@ -389,23 +391,36 @@ export function parseFuturaImProduct(html: string, sourceUrl: string): ImportedP
   // Derivamos do item_name do dataLayer (descritor completo) quando disponível.
   // Ex.: "1000 Cartão de Visita - 88x48mm em Couché Fosco 300g - 4x4 - Laminação Fosca e Verniz Localizado - Refile"
   const descriptor: string = dlItem?.item_name || "";
-  const specsRaw: Record<string, string> = {};
-  const findAxisValue = (axis: string): string | undefined => {
-    const a = variant_axes.find((x) => x.normalized_name === normalizeKey(axis));
-    if (!a) return undefined;
-    return a.options.find((o) => o.selected)?.value;
-  };
 
-  // Material / formato / cor / acabamento — preferimos o eixo, com fallback no descritor.
-  const formatStr =
-    findAxisValue("Formato") || descriptor.match(/(\d+(?:[.,]\d+)?\s*x\s*\d+(?:[.,]\d+)?\s*(?:mm|cm|m)?)/i)?.[1] || "";
-  const materialStr =
-    findAxisValue("Material") || descriptor.match(/em\s+([^-]+?)(?:\s*-\s*\d|\s*$)/i)?.[1]?.trim() || "";
-  const colorStr = findAxisValue("Cor") || descriptor.match(/(\d\s*x\s*\d)/)?.[1] || "";
+  // Todos os eixos são resolvidos contra as opções reais da página (rótulo
+  // exato da opção). Só sem eixos (tabela renderizada por JS) caímos no
+  // descritor puro — e mesmo assim sem ler "8x4" de 88x48mm.
+  const resolved = resolveVariantAttributes(descriptor, variant_axes);
+  const specsRaw: Record<string, string> = { ...resolved.attributes };
+  if (resolved.unresolved.length) {
+    warnings.push(`Eixo(s) sem valor identificado nesta combinação: ${resolved.unresolved.join(", ")}.`);
+  }
+  const axisValue = (name: string) =>
+    Object.entries(specsRaw).find(([k]) => normalizeKey(k) === normalizeKey(name))?.[1];
 
-  if (formatStr) specsRaw["Formato"] = formatStr;
-  if (materialStr) specsRaw["Material"] = materialStr;
-  if (colorStr) specsRaw["Cor"] = colorStr;
+  if (!axisValue("Formato")) {
+    const f = descriptor.match(/(\d+(?:[.,]\d+)?\s*x\s*\d+(?:[.,]\d+)?\s*(?:mm|cm|m)?)/i)?.[1];
+    if (f) specsRaw["Formato"] = f;
+  }
+  if (!axisValue("Material")) {
+    const m = descriptor.match(/em\s+([^-]+?)(?:\s*-\s*\d|\s*$)/i)?.[1]?.trim();
+    if (m) specsRaw["Material"] = m;
+  }
+  if (!axisValue("Cor")) {
+    const c = descriptor.match(COLOR_CODE_RE);
+    if (c) specsRaw["Cor"] = `${c[1]}x${c[2]}`;
+  }
+
+  const formatStr = axisValue("Formato") || "";
+  const materialStr = axisValue("Material") || "";
+  const colorStr = axisValue("Cor") || "";
+  const enoblementStr = axisValue("Enobrecimento");
+  const finishingStr = axisValue("Acabamento");
 
   const dimensions = formatStr ? parseDimensions(formatStr) : undefined;
   const material = materialStr ? parseMaterial(materialStr) : undefined;
@@ -457,6 +472,8 @@ export function parseFuturaImProduct(html: string, sourceUrl: string): ImportedP
       material,
       dimensions,
       color,
+      enoblement: enoblementStr ? [enoblementStr] : undefined,
+      finishing: finishingStr ? [finishingStr] : undefined,
       production_days: production_time?.production_days,
       available,
       price_tiers,

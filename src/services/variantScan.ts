@@ -7,8 +7,10 @@
  * (sem rede): descobrir os ids a visitar e consolidar os produtos coletados.
  */
 
-import type { ImportedProduct, ImportedVariantAxis } from "@/types/importedProduct";
+import type { ImportedProduct, ImportedVariant, ImportedVariantAxis } from "@/types/importedProduct";
 import { externalIdFromUrl } from "@/services/futuraImParser";
+import { normalizeKey, parseColorCode, parseDimensions, parseMaterial } from "@/services/productNormalizer";
+import { attributeSignature, resolveVariantAttributes } from "@/services/variantAttributes";
 
 /** Reescreve a URL de origem apontando para outro `?id=` (mesmo slug). */
 function urlWithExternalId(sourceUrl: string, id: string): string | null {
@@ -101,7 +103,10 @@ export function collectVariantUrls(product: ImportedProduct): string[] {
  * Sem varredura (nenhuma variante extra) as opções ficam sem preço e a UI herda
  * o custo-base — nada é fabricado.
  */
-export function attachVariantPrices(product: ImportedProduct): ImportedProduct {
+export function attachVariantPrices(
+  product: ImportedProduct,
+  aliases: Map<string, string> = new Map(),
+): ImportedProduct {
   const byExtId = new Map<
     string,
     {
@@ -133,13 +138,121 @@ export function attachVariantPrices(product: ImportedProduct): ImportedProduct {
   const variant_axes = product.variant_axes.map((axis) => ({
     ...axis,
     options: axis.options.map((o) => {
-      const p = o.external_id ? byExtId.get(o.external_id) : undefined;
+      const id = o.external_id ? (aliases.get(o.external_id) ?? o.external_id) : undefined;
+      const p = id ? byExtId.get(id) : undefined;
       return p
         ? { ...o, unit_price: p.unit_price, total_price: p.total_price, ref_quantity: p.quantity, tiers: p.tiers }
         : o;
     }),
   }));
   return { ...product, variant_axes };
+}
+
+/** Reaplica atributos resolvidos nos campos estruturados da variante. */
+function withAttributes(variant: ImportedVariant, attributes: Record<string, string>): ImportedVariant {
+  const get = (name: string) =>
+    Object.entries(attributes).find(([k]) => normalizeKey(k) === normalizeKey(name))?.[1];
+  const formato = get("Formato");
+  const material = get("Material");
+  const cor = get("Cor");
+  const enobrecimento = get("Enobrecimento");
+  const acabamento = get("Acabamento");
+  return {
+    ...variant,
+    raw_attributes: attributes,
+    attributes: Object.entries(attributes).map(([name, value]) => ({
+      name,
+      normalized_name: normalizeKey(name),
+      value,
+      normalized_value: normalizeKey(value),
+    })),
+    dimensions: formato ? parseDimensions(formato) : variant.dimensions,
+    material: material ? parseMaterial(material) : variant.material,
+    color: cor ? parseColorCode(cor) : variant.color,
+    enoblement: enobrecimento ? [enobrecimento] : variant.enoblement,
+    finishing: acabamento ? [acabamento] : variant.finishing,
+  };
+}
+
+/**
+ * Normaliza as variantes coletadas contra o vocabulário UNIDO dos eixos e funde
+ * as que representam a mesma combinação.
+ *
+ * - Cada página só mostra as opções alcançáveis a partir dela; por isso a
+ *   resolução é refeita aqui, com as opções de TODAS as páginas.
+ * - A FuturaIM expõe SKUs de tiragem (ex.: 104756 = 50 un. do mesmo cartão que
+ *   4571) com o mesmo descritor: viram UMA combinação com as tiragens unidas.
+ * - Mesma combinação com preços diferentes na mesma quantidade é sinalizada —
+ *   indica um eixo que a página não expõe — em vez de descartada em silêncio.
+ */
+export function normalizeScannedVariants(
+  variants: ImportedVariant[],
+  axes: ImportedVariantAxis[],
+  preferredId?: string,
+): { variants: ImportedVariant[]; warnings: string[]; aliases: Map<string, string> } {
+  const warnings: string[] = [];
+  const aliases = new Map<string, string>();
+  if (!axes.length) return { variants, warnings, aliases };
+
+  const validValue = (key: string, value: string) => {
+    const axis = axes.find((a) => a.normalized_name === normalizeKey(key));
+    return axis?.options.find((o) => (o.normalized_value || normalizeKey(o.value)) === normalizeKey(value))?.value;
+  };
+  const combinationIds = new Set(
+    axes.flatMap((a) => a.options.map((o) => o.external_id).filter((id): id is string => !!id)),
+  );
+
+  const groups = new Map<string, ImportedVariant[]>();
+  for (const variant of variants) {
+    const resolved = resolveVariantAttributes(variant.title || "", axes, { useSelected: false });
+    const attributes: Record<string, string> = {};
+    // Valores de página só sobrevivem se forem opções reais de algum eixo.
+    for (const [k, v] of Object.entries(variant.raw_attributes || {})) {
+      const canonical = validValue(k, v);
+      if (canonical) attributes[k] = canonical;
+    }
+    Object.assign(attributes, resolved.attributes);
+    const missing = resolved.unresolved.filter((name) => !attributes[name]);
+    if (missing.length) {
+      warnings.push(`Combinação ${variant.external_id || variant.title}: eixo(s) não identificado(s): ${missing.join(", ")}.`);
+    }
+    const normalized = withAttributes(variant, attributes);
+    const signature = attributeSignature(attributes) || `id:${variant.external_id || variant.title}`;
+    groups.set(signature, [...(groups.get(signature) ?? []), normalized]);
+  }
+
+  const merged: ImportedVariant[] = [];
+  for (const group of groups.values()) {
+    // Mantém o id de entrada (é o supplier_sku do produto no CRM); senão, a
+    // combinação que os eixos apontam. Os demais ids viram apelidos dela.
+    const primary =
+      group.find((v) => preferredId && v.external_id === preferredId) ??
+      group.find((v) => v.external_id && combinationIds.has(v.external_id)) ??
+      group[0];
+    for (const other of group) {
+      if (other !== primary && other.external_id && primary.external_id) {
+        aliases.set(other.external_id, primary.external_id);
+      }
+    }
+    const tiers = new Map(primary.price_tiers.map((t) => [t.quantity, t]));
+    for (const other of group) {
+      if (other === primary) continue;
+      for (const tier of other.price_tiers) {
+        const current = tiers.get(tier.quantity);
+        if (!current) tiers.set(tier.quantity, tier);
+        else if (Math.abs(current.total_price - tier.total_price) > 0.01) {
+          warnings.push(
+            `Combinações ${primary.external_id} e ${other.external_id} têm os mesmos atributos mas preços diferentes em ${tier.quantity} un. — algum eixo não foi exposto pela página.`,
+          );
+        }
+      }
+    }
+    merged.push({
+      ...primary,
+      price_tiers: [...tiers.values()].sort((a, b) => a.quantity - b.quantity),
+    });
+  }
+  return { variants: merged, warnings, aliases };
 }
 
 /**
@@ -149,7 +262,7 @@ export function attachVariantPrices(product: ImportedProduct): ImportedProduct {
  */
 export function consolidateVariants(products: ImportedProduct[]): ImportedProduct {
   const base = products[0];
-  const variants: ImportedProduct["variants"] = [];
+  const rawVariants: ImportedProduct["variants"] = [];
   const seen = new Set<string>();
   const axesMap = new Map<string, ImportedVariantAxis>();
 
@@ -158,7 +271,7 @@ export function consolidateVariants(products: ImportedProduct[]): ImportedProduc
       const key = v.external_id || v.sku || v.title;
       if (key && !seen.has(key)) {
         seen.add(key);
-        variants.push(v);
+        rawVariants.push(v);
       }
     }
     for (const axis of p.variant_axes) {
@@ -174,18 +287,28 @@ export function consolidateVariants(products: ImportedProduct[]): ImportedProduc
     }
   }
 
+  const variant_axes = [...axesMap.values()];
+  const { variants, warnings: mergeWarnings, aliases } = normalizeScannedVariants(
+    rawVariants,
+    variant_axes,
+    base.external_id,
+  );
+
   const consolidated: ImportedProduct = {
     ...base,
     variants,
-    variant_axes: [...axesMap.values()],
+    variant_axes,
     variant_scan_status: "complete",
     warnings: Array.from(
       new Set([
-        ...base.warnings.filter((w) => !/opções de varia[cç][aã]o não varridas/i.test(w)),
-        `Varredura completa: ${variants.length} variante(s) real(is) coletada(s).`,
+        ...base.warnings.filter(
+          (w) => !/opções de varia[cç][aã]o não varridas|Eixo\(s\) sem valor identificado/i.test(w),
+        ),
+        ...mergeWarnings,
+        `Varredura completa: ${variants.length} combinação(ões) real(is) coletada(s).`,
       ]),
     ),
   };
   // Anexa o preço real de cada combinação às opções dos eixos.
-  return attachVariantPrices(consolidated);
+  return attachVariantPrices(consolidated, aliases);
 }

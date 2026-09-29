@@ -78,7 +78,17 @@ type StoreSync = {
 type PublishResult = {
   action: "insert" | "update";
   sync_status: "synced" | "attention";
-  counts: { images: number; option_groups: number; options: number; variants: number; tiers: number };
+  counts: {
+    images: number;
+    option_groups: number;
+    options: number;
+    variants: number;
+    tiers: number;
+    // Presentes a partir da publicação que liga variantes às opções.
+    source_variants?: number;
+    merged_variants?: number;
+    unmatched_variants?: number;
+  };
   warnings: string[];
 };
 
@@ -411,7 +421,13 @@ function ProdutosPage() {
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["site_products"] });
       const c = result.counts;
-      const summary = `${c.images} mídia(s), ${c.option_groups} grupo(s), ${c.options} opção(ões), ${c.variants} variante(s) e ${c.tiers} tiragem(ns).`;
+      const linked = c.source_variants
+        ? ` Combinações do Flow: ${c.source_variants} → ${c.variants} na loja` +
+          (c.merged_variants ? ` (${c.merged_variants} SKU(s) de tiragem unidos)` : "") +
+          (c.unmatched_variants ? `, ${c.unmatched_variants} sem correspondência` : "") +
+          "."
+        : "";
+      const summary = `${c.images} mídia(s), ${c.option_groups} grupo(s), ${c.options} opção(ões), ${c.variants} variante(s) e ${c.tiers} tiragem(ns).${linked}`;
       const message = result.action === "insert"
         ? "Produto publicado e validado na loja Nexus."
         : "Produto atualizado e validado na loja Nexus.";
