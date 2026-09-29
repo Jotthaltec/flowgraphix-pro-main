@@ -16,6 +16,13 @@
 --
 -- Erros de permissão e produto inexistente continuam sendo exceções: não são
 -- tentativas de publicação daquela empresa e não entram no log dela.
+--
+-- Camadas:
+--   publish_crm_product(id)             pública: checa permissão do usuário
+--   publish_crm_product_internal(id, o) hash, noop, validação, log (origem o)
+--   publish_crm_product_apply(id)       montagem do catálogo
+-- As duas internas não verificam usuário: só são chamáveis pelo dono das
+-- funções (a pública e a fila de sincronização, que roda sem sessão).
 
 -- 1. Assinatura do conteúdo publicado ------------------------------------------
 -- Calculada sobre as linhas da loja, não sobre o Flow: serve tanto para saber
@@ -215,9 +222,6 @@ begin
 
   if v_source.id is null then
     raise exception 'Produto do Flow nao encontrado.' using errcode = 'P0002';
-  end if;
-  if not private.is_company_member(v_source.company_id, array['owner','admin']) then
-    raise exception 'Sem permissao para publicar este produto.' using errcode = '42501';
   end if;
   if not exists (select 1 from public.companies where id = v_source.company_id and store_access) then
     raise exception 'Esta empresa nao esta vinculada a loja Nexus.' using errcode = '42501';
@@ -871,7 +875,7 @@ revoke all on function store.publish_crm_product_apply(uuid) from public, anon, 
 
 -- 4. Publicação canônica -----------------------------------------------------------
 
-create or replace function store.publish_crm_product(p_crm_product_id uuid)
+create or replace function store.publish_crm_product_internal(p_crm_product_id uuid, p_origin text)
 returns jsonb
 language plpgsql
 security definer
@@ -897,9 +901,6 @@ begin
   select * into v_source from public.products where id = p_crm_product_id for update;
   if v_source.id is null then
     raise exception 'Produto do Flow nao encontrado.' using errcode = 'P0002';
-  end if;
-  if not private.is_company_member(v_source.company_id, array['owner','admin']) then
-    raise exception 'Sem permissao para publicar este produto.' using errcode = '42501';
   end if;
 
   select * into v_store from store.products where crm_id = v_source.id for update;
@@ -938,7 +939,7 @@ begin
       insert into store.sync_log(entidade, direcao, origem_id, destino_id, acao, sucesso, erro, payload)
       values (
         'produtos', 'crm_para_site', v_source.id, v_store.id, 'erro', false, v_error,
-        pg_catalog.jsonb_build_object('name', v_source.name, 'code', v_code, 'published_by', auth.uid())
+        pg_catalog.jsonb_build_object('name', v_source.name, 'code', v_code, 'origin', p_origin, 'published_by', auth.uid())
       );
       return pg_catalog.jsonb_build_object(
         'ok', false, 'action', 'error', 'product_id', v_store.id, 'id', v_store.id,
@@ -983,6 +984,7 @@ begin
     pg_catalog.jsonb_build_object(
       'name', v_source.name,
       'action', v_action,
+      'origin', p_origin,
       'published_by', auth.uid(),
       'sync_version', v_version,
       'content_hash', v_hash,
@@ -1005,6 +1007,28 @@ begin
     'counts', v_result -> 'counts',
     'warnings', v_warnings
   );
+end;
+$$;
+
+revoke all on function store.publish_crm_product_internal(uuid, text) from public, anon, authenticated;
+
+create or replace function store.publish_crm_product(p_crm_product_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_company uuid;
+begin
+  select company_id into v_company from public.products where id = p_crm_product_id;
+  if not found then
+    raise exception 'Produto do Flow nao encontrado.' using errcode = 'P0002';
+  end if;
+  if not private.is_company_member(v_company, array['owner','admin']) then
+    raise exception 'Sem permissao para publicar este produto.' using errcode = '42501';
+  end if;
+  return store.publish_crm_product_internal(p_crm_product_id, 'manual');
 end;
 $$;
 

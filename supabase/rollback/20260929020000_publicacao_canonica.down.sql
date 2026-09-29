@@ -751,6 +751,7 @@ begin
 end;
 $function$;
 
+drop function if exists store.publish_crm_product_internal(uuid, text);
 drop function if exists store.publish_crm_product_apply(uuid);
 drop function if exists store.product_publish_problems(uuid);
 drop function if exists store.product_content_hash(uuid);
