@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
-import type { ProductSyncStatus } from "@/lib/product-sync";
+import { syncStatusDisplay, type ProductSyncStatus } from "@/lib/product-sync";
 
 export const Route = createFileRoute("/_app/produtos-site")({ component: ProdutosSitePage });
 
@@ -213,8 +213,8 @@ function ProdutosSitePage() {
                           <StatusBadge variant="muted">Só revenda</StatusBadge>
                         ) : null}
                         {p.crm_id ? (
-                          <StatusBadge variant={p.sync_status === "synced" ? "success" : "warning"}>
-                            {p.sync_status === "synced" ? "Flow sincronizado" : "Revisar sincronização"}
+                          <StatusBadge variant={syncStatusDisplay(p.sync_status).variant}>
+                            {syncStatusDisplay(p.sync_status).label}
                           </StatusBadge>
                         ) : null}
                       </div>

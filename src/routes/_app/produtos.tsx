@@ -19,7 +19,7 @@ import { DialogDescription } from "@/components/ui/dialog";
 import { ProductEditor } from "@/components/products/product-editor";
 import { generateCommercialProducts } from "@/integrations/supabase/combination-client";
 import { normalizeUrlForMatch } from "@/lib/importer-persistence";
-import type { ProductSyncStatus } from "@/lib/product-sync";
+import { syncStatusDisplay, type ProductSyncStatus } from "@/lib/product-sync";
 import { describePublishSuccess, publishCrmProduct } from "@/lib/store-publication";
 
 export const Route = createFileRoute("/_app/produtos")({ component: ProdutosPage });
@@ -702,8 +702,8 @@ function ProdutosPage() {
                         )}
                         {storeSync ? (
                           <span className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
-                            <StatusBadge variant={storeSync.sync_status === "synced" ? "success" : "warning"}>
-                              {storeSync.sync_status === "synced" ? "Loja sincronizada" : "Loja com atenção"}
+                            <StatusBadge variant={syncStatusDisplay(storeSync.sync_status).variant}>
+                              {syncStatusDisplay(storeSync.sync_status).label}
                             </StatusBadge>
                             <span className="text-muted-foreground">
                               {storeSync.imagens} mídia(s) · {storeSync.opcoes} opção(ões) · {storeSync.tiragens} tiragem(ns)
