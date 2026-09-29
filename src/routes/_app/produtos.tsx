@@ -19,6 +19,7 @@ import { DialogDescription } from "@/components/ui/dialog";
 import { ProductEditor } from "@/components/products/product-editor";
 import { generateCommercialProducts } from "@/integrations/supabase/combination-client";
 import { normalizeUrlForMatch } from "@/lib/importer-persistence";
+import type { ProductSyncStatus } from "@/lib/product-sync";
 
 export const Route = createFileRoute("/_app/produtos")({ component: ProdutosPage });
 
@@ -66,7 +67,7 @@ type Product = {
 type StoreSync = {
   crm_id: string | null;
   slug: string;
-  sync_status: "native" | "synced" | "attention" | "error";
+  sync_status: ProductSyncStatus;
   synced_at: string | null;
   imagens: number;
   grupos_opcao: number;

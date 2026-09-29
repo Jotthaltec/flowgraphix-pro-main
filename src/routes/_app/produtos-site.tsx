@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import type { ProductSyncStatus } from "@/lib/product-sync";
 
 export const Route = createFileRoute("/_app/produtos-site")({ component: ProdutosSitePage });
 
@@ -47,7 +48,7 @@ type SiteProduct = {
   updated_at: string;
   imagem: string | null;
   active: boolean;
-  sync_status: "native" | "synced" | "attention" | "error";
+  sync_status: ProductSyncStatus;
   synced_at: string | null;
   imagens: number;
   grupos_opcao: number;
