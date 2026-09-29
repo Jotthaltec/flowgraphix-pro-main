@@ -11,6 +11,7 @@ import { buildProductRow, type BuildProductRowOptions } from "@/services/product
 import { persistStructured } from "@/lib/importer-structured-persistence";
 import { copyImagesToStorage } from "@/lib/importer-image-storage";
 import { resolveSupplierByUrl } from "@/lib/supplier-link";
+import type { ProductStatusRule } from "@/lib/importer-publication";
 
 export interface PersistOptions extends Omit<BuildProductRowOptions, "companyId"> {
   companyId: string;
@@ -20,6 +21,11 @@ export interface PersistOptions extends Omit<BuildProductRowOptions, "companyId"
   writeStructured?: boolean;
   /** Copia as imagens para o Supabase Storage (seção 17). Padrão: false (mantém URL externa). */
   copyImages?: boolean;
+  /**
+   * Status do produto no Flow. Sem esta regra, vale o de buildProductRow
+   * ("Ativo") inclusive ao atualizar — o que reativava produtos arquivados.
+   */
+  productStatus?: ProductStatusRule;
 }
 
 export interface PersistResult {
@@ -162,6 +168,12 @@ export async function persistImportedProduct(
 
   let productId: string;
   let action: "created" | "updated";
+
+  if (opts.productStatus) {
+    const rule = existingId ? opts.productStatus.update : opts.productStatus.create;
+    if (rule === "keep") delete (row as { status?: string }).status;
+    else (row as { status?: string }).status = rule;
+  }
 
   if (existingId) {
     const { error } = await supabase

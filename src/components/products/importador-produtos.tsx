@@ -16,6 +16,8 @@ import {
   Save,
   History,
   Image as ImageIcon,
+  RotateCcw,
+  Store,
 } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -27,6 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatusBadge } from "@/components/status-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -43,6 +46,7 @@ import { persistImportedProduct, findExistingProduct, type ExistingProductMatch 
 import { generateCommercialProducts } from "@/integrations/supabase/combination-client";
 import {
   createCatalogJob,
+  createImportJob,
   loadOpenJobs,
   loadJobItems,
   updateImportItem,
@@ -51,6 +55,23 @@ import {
   type ImportJobRow,
 } from "@/lib/importer-jobs";
 import type { ImportedProduct, ImportItemStatus } from "@/types/importedProduct";
+import { publishCrmProduct, storeProductUrl, type PublishCounts } from "@/lib/store-publication";
+import {
+  DEFAULT_SAVE_DESTINATION,
+  IMPORT_STATUS_LABEL,
+  SAVE_DESTINATIONS,
+  emptyTally,
+  isFailedStatus,
+  isSavedStatus,
+  productStatusRule,
+  retryStep,
+  shouldPublish,
+  statusAfterPublish,
+  statusAfterSave,
+  summarizeRun,
+  type RunTally,
+  type SaveDestination,
+} from "@/lib/importer-publication";
 
 type Mode = "single" | "batch" | "catalog";
 
@@ -72,6 +93,10 @@ interface QueueItem {
   saved?: "created" | "updated" | "skipped";
   /** Produto já existente na base, reconhecido durante a análise. */
   existing?: ExistingProductMatch | null;
+  /** Produto gravado no Flow (public.products.id). */
+  productId?: string | null;
+  /** Resultado confirmado pelo banco da última publicação na loja. */
+  publication?: { slug: string | null; action?: string; counts?: PublishCounts; warnings: string[] };
 }
 
 interface ImporterOptions {
@@ -103,6 +128,8 @@ const DEFAULT_OPTIONS: ImporterOptions = {
   copyImagesToStorage: true,
 };
 
+const LOJA_URL = import.meta.env.VITE_LOJA_URL ?? "http://localhost:3000";
+
 const SLEEP = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const fmtBRL = (n: number) =>
   n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -127,6 +154,7 @@ export function ImportadorProdutos() {
   const [progress, setProgress] = useState(0);
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [openJobs, setOpenJobs] = useState<ImportJobRow[]>([]);
+  const [destination, setDestination] = useState<SaveDestination>(DEFAULT_SAVE_DESTINATION);
 
   const patch = (id: string, p: Partial<QueueItem>) =>
     setQueue((q) => q.map((it) => (it.id === id ? { ...it, ...p } : it)));
@@ -244,36 +272,55 @@ export function ImportadorProdutos() {
       return;
     }
 
-    // ----- Modos individual / lote (em memória) -----------------------------
+    // ----- Individual (em memória) / lote (fila persistente) ----------------
     let urls: string[] = [];
     if (mode === "single") urls = singleUrl.trim() ? [singleUrl.trim()] : [];
     if (mode === "batch") urls = parseBatchUrls(batchText);
     if (!urls.length) return toast.error("Informe ao menos um link válido.");
 
-    const items: QueueItem[] = urls.map((url) => ({ id: nextId(), url, status: "pendente", selected: false }));
-    setCurrentJobId(null);
+    const created = mode === "batch" ? await createImportJob(profile.company_id, "batch", null, urls) : null;
+    const items: QueueItem[] = created
+      ? created.items.map((it) => ({ id: nextId(), dbId: it.id, url: it.source_url, status: it.status, selected: false }))
+      : urls.map((url) => ({ id: nextId(), url, status: "pendente", selected: false }));
+    if (created) toast.info("Fila salva — o lote pode ser retomado se você sair da página.");
+    setCurrentJobId(created?.job.id ?? null);
     setQueue(items);
-    await processPending(items, null);
+    await processPending(items, created?.job.id ?? null);
   }
 
-  // Retoma um job de catálogo interrompido: recarrega itens e processa pendentes.
+  // Retoma uma fila interrompida (catálogo ou lote): recarrega itens, links
+  // dos já publicados e processa os pendentes. Itens já gravados no Flow não
+  // voltam selecionados, e os com erro podem ser repetidos sem duplicar.
   async function resumeJob(job: ImportJobRow) {
     const rows = await loadJobItems(job.id);
     if (!rows.length) return toast.error("Não há itens para retomar neste job.");
+    const publishedIds = rows
+      .filter((r) => r.product_id && (r.status === "publicado" || r.status === "publicado_atencao"))
+      .map((r) => r.product_id!);
+    const slugs = new Map<string, string>();
+    if (publishedIds.length) {
+      const { data } = await (supabase as any).from("site_products").select("crm_id,slug").in("crm_id", publishedIds);
+      for (const row of (data ?? []) as { crm_id: string; slug: string }[]) slugs.set(row.crm_id, row.slug);
+    }
     const items: QueueItem[] = rows.map((r) => ({
       id: nextId(),
       dbId: r.id,
       url: r.source_url,
       status: r.status,
       product: r.normalized_data || undefined,
-      selected: !!r.normalized_data && (r.normalized_data.errors?.length ?? 0) === 0 && r.status !== "importado",
+      selected: !!r.normalized_data && (r.normalized_data.errors?.length ?? 0) === 0 && !isSavedStatus(r.status),
       editName: r.normalized_data?.original_name,
       editCategory: r.normalized_data?.classification.category,
       editSubcategory: r.normalized_data?.classification.subcategory,
       error: r.errors?.[0],
+      productId: r.product_id,
+      publication:
+        r.product_id && slugs.has(r.product_id)
+          ? { slug: slugs.get(r.product_id)!, warnings: r.warnings ?? [] }
+          : undefined,
     }));
     setCurrentJobId(job.id);
-    setMode("catalog");
+    setMode(job.import_mode === "batch" ? "batch" : "catalog");
     setQueue(items);
     const pendingCount = items.filter((it) => it.status === "pendente").length;
     toast.success(`Retomando: ${items.length} itens (${pendingCount} pendentes).`);
@@ -301,6 +348,152 @@ export function ImportadorProdutos() {
     return p;
   }
 
+  /**
+   * Publica um produto já gravado no Flow. Só marca sucesso com a confirmação
+   * do banco; a falha fica no item (e na fila persistente) para repetir.
+   */
+  async function publishOne(item: QueueItem, productId: string, tally: RunTally) {
+    patch(item.id, { status: "publicando", error: undefined });
+    try {
+      const result = await publishCrmProduct(supabase as any, productId);
+      const status = statusAfterPublish(result);
+      if (status === "publicado") tally.published++;
+      else tally.publishedWithWarnings++;
+      patch(item.id, {
+        status,
+        publication: { slug: result.slug, action: result.action, counts: result.counts, warnings: result.warnings },
+      });
+      if (item.dbId) await updateImportItem(item.dbId, { status, warnings: result.warnings, errors: [] });
+    } catch (e: any) {
+      tally.failedPublish++;
+      const message = e?.message || "Falha ao publicar na loja.";
+      patch(item.id, { status: "erro_publicacao", error: message });
+      if (item.dbId) await updateImportItem(item.dbId, { status: "erro_publicacao", errors: [message] });
+    }
+  }
+
+  type SaveSideEffects = {
+    structuredWarn: number;
+    combos: number;
+    imagesCopied: number;
+    imagesNotCopied: number;
+    firstImageError?: string;
+  };
+
+  const emptySideEffects = (): SaveSideEffects => ({
+    structuredWarn: 0,
+    combos: 0,
+    imagesCopied: 0,
+    imagesNotCopied: 0,
+  });
+
+  async function saveOne(
+    item: QueueItem,
+    dest: SaveDestination,
+    updateExisting: boolean,
+    tally: RunTally,
+    fx: SaveSideEffects,
+  ) {
+    const companyId = profile!.company_id!;
+    patch(item.id, { status: "importando", error: undefined });
+    const product = buildEffective(item);
+    let result: Awaited<ReturnType<typeof persistImportedProduct>>;
+    try {
+      result = await persistImportedProduct(product, {
+        companyId,
+        marginPercent: margin,
+        supplierName: options.saveAsExternalSupplier ? product.supplier : null,
+        updateExisting,
+        descriptionInternalOnly: options.descriptionInternalOnly,
+        copyImages: options.copyImagesToStorage,
+        productStatus: productStatusRule(dest),
+      });
+    } catch (e: any) {
+      tally.failedSave++;
+      const message = e?.message || "Falha ao salvar.";
+      patch(item.id, { status: "erro", error: message });
+      if (item.dbId) await updateImportItem(item.dbId, { status: "erro", errors: [message] });
+      return;
+    }
+
+    if (result.action === "created") tally.created++;
+    else if (result.action === "updated") tally.updated++;
+    else tally.skipped++;
+    const savedStatus = statusAfterSave(result.action, dest);
+    if (savedStatus === "rascunho") tally.drafts++;
+    patch(item.id, { status: savedStatus, saved: result.action, productId: result.productId });
+    if (item.dbId) await updateImportItem(item.dbId, { status: savedStatus, product_id: result.productId });
+
+    if (result.structuredWarnings?.length) fx.structuredWarn += result.structuredWarnings.length;
+    if (result.imageCopy) {
+      fx.imagesCopied += result.imageCopy.copied;
+      fx.imagesNotCopied += result.imageCopy.total - result.imageCopy.copied;
+      fx.firstImageError ??= result.imageCopy.errors[0];
+    }
+
+    if (result.action !== "skipped" && result.productId) {
+      // Motor técnico: gera automaticamente os produtos comerciais (combinações
+      // do fornecedor) para cada produto importado/atualizado. Best-effort —
+      // nunca derruba a importação nem a categorização já feita.
+      try {
+        const gen = await generateCommercialProducts({ product_id: result.productId, company_id: companyId });
+        fx.combos += gen.commercial_products_created + gen.commercial_products_updated;
+      } catch {
+        /* segue sem as combinações; podem ser geradas depois pelo menu do produto */
+      }
+
+      // Registra histórico (best-effort, não bloqueia a importação).
+      const tiers = product.variants[0]?.price_tiers || [];
+      supabase
+        .from("supplier_imports")
+        .insert({
+          company_id: companyId,
+          source_url: product.source_url,
+          supplier_domain: product.supplier_domain,
+          extraction_status: "imported",
+          product_name: product.original_name,
+          supplier_sku: product.external_id ?? null,
+          current_price: tiers[0]?.total_price ?? null,
+          main_image_url: product.images.find((im) => im.is_main)?.url ?? null,
+          production_deadline: product.production_time?.original_production_time ?? null,
+        })
+        .then(undefined, () => {});
+    }
+
+    // Publicação só depois do grafo estruturado gravado: a loja lê variantes e
+    // tiragens de lá. Cada item isolado: uma falha não interrompe o lote.
+    if (shouldPublish(dest, result.action) && result.productId) {
+      await publishOne(item, result.productId, tally);
+    }
+  }
+
+  function reportRun(tally: RunTally, fx: SaveSideEffects) {
+    const { level, message } = summarizeRun(tally);
+    const combos = fx.combos > 0 ? ` ${fx.combos} produtos comerciais gerados.` : "";
+    toast[level](message + combos);
+    // Imagem não copiada fica apontando para o CDN do fornecedor e aparece
+    // assim na loja: precisa ser visível, não um aviso genérico.
+    if (fx.imagesNotCopied > 0) {
+      toast.error(
+        `${fx.imagesNotCopied} imagem(ns) não copiada(s) para o Storage` +
+          `${fx.imagesCopied ? ` (${fx.imagesCopied} copiada(s))` : ""}: continuam no servidor do fornecedor.`,
+        { description: fx.firstImageError },
+      );
+    }
+    if (fx.structuredWarn > 0) {
+      toast.warning(`${fx.structuredWarn} aviso(s) ao gravar dados estruturados (variantes/atributos). Produto salvo mesmo assim.`);
+    }
+  }
+
+  async function finishRun() {
+    setIsSaving(false);
+    if (currentJobId) {
+      await updateImportJob(currentJobId, { status: "importado", finished_at: new Date().toISOString() });
+      await syncJobCounters(currentJobId);
+      refreshOpenJobs();
+    }
+  }
+
   async function saveSelected() {
     if (!profile?.company_id) {
       toast.error("Empresa do usuário não identificada.");
@@ -325,103 +518,35 @@ export function ImportadorProdutos() {
     }
 
     setIsSaving(true);
-    let created = 0,
-      updated = 0,
-      skipped = 0,
-      failed = 0,
-      structuredWarn = 0,
-      combos = 0,
-      imagesCopied = 0,
-      imagesNotCopied = 0;
-    let firstImageError: string | undefined;
-
+    const tally = emptyTally();
+    const fx = emptySideEffects();
     for (const item of toSave) {
-      try {
-        patch(item.id, { status: "importando" });
-        const product = buildEffective(item);
-        const result = await persistImportedProduct(product, {
-          companyId: profile.company_id,
-          marginPercent: margin,
-          supplierName: options.saveAsExternalSupplier ? product.supplier : null,
-          updateExisting: updateExistingForRun,
-          descriptionInternalOnly: options.descriptionInternalOnly,
-          copyImages: options.copyImagesToStorage,
-        });
-        if (result.action === "created") created++;
-        else if (result.action === "updated") updated++;
-        else skipped++;
-        const finalStatus: ImportItemStatus =
-          result.action === "skipped" ? "ignorado" : result.action === "updated" ? "atualizado" : "importado";
-        patch(item.id, { status: finalStatus, saved: result.action });
-        if (result.structuredWarnings?.length) structuredWarn += result.structuredWarnings.length;
-        if (result.imageCopy) {
-          imagesCopied += result.imageCopy.copied;
-          imagesNotCopied += result.imageCopy.total - result.imageCopy.copied;
-          firstImageError ??= result.imageCopy.errors[0];
-        }
-        if (item.dbId) await updateImportItem(item.dbId, { status: finalStatus, product_id: result.productId });
+      await saveOne(item, destination, updateExistingForRun, tally, fx);
+    }
+    await finishRun();
+    reportRun(tally, fx);
+  }
 
-        // Motor técnico: gera automaticamente os produtos comerciais (combinações
-        // do fornecedor) para cada produto importado/atualizado. Best-effort —
-        // nunca derruba a importação nem a categorização já feita.
-        if (result.action !== "skipped" && result.productId) {
-          try {
-            const gen = await generateCommercialProducts({
-              product_id: result.productId,
-              company_id: profile.company_id,
-            });
-            combos += gen.commercial_products_created + gen.commercial_products_updated;
-          } catch {
-            /* segue sem as combinações; podem ser geradas depois pelo menu do produto */
-          }
-        }
+  /**
+   * Repete só os itens com erro, retomando do passo que falhou: análise,
+   * gravação (a deduplicação reconhece o que já existe) ou só a publicação.
+   */
+  async function retryFailed() {
+    if (!profile?.company_id) return toast.error("Empresa do usuário não identificada.");
+    const failed = queue.filter((it) => retryStep({ ...it, hasProduct: !!it.product }) !== null);
+    if (!failed.length) return toast.info("Nenhum item com erro para repetir.");
 
-        // Registra histórico (best-effort, não bloqueia a importação).
-        if (result.action !== "skipped") {
-          const tiers = product.variants[0]?.price_tiers || [];
-          supabase
-            .from("supplier_imports")
-            .insert({
-              company_id: profile.company_id,
-              source_url: product.source_url,
-              supplier_domain: product.supplier_domain,
-              extraction_status: "imported",
-              product_name: product.original_name,
-              supplier_sku: product.external_id ?? null,
-              current_price: tiers[0]?.total_price ?? null,
-              main_image_url: product.images.find((im) => im.is_main)?.url ?? null,
-              production_deadline: product.production_time?.original_production_time ?? null,
-            })
-            .then(undefined, () => {});
-        }
-      } catch (e: any) {
-        failed++;
-        patch(item.id, { status: "erro", error: e?.message || "Falha ao salvar." });
-      }
+    setIsSaving(true);
+    const tally = emptyTally();
+    const fx = emptySideEffects();
+    for (const item of failed) {
+      const step = retryStep({ ...item, hasProduct: !!item.product });
+      if (step === "analyze") await analyzeOne(item);
+      else if (step === "save") await saveOne(item, destination, true, tally, fx);
+      else if (step === "publish") await publishOne(item, item.productId!, tally);
     }
-
-    setIsSaving(false);
-    if (currentJobId) {
-      await updateImportJob(currentJobId, { status: "importado", finished_at: new Date().toISOString() });
-      await syncJobCounters(currentJobId);
-      refreshOpenJobs();
-    }
-    toast.success(
-      `Importação concluída: ${created} criados, ${updated} atualizados, ${skipped} ignorados${failed ? `, ${failed} com erro` : ""}` +
-        `${combos > 0 ? ` · ${combos} produtos comerciais gerados` : ""}.`,
-    );
-    // Imagem não copiada fica apontando para o CDN do fornecedor e aparece
-    // assim na loja: precisa ser visível, não um aviso genérico.
-    if (imagesNotCopied > 0) {
-      toast.error(
-        `${imagesNotCopied} imagem(ns) não copiada(s) para o Storage` +
-          `${imagesCopied ? ` (${imagesCopied} copiada(s))` : ""}: continuam no servidor do fornecedor.`,
-        { description: firstImageError },
-      );
-    }
-    if (structuredWarn > 0) {
-      toast.warning(`${structuredWarn} aviso(s) ao gravar dados estruturados (variantes/atributos). Produto salvo mesmo assim.`);
-    }
+    await finishRun();
+    reportRun(tally, fx);
   }
 
   // ---- Agregações para os painéis de avisos/erros --------------------------
@@ -434,7 +559,8 @@ export function ImportadorProdutos() {
       .concat(analyzed.flatMap((q) => (q.product?.errors || []).map((e) => ({ url: q.url, e }))));
     const selectedCount = queue.filter((q) => q.selected && q.product).length;
     const reviewCount = queue.filter((q) => q.status === "revisao_necessaria").length;
-    return { analyzedCount: analyzed.length, warnings, errors, selectedCount, reviewCount };
+    const failedCount = queue.filter((q) => isFailedStatus(q.status)).length;
+    return { analyzedCount: analyzed.length, warnings, errors, selectedCount, reviewCount, failedCount };
   }, [queue]);
 
   return (
@@ -448,23 +574,26 @@ export function ImportadorProdutos() {
         </span>
       </div>
 
-      {/* Retomar importações de catálogo interrompidas (fila persistente) */}
+      {/* Retomar filas interrompidas ou com erros (catálogo e lote) */}
       {openJobs.length > 0 && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
           <div className="flex items-center gap-2 mb-2 text-sm font-semibold text-amber-700">
-            <History className="h-4 w-4" /> Importações de catálogo em andamento
+            <History className="h-4 w-4" /> Importações em andamento ou com erros
           </div>
           <div className="space-y-2">
             {openJobs.map((job) => {
               const pending = Math.max(0, (job.total_found || 0) - (job.total_processed || 0));
               return (
                 <div key={job.id} className="flex items-center gap-3 text-xs">
-                  <span className="flex-1 truncate text-muted-foreground">{job.source_url}</span>
+                  <span className="flex-1 truncate text-muted-foreground">
+                    {job.source_url || `Lote de ${job.total_found} link(s) · ${new Date(job.created_at).toLocaleString("pt-BR")}`}
+                  </span>
                   <span className="text-muted-foreground">
                     {job.total_processed}/{job.total_found} processados
+                    {job.total_error > 0 && <span className="text-destructive"> · {job.total_error} com erro</span>}
                   </span>
                   <Button size="sm" variant="outline" disabled={isRunning} onClick={() => resumeJob(job)}>
-                    Retomar ({pending})
+                    {pending > 0 ? `Retomar (${pending})` : "Abrir para repetir"}
                   </Button>
                 </div>
               );
@@ -611,11 +740,31 @@ export function ImportadorProdutos() {
                     <AlertTriangle className="h-4 w-4" /> {stats.errors.length} erros
                   </span>
                 )}
-                <div className="ml-auto flex items-center gap-2">
+                <div className="ml-auto flex flex-wrap items-center gap-2">
                   <span className="text-xs text-muted-foreground">{stats.selectedCount} selecionados</span>
+                  {stats.failedCount > 0 && (
+                    <Button size="sm" variant="outline" disabled={isSaving || isRunning} onClick={retryFailed}>
+                      <RotateCcw className="h-4 w-4 mr-1" /> Repetir com erro ({stats.failedCount})
+                    </Button>
+                  )}
+                  <Select value={destination} onValueChange={(v) => setDestination(v as SaveDestination)}>
+                    <SelectTrigger className="h-9 w-[230px]" aria-label="Destino dos produtos">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SAVE_DESTINATIONS.map((d) => (
+                        <SelectItem key={d.value} value={d.value}>
+                          <span className="flex flex-col">
+                            <span>{d.label}</span>
+                            <span className="text-[11px] text-muted-foreground">{d.description}</span>
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Button size="sm" disabled={isSaving || stats.selectedCount === 0} onClick={saveSelected}>
                     {isSaving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
-                    Salvar selecionados
+                    {SAVE_DESTINATIONS.find((d) => d.value === destination)!.button}
                   </Button>
                 </div>
               </CardContent>
@@ -673,11 +822,11 @@ function PreviewCard({
 }) {
   const p = item.product;
   const statusVariant =
-    item.status === "erro" || item.status === "bloqueado"
+    item.status === "erro" || item.status === "bloqueado" || item.status === "erro_publicacao"
       ? "destructive"
-      : item.status === "revisao_necessaria"
+      : item.status === "revisao_necessaria" || item.status === "publicado_atencao"
         ? "warning"
-        : item.status === "importado" || item.status === "atualizado"
+        : ["importado", "atualizado", "rascunho", "publicado"].includes(item.status)
           ? "success"
           : item.status === "ignorado"
             ? "muted"
@@ -707,7 +856,17 @@ function PreviewCard({
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <StatusBadge variant={statusVariant as any}>{item.status}</StatusBadge>
+              <StatusBadge variant={statusVariant as any}>{IMPORT_STATUS_LABEL[item.status] ?? item.status}</StatusBadge>
+              {item.publication?.slug && (
+                <a
+                  href={storeProductUrl(LOJA_URL, item.publication.slug)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[11px] font-medium text-primary inline-flex items-center gap-0.5"
+                >
+                  <Store className="h-3 w-3" /> Abrir na loja
+                </a>
+              )}
               {p && (
                 <span className="text-[10px] text-muted-foreground">
                   confiança {p.classification.confidence}%

@@ -11,6 +11,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import type { ImportItemStatus, ImportedProduct } from "@/types/importedProduct";
+import { FAILED_STATUSES, SUCCESS_STATUSES } from "@/lib/importer-publication";
 
 // As tabelas product_import_jobs/items ainda não estão refletidas no types.ts
 // gerado (criadas via migration nova). Acesso por handle sem tipagem estrita.
@@ -37,20 +38,44 @@ export interface ImportItemRow {
   status: ImportItemStatus;
   normalized_data: ImportedProduct | null;
   errors: string[] | null;
+  /** Avisos da publicação na loja (quando o item foi publicado). */
+  warnings: string[] | null;
   product_id: string | null;
 }
 
 const externalId = (url: string) => url.match(/[?&]id=(\d+)/)?.[1] ?? null;
 
-const OPEN_STATUSES = ["pendente", "analisando", "extraido", "revisao_necessaria", "pronto_para_importar", "importando"];
+const OPEN_STATUSES = [
+  "pendente",
+  "analisando",
+  "extraido",
+  "revisao_necessaria",
+  "pronto_para_importar",
+  "importando",
+  "publicando",
+];
 
 /**
  * Cria um job de catálogo e seus itens (deduplicados por id externo / URL).
  * Retorna o job e os itens criados. Em caso de falha, retorna null (modo memória).
  */
-export async function createCatalogJob(
+export function createCatalogJob(
   companyId: string,
   sourceUrl: string,
+  links: string[],
+  supplierId?: string | null,
+): Promise<{ job: ImportJobRow; items: ImportItemRow[] } | null> {
+  return createImportJob(companyId, "catalog", sourceUrl, links, supplierId);
+}
+
+/**
+ * Fila persistente para qualquer modo com mais de um link (catálogo ou lote),
+ * para sobreviver ao recarregamento da página e permitir repetir só os erros.
+ */
+export async function createImportJob(
+  companyId: string,
+  importMode: "catalog" | "batch",
+  sourceUrl: string | null,
   links: string[],
   supplierId?: string | null,
 ): Promise<{ job: ImportJobRow; items: ImportItemRow[] } | null> {
@@ -69,7 +94,7 @@ export async function createCatalogJob(
       .insert({
         company_id: companyId,
         supplier_id: supplierId ?? null,
-        import_mode: "catalog",
+        import_mode: importMode,
         source_url: sourceUrl,
         status: "analisando",
         total_found: uniqueLinks.length,
@@ -106,7 +131,8 @@ export async function loadOpenJobs(companyId: string): Promise<ImportJobRow[]> {
       .from("product_import_jobs")
       .select("*")
       .eq("company_id", companyId)
-      .in("status", ["pendente", "analisando", "importando"])
+      // "com_erros": terminou, mas há itens para repetir.
+      .in("status", ["pendente", "analisando", "importando", "com_erros"])
       .order("created_at", { ascending: false })
       .limit(10);
     if (error || !data) return [];
@@ -136,7 +162,7 @@ export const isOpenStatus = (s: ImportItemStatus) => OPEN_STATUSES.includes(s);
 /** Atualiza um item da fila (status / dados normalizados / erros / product_id). */
 export async function updateImportItem(
   itemId: string,
-  patch: Partial<Pick<ImportItemRow, "status" | "normalized_data" | "errors" | "product_id">>,
+  patch: Partial<Pick<ImportItemRow, "status" | "normalized_data" | "errors" | "warnings" | "product_id">>,
 ): Promise<void> {
   try {
     await db.from("product_import_items").update(patch as any).eq("id", itemId);
@@ -160,15 +186,15 @@ export async function syncJobCounters(jobId: string): Promise<void> {
     const items = await loadJobItems(jobId);
     if (!items.length) return;
     const processed = items.filter((i) => !["pendente", "analisando"].includes(i.status)).length;
-    const success = items.filter((i) => ["extraido", "importado", "atualizado", "pronto_para_importar"].includes(i.status))
-      .length;
-    const errorCount = items.filter((i) => ["erro", "bloqueado"].includes(i.status)).length;
-    const allDone = items.every((i) => !["pendente", "analisando", "importando"].includes(i.status));
+    const success = items.filter((i) => SUCCESS_STATUSES.includes(i.status)).length;
+    const errorCount = items.filter((i) => [...FAILED_STATUSES, "bloqueado"].includes(i.status)).length;
+    const retryable = items.filter((i) => FAILED_STATUSES.includes(i.status)).length;
+    const allDone = items.every((i) => !["pendente", "analisando", "importando", "publicando"].includes(i.status));
     await updateImportJob(jobId, {
       total_processed: processed,
       total_success: success,
       total_error: errorCount,
-      status: allDone ? "importado" : "analisando",
+      status: allDone ? (retryable ? "com_erros" : "importado") : "analisando",
       ...(allDone ? { finished_at: new Date().toISOString() } : {}),
     });
   } catch {

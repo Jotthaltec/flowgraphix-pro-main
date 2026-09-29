@@ -33,10 +33,15 @@ export type ImportItemStatus =
   | "revisao_necessaria"
   | "pronto_para_importar"
   | "importando"
+  | "publicando"
   | "importado"
   | "atualizado"
+  | "rascunho"
+  | "publicado"
+  | "publicado_atencao"
   | "ignorado"
   | "erro"
+  | "erro_publicacao"
   | "bloqueado";
 
 /** Estado da varredura de variantes (seção 10). */
