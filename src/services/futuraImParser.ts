@@ -447,16 +447,18 @@ export function parseFuturaImProduct(html: string, sourceUrl: string): ImportedP
   }));
 
   // Prazo de produção (seção 19). A FuturaIM expõe na ficha:
-  //   <th>Prazo de produção<td><strong> 3 dias &#xFA;teis + frete ...
-  // ("úteis" vem como entidade HTML, por isso decodificamos antes de casar).
+  //   <th>Prazo de produção<td><strong> 3 dias &#xFA;teis + frete</strong>
+  //   <th>Prazo de produção<td><strong> 1 dia &#xFA;til + frete <a href=/politica-de-entrega>...
+  // O texto vai até a primeira tag (o <strong> pode conter um link), e pode vir
+  // no singular ("1 dia útil"). "útil/úteis" vem como entidade HTML.
   let production_time;
   let prazoText = "";
-  const labelM = html.match(/Prazo de produ[\s\S]{0,80}?<strong[^>]*>([^<]+)<\/strong>/i);
-  if (labelM) {
+  const labelM = html.match(/Prazo de produ[\s\S]{0,80}?<strong[^>]*>([^<]+)/i);
+  if (labelM && /\d/.test(labelM[1])) {
     prazoText = cleanText(decodeEntities(labelM[1]));
   }
   if (!prazoText) {
-    const dm = decodeEntities(html).match(/(\d+\s*dias?\s*(?:[úu]teis|corridos?)(?:\s*\+\s*frete)?)/i);
+    const dm = decodeEntities(html).match(/(\d+\s*dias?\s*(?:[úu]teis|[úu]til|corridos?)(?:\s*\+\s*frete)?)/i);
     if (dm) prazoText = dm[1];
   }
   if (prazoText) {

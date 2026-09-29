@@ -330,7 +330,10 @@ export function ImportadorProdutos() {
       skipped = 0,
       failed = 0,
       structuredWarn = 0,
-      combos = 0;
+      combos = 0,
+      imagesCopied = 0,
+      imagesNotCopied = 0;
+    let firstImageError: string | undefined;
 
     for (const item of toSave) {
       try {
@@ -351,6 +354,11 @@ export function ImportadorProdutos() {
           result.action === "skipped" ? "ignorado" : result.action === "updated" ? "atualizado" : "importado";
         patch(item.id, { status: finalStatus, saved: result.action });
         if (result.structuredWarnings?.length) structuredWarn += result.structuredWarnings.length;
+        if (result.imageCopy) {
+          imagesCopied += result.imageCopy.copied;
+          imagesNotCopied += result.imageCopy.total - result.imageCopy.copied;
+          firstImageError ??= result.imageCopy.errors[0];
+        }
         if (item.dbId) await updateImportItem(item.dbId, { status: finalStatus, product_id: result.productId });
 
         // Motor técnico: gera automaticamente os produtos comerciais (combinações
@@ -402,6 +410,15 @@ export function ImportadorProdutos() {
       `Importação concluída: ${created} criados, ${updated} atualizados, ${skipped} ignorados${failed ? `, ${failed} com erro` : ""}` +
         `${combos > 0 ? ` · ${combos} produtos comerciais gerados` : ""}.`,
     );
+    // Imagem não copiada fica apontando para o CDN do fornecedor e aparece
+    // assim na loja: precisa ser visível, não um aviso genérico.
+    if (imagesNotCopied > 0) {
+      toast.error(
+        `${imagesNotCopied} imagem(ns) não copiada(s) para o Storage` +
+          `${imagesCopied ? ` (${imagesCopied} copiada(s))` : ""}: continuam no servidor do fornecedor.`,
+        { description: firstImageError },
+      );
+    }
     if (structuredWarn > 0) {
       toast.warning(`${structuredWarn} aviso(s) ao gravar dados estruturados (variantes/atributos). Produto salvo mesmo assim.`);
     }

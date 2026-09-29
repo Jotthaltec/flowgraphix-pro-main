@@ -94,6 +94,21 @@ describe("FuturaIM — páginas reais (classificação)", () => {
     expect(cartao.production_time?.production_days).toBe(2);
   });
 
+  it("prazo no formato novo: link dentro do <strong> e singular '1 dia útil' (página de set/2026)", () => {
+    // Regressão: a FuturaIM passou a colocar <a href=/politica-de-entrega> dentro
+    // do <strong> do prazo e a usar o singular. O parser exigia "</strong>" logo
+    // após o texto e só conhecia "úteis" → "Prazo de produção não encontrado".
+    const p = parseFuturaImProduct(
+      fixture("futuraim-cartao-couche-brilho-2026-09.html"),
+      "https://www.futuraim.com.br/produto/cartao-de-visita-em-couche-brilho?id=104756",
+    );
+    expect(p.warnings.join(" ")).not.toMatch(/Prazo de produ/);
+    expect(p.production_time?.production_days).toBe(1);
+    expect(p.production_time?.production_day_type).toBe("business_days");
+    expect(p.production_time?.freight_not_included).toBe(true);
+    expect(p.production_time?.original_production_time).toMatch(/^1 dia útil \+ frete$/);
+  });
+
   it("a MAIOR tiragem tem preço real (não vaza para frete/extra após a tabela)", () => {
     // Regressão: o HTML da FuturaIM não fecha <tr>/<td>; sem limitar a linha ao
     // </table>, a última tiragem capturava o último R$ da página (frete R$ 9,99)

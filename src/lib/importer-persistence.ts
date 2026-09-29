@@ -27,6 +27,8 @@ export interface PersistResult {
   action: "created" | "updated" | "skipped";
   message?: string;
   structuredWarnings?: string[];
+  /** Resultado da cópia de imagens para o Storage (quando solicitada). */
+  imageCopy?: { copied: number; total: number; errors: string[] };
 }
 
 /**
@@ -182,6 +184,7 @@ export async function persistImportedProduct(
   }
 
   const structuredWarnings: string[] = [];
+  let imageCopy: PersistResult["imageCopy"];
 
   // Copia imagens para o Storage (opcional) ANTES do grafo estruturado, para
   // que as URLs gravadas já sejam as do Storage.
@@ -189,14 +192,14 @@ export async function persistImportedProduct(
     try {
       const res = await copyImagesToStorage(product.images, productId, opts.companyId);
       product.images = res.images;
-      structuredWarnings.push(...res.warnings);
+      imageCopy = { copied: res.copied, total: Math.min(res.images.length, 8), errors: res.warnings };
       const main = res.images.find((i) => i.is_main)?.url ?? res.images[0]?.url ?? null;
       await supabase
         .from("products")
         .update({ image_url: main, main_image_url: main, gallery_images: res.images.map((i) => i.url) } as any)
         .eq("id", productId);
     } catch (e: any) {
-      structuredWarnings.push(`cópia de imagens: ${e?.message || e}`);
+      imageCopy = { copied: 0, total: product.images.length, errors: [`cópia de imagens: ${e?.message || e}`] };
     }
   }
 
@@ -206,5 +209,10 @@ export async function persistImportedProduct(
     structuredWarnings.push(...structured.warnings);
   }
 
-  return { productId, action, structuredWarnings: structuredWarnings.length ? structuredWarnings : undefined };
+  return {
+    productId,
+    action,
+    structuredWarnings: structuredWarnings.length ? structuredWarnings : undefined,
+    imageCopy,
+  };
 }
