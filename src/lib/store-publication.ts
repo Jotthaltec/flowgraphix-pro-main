@@ -126,3 +126,49 @@ export function describePublishSuccess(result: PublishSuccess): {
 export function storeProductUrl(lojaUrl: string, slug: string): string {
   return `${lojaUrl.replace(/\/+$/, "")}/produtos/${encodeURIComponent(slug)}`;
 }
+
+/**
+ * Retirar um produto do Flow da loja (migração 20260929040000). Nunca apaga:
+ * - `unpublish` tira da vitrine; volta com "Publicar na loja".
+ * - `archive` deixa fora de venda com o histórico; só uma nova publicação o traz de volta.
+ * O motivo é obrigatório e fica no produto e em `store.sync_log`.
+ */
+export type WithdrawMode = "unpublish" | "archive";
+
+export type WithdrawResult = {
+  ok: true;
+  action: WithdrawMode;
+  product_id: string;
+  sync_status: ProductSyncStatus;
+  cancelled_queue_items: number;
+};
+
+export const WITHDRAW_LABEL: Record<WithdrawMode, { action: string; done: string }> = {
+  unpublish: { action: "Despublicar da loja", done: "Produto despublicado: saiu da vitrine." },
+  archive: {
+    action: "Arquivar na loja",
+    done: "Produto arquivado: fora de venda, histórico preservado.",
+  },
+};
+
+export async function withdrawCrmProduct(
+  client: RpcClient,
+  crmProductId: string,
+  mode: WithdrawMode,
+  reason: string,
+): Promise<WithdrawResult> {
+  const trimmed = reason.trim();
+  if (!trimmed) throw new Error("Informe o motivo.");
+  const { data, error } = await client
+    .schema("store")
+    .rpc(mode === "archive" ? "archive_crm_product" : "unpublish_crm_product", {
+      p_crm_product_id: crmProductId,
+      p_reason: trimmed,
+    });
+  if (error) throw new Error(error.message);
+  const result = data as Partial<WithdrawResult> | null;
+  if (!result || result.ok !== true || result.action !== mode || !result.product_id) {
+    throw new Error("A loja devolveu uma resposta inesperada.");
+  }
+  return result as WithdrawResult;
+}

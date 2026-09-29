@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   SYNC_STATUS_DISPLAY,
   describeSyncHealth,
+  isWithdrawn,
   syncStatusDisplay,
   type ProductSyncHealth,
 } from "@/lib/product-sync";
@@ -101,5 +102,43 @@ describe("describeSyncHealth", () => {
 
   it("nunca publicado não inventa data", () => {
     expect(describeSyncHealth({ ...base, synced_at: null }, fmt).dates[0]).toBe("Nunca publicado");
+  });
+});
+
+describe("produto retirado da loja", () => {
+  const base: ProductSyncHealth = {
+    crm_id: "crm-1",
+    divergence: null,
+    synced_at: "2026-09-29T02:30:00Z",
+    crm_updated_at: null,
+    site_updated_at: null,
+    last_sync_error: null,
+    queue_status: null,
+    queue_attempts: null,
+    queue_next_attempt_at: null,
+    queue_last_error: null,
+  };
+  const fmt = (iso: string) => iso.slice(11, 16);
+
+  it("mostra quando e por que saiu", () => {
+    expect(
+      describeSyncHealth(
+        { ...base, unpublished_at: "2026-09-29T10:00:00Z", withdrawn_reason: "Sem estoque" },
+        fmt,
+      ).summary,
+    ).toEqual(["Despublicado em 10:00: Sem estoque"]);
+    expect(
+      describeSyncHealth(
+        { ...base, archived_at: "2026-09-29T11:00:00Z", unpublished_at: "2026-09-29T10:00:00Z" },
+        fmt,
+      ).summary,
+    ).toEqual(["Arquivado em 11:00"]);
+  });
+
+  it("isWithdrawn só é verdadeiro fora de venda", () => {
+    expect(isWithdrawn(base)).toBe(false);
+    expect(isWithdrawn(undefined)).toBe(false);
+    expect(isWithdrawn({ archived_at: "x", unpublished_at: null })).toBe(true);
+    expect(isWithdrawn({ archived_at: null, unpublished_at: "x" })).toBe(true);
   });
 });

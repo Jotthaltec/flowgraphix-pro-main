@@ -43,7 +43,7 @@ export function syncStatusDisplay(status: string | null | undefined) {
   );
 }
 
-/** Linha de store.crm_product_sync_health (migração 20260929030000). */
+/** Linha de store.crm_product_sync_health (migrações 20260929030000 e 20260929040000). */
 export type ProductSyncHealth = {
   crm_id: string | null;
   divergence: "flow" | "site" | "ambos" | "orfao" | "sem_assinatura" | null;
@@ -55,7 +55,18 @@ export type ProductSyncHealth = {
   queue_attempts: number | null;
   queue_next_attempt_at: string | null;
   queue_last_error: string | null;
+  /** Retirado da loja pelo Flow (fase 6): quando e por quê. */
+  archived_at?: string | null;
+  unpublished_at?: string | null;
+  withdrawn_reason?: string | null;
 };
+
+/** Produto do Flow fora de venda na loja (despublicado ou arquivado). */
+export function isWithdrawn(
+  h: Pick<ProductSyncHealth, "archived_at" | "unpublished_at"> | null | undefined,
+) {
+  return Boolean(h?.archived_at || h?.unpublished_at);
+}
 
 export const DIVERGENCE_LABEL: Record<NonNullable<ProductSyncHealth["divergence"]>, string> = {
   flow: "Alterado no Flow depois da publicação",
@@ -76,6 +87,9 @@ const dateTime = (iso: string) =>
  */
 export function describeSyncHealth(h: ProductSyncHealth, fmt: (iso: string) => string = dateTime) {
   const summary: string[] = [];
+  const why = h.withdrawn_reason ? `: ${h.withdrawn_reason}` : "";
+  if (h.archived_at) summary.push(`Arquivado em ${fmt(h.archived_at)}${why}`);
+  else if (h.unpublished_at) summary.push(`Despublicado em ${fmt(h.unpublished_at)}${why}`);
   if (h.divergence) summary.push(DIVERGENCE_LABEL[h.divergence] ?? `Divergência: ${h.divergence}`);
 
   if (h.queue_status === "pending") {

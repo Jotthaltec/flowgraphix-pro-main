@@ -5,6 +5,7 @@ import {
   parsePublishResult,
   publishCrmProduct,
   storeProductUrl,
+  withdrawCrmProduct,
   type PublishSuccess,
 } from "@/lib/store-publication";
 
@@ -95,6 +96,51 @@ describe("storeProductUrl", () => {
   it("aponta para a rota de produto da loja", () => {
     expect(storeProductUrl("https://nexusprinti.com.br/", "cartao-de-visita-21ed9d14")).toBe(
       "https://nexusprinti.com.br/produtos/cartao-de-visita-21ed9d14",
+    );
+  });
+});
+
+describe("withdrawCrmProduct", () => {
+  const archived = {
+    ok: true,
+    action: "archive",
+    product_id: "p1",
+    sync_status: "archived",
+    cancelled_queue_items: 1,
+  };
+
+  it("chama a função do modo pedido, com o motivo aparado", async () => {
+    const { client, rpc } = clientReturning(archived);
+    await expect(
+      withdrawCrmProduct(client, "crm-1", "archive", "  Linha descontinuada "),
+    ).resolves.toEqual(archived);
+    expect(rpc).toHaveBeenCalledWith("archive_crm_product", {
+      p_crm_product_id: "crm-1",
+      p_reason: "Linha descontinuada",
+    });
+
+    const unpub = clientReturning({ ...archived, action: "unpublish", sync_status: "pending" });
+    await withdrawCrmProduct(unpub.client, "crm-1", "unpublish", "Sem estoque");
+    expect(unpub.rpc).toHaveBeenCalledWith("unpublish_crm_product", {
+      p_crm_product_id: "crm-1",
+      p_reason: "Sem estoque",
+    });
+  });
+
+  it("exige motivo antes de chamar o banco", async () => {
+    const { client, rpc } = clientReturning(archived);
+    await expect(withdrawCrmProduct(client, "crm-1", "archive", "   ")).rejects.toThrow("motivo");
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("propaga a recusa do banco e não aceita resposta de outro modo", async () => {
+    const denied = clientReturning(null, { message: "Este produto nao esta publicado na loja." });
+    await expect(withdrawCrmProduct(denied.client, "crm-1", "unpublish", "x")).rejects.toThrow(
+      "nao esta publicado",
+    );
+    const wrong = clientReturning(archived);
+    await expect(withdrawCrmProduct(wrong.client, "crm-1", "unpublish", "x")).rejects.toThrow(
+      "inesperada",
     );
   });
 });

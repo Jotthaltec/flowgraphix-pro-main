@@ -1,9 +1,10 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Search, MoreVertical, Loader2, Edit, Trash2, Copy, FilePlus2, Tag, Package, Store, Truck, Hand, Layers, Plus, Sparkles, Settings2 } from "lucide-react";
+import { Search, MoreVertical, Loader2, Edit, Trash2, Copy, FilePlus2, Tag, Package, Store, Truck, Hand, Layers, Plus, Sparkles, Settings2, EyeOff, Archive } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -21,11 +22,18 @@ import { generateCommercialProducts } from "@/integrations/supabase/combination-
 import { normalizeUrlForMatch } from "@/lib/importer-persistence";
 import {
   describeSyncHealth,
+  isWithdrawn,
   syncStatusDisplay,
   type ProductSyncHealth,
   type ProductSyncStatus,
 } from "@/lib/product-sync";
-import { describePublishSuccess, publishCrmProduct } from "@/lib/store-publication";
+import {
+  WITHDRAW_LABEL,
+  describePublishSuccess,
+  publishCrmProduct,
+  withdrawCrmProduct,
+  type WithdrawMode,
+} from "@/lib/store-publication";
 
 export const Route = createFileRoute("/_app/produtos")({ component: ProdutosPage });
 
@@ -102,6 +110,8 @@ function ProdutosPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [marketplaceProduct, setMarketplaceProduct] = useState<Product | null>(null);
   const [deleteConfirmProduct, setDeleteConfirmProduct] = useState<Product | null>(null);
+  const [withdrawTarget, setWithdrawTarget] = useState<{ product: Product; mode: WithdrawMode } | null>(null);
+  const [withdrawReason, setWithdrawReason] = useState("");
 
   const { data: dbProducts, isLoading, isError, error } = useQuery({
     queryKey: ["products"],
@@ -145,7 +155,7 @@ function ProdutosPage() {
         .schema("store")
         .from("crm_product_sync_health")
         .select(
-          "crm_id,divergence,synced_at,crm_updated_at,site_updated_at,last_sync_error,queue_status,queue_attempts,queue_next_attempt_at,queue_last_error",
+          "crm_id,divergence,synced_at,crm_updated_at,site_updated_at,last_sync_error,queue_status,queue_attempts,queue_next_attempt_at,queue_last_error,archived_at,unpublished_at,withdrawn_reason",
         );
       if (error) throw error;
       return (data ?? []) as ProductSyncHealth[];
@@ -415,9 +425,10 @@ function ProdutosPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["products"] });
       queryClient.invalidateQueries({ queryKey: ["imported-products"] });
-      // O gatilho tr_crm_product_deleted tira o produto da loja na mesma transação.
+      // Só chega aqui produto nunca publicado: o banco recusa excluir o que tem
+      // par na loja (tr_crm_product_delete_guard).
       queryClient.invalidateQueries({ queryKey: ["site_products"] });
-      toast.success("Produto removido do CRM e da loja.");
+      toast.success("Produto excluído do CRM.");
     },
     onError: (err) => {
       toast.error("Erro ao remover produto: " + err.message);
@@ -436,6 +447,24 @@ function ProdutosPage() {
     onError: (err: Error) => {
       queryClient.invalidateQueries({ queryKey: ["site_products"] });
       toast.error("Falha ao publicar na loja: " + err.message);
+    },
+  });
+
+  const withdrawMutation = useMutation({
+    // Despublicar/arquivar nunca apaga; só confirma com o retorno do banco.
+    mutationFn: ({ product, mode, reason }: { product: Product; mode: WithdrawMode; reason: string }) =>
+      withdrawCrmProduct(supabase as any, product.id, mode, reason),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["site_products"] });
+      const queued = result.cancelled_queue_items
+        ? ` ${result.cancelled_queue_items} republicação(ões) agendada(s) cancelada(s).`
+        : "";
+      toast.success(WITHDRAW_LABEL[result.action].done + queued);
+      setWithdrawTarget(null);
+      setWithdrawReason("");
+    },
+    onError: (err: Error) => {
+      toast.error("Não foi possível retirar da loja: " + err.message);
     },
   });
 
@@ -690,6 +719,7 @@ function ProdutosPage() {
                 const storeSync = storeByCrmId.get(p.id);
                 const health = healthByCrmId.get(p.id);
                 const syncDetail = health ? describeSyncHealth(health) : null;
+                const withdrawn = isWithdrawn(health);
 
                 let formattedCost = "R$ 0,00";
                 try {
@@ -793,8 +823,18 @@ function ProdutosPage() {
                             onClick={() => publishToStoreMutation.mutate(p)}
                             disabled={publishToStoreMutation.isPending}
                           >
-                            <Store className="h-4 w-4 mr-2" /> {storeSync ? "Ressincronizar loja" : "Publicar na loja"}
+                            <Store className="h-4 w-4 mr-2" /> {storeSync && !withdrawn ? "Ressincronizar loja" : "Publicar na loja"}
                           </DropdownMenuItem>
+                          {storeSync && !withdrawn ? (
+                            <>
+                              <DropdownMenuItem onClick={() => setWithdrawTarget({ product: p, mode: "unpublish" })}>
+                                <EyeOff className="h-4 w-4 mr-2" /> {WITHDRAW_LABEL.unpublish.action}
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setWithdrawTarget({ product: p, mode: "archive" })}>
+                                <Archive className="h-4 w-4 mr-2" /> {WITHDRAW_LABEL.archive.action}
+                              </DropdownMenuItem>
+                            </>
+                          ) : null}
                           <DropdownMenuItem onClick={() => setMarketplaceProduct(p)}>
                             <Store className="h-4 w-4 mr-2" /> Rascunho Marketplace
                           </DropdownMenuItem>
@@ -807,11 +847,14 @@ function ProdutosPage() {
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem 
+                          {/* Publicado nunca é excluído: o banco recusa (despublique ou arquive). */}
+                          <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
+                            disabled={!!storeSync}
+                            title={storeSync ? "Já publicado na loja: despublique ou arquive." : undefined}
                             onClick={() => setDeleteConfirmProduct(p)}
                           >
-                            <Trash2 className="h-4 w-4 mr-2" /> Remover
+                            <Trash2 className="h-4 w-4 mr-2" /> {storeSync ? "Remover (publicado)" : "Remover"}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -967,13 +1010,61 @@ function ProdutosPage() {
       </Dialog>
 
       {/* Dialog de confirmação de exclusão */}
+      <Dialog
+        open={!!withdrawTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setWithdrawTarget(null);
+            setWithdrawReason("");
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[440px]">
+          <DialogHeader>
+            <DialogTitle>{withdrawTarget ? WITHDRAW_LABEL[withdrawTarget.mode].action : ""}</DialogTitle>
+            <DialogDescription>
+              {withdrawTarget?.mode === "archive"
+                ? "O produto sai de venda e fica preservado com pedidos e histórico. Só volta publicando de novo pelo Flow."
+                : "O produto sai da vitrine e pode voltar a qualquer momento com “Publicar na loja”."}{" "}
+              Nada é apagado.
+            </DialogDescription>
+          </DialogHeader>
+          <p className="text-sm">
+            <strong>{withdrawTarget?.product.name}</strong>
+          </p>
+          <Textarea
+            placeholder="Motivo (obrigatório), ex.: fornecedor sem estoque"
+            value={withdrawReason}
+            maxLength={500}
+            onChange={(e) => setWithdrawReason(e.target.value)}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setWithdrawTarget(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!withdrawReason.trim() || withdrawMutation.isPending}
+              onClick={() => {
+                if (withdrawTarget) {
+                  withdrawMutation.mutate({ ...withdrawTarget, reason: withdrawReason });
+                }
+              }}
+            >
+              {withdrawMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {withdrawTarget?.mode === "archive" ? "Arquivar" : "Despublicar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!deleteConfirmProduct} onOpenChange={(open) => !open && setDeleteConfirmProduct(null)}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>Confirmar exclusão</DialogTitle>
           </DialogHeader>
           <p className="text-muted-foreground text-sm">
-            Tem certeza que deseja remover o produto <strong>{deleteConfirmProduct?.name}</strong>? Esta ação não pode ser desfeita.
+            Tem certeza que deseja remover o produto <strong>{deleteConfirmProduct?.name}</strong>? Ele nunca foi publicado na loja; esta ação não pode ser desfeita.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirmProduct(null)}>Cancelar</Button>
