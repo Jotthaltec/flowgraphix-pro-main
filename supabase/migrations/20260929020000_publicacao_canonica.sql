@@ -891,6 +891,7 @@ declare
   v_error text;
   v_code text;
   v_version integer;
+  v_slug text;
 begin
   -- Mesma ordem de travas da montagem: origem no Flow, depois a linha da loja.
   select * into v_source from public.products where id = p_crm_product_id for update;
@@ -973,6 +974,8 @@ begin
     where id = v_store_id;
   end if;
 
+  select slug into v_slug from store.products where id = v_store_id;
+
   insert into store.sync_log(entidade, direcao, origem_id, destino_id, acao, sucesso, payload)
   values (
     'produtos', 'crm_para_site', v_source.id, v_store_id,
@@ -995,6 +998,7 @@ begin
     'action', v_action,
     'product_id', v_store_id,
     'id', v_store_id,
+    'slug', v_slug,
     'sync_status', v_status,
     'sync_version', v_version,
     'content_hash', v_hash,

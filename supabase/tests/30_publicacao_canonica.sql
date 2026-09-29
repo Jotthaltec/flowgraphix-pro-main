@@ -52,6 +52,7 @@ begin
   r := store.publish_crm_product(c_crm);
   assert r ->> 'ok' = 'true' and r ->> 'action' = 'insert', format('A: %s', r);
   v_id := (r ->> 'product_id')::uuid;
+  assert r ->> 'slug' = (select slug from store.products where id = v_id), 'A: slug devolvido';
   assert (r ->> 'sync_version')::int = 1, 'A: versão 1';
   assert (select content_hash = r ->> 'content_hash' and content_hash = store.product_content_hash(v_id)
           and sync_status in ('synced','attention') and synced_at is not null and last_sync_error is null

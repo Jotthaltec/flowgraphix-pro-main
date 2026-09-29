@@ -12,6 +12,7 @@ const success: PublishSuccess = {
   ok: true,
   action: "update",
   product_id: "487992ba-fc32-4231-8c27-7242539658d8",
+  slug: "cartao-de-visita-em-couche-brilho-21ed9d14",
   sync_status: "synced",
   sync_version: 3,
   content_hash: "abc",

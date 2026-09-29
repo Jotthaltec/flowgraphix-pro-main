@@ -24,6 +24,8 @@ export type PublishSuccess = {
   ok: true;
   action: "insert" | "update" | "noop";
   product_id: string;
+  /** Slug do produto na loja, para montar o link público. */
+  slug: string;
   sync_status: ProductSyncStatus;
   sync_version: number;
   content_hash: string;
