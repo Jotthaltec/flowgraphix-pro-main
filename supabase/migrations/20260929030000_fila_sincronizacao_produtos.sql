@@ -96,7 +96,7 @@ set search_path = ''
 as $$
   with s as (
     select
-      p.sync_origin, p.sync_status, p.archived_at, p.content_hash, p.source_updated_at,
+      p.sync_origin, p.sync_status, p.archived_at, p.content_hash, p.source_updated_at, p.synced_at,
       c.id is null and p.sync_origin = 'crm' as orphan,
       c.updated_at as crm_updated_at,
       case when p.sync_origin = 'crm' then store.product_content_hash(p.id) end as site_hash,
@@ -111,9 +111,11 @@ as $$
     select s.*,
       s.sync_origin = 'crm' and s.content_hash is not null
         and s.site_hash is distinct from s.content_hash as site_changed,
+      -- Publicado antes de existir source_updated_at: a referência é a própria
+      -- publicação, senão toda edição antiga pareceria "Flow alterado".
       s.sync_origin = 'crm' and not s.orphan and (
         s.queued or s.sync_status = 'stale'
-        or s.crm_updated_at > coalesce(s.source_updated_at, '-infinity'::timestamptz)
+        or s.crm_updated_at > coalesce(s.source_updated_at, s.synced_at, '-infinity'::timestamptz)
       ) as crm_changed
     from s
   )

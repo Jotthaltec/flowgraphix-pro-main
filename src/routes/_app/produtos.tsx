@@ -19,7 +19,12 @@ import { DialogDescription } from "@/components/ui/dialog";
 import { ProductEditor } from "@/components/products/product-editor";
 import { generateCommercialProducts } from "@/integrations/supabase/combination-client";
 import { normalizeUrlForMatch } from "@/lib/importer-persistence";
-import { syncStatusDisplay, type ProductSyncStatus } from "@/lib/product-sync";
+import {
+  describeSyncHealth,
+  syncStatusDisplay,
+  type ProductSyncHealth,
+  type ProductSyncStatus,
+} from "@/lib/product-sync";
 import { describePublishSuccess, publishCrmProduct } from "@/lib/store-publication";
 
 export const Route = createFileRoute("/_app/produtos")({ component: ProdutosPage });
@@ -130,6 +135,28 @@ function ProdutosPage() {
     },
     enabled: !!profile,
   });
+
+  // Por que o status é esse: lado que divergiu, fila e último erro. A chave fica
+  // sob "site_products" para ser invalidada junto a cada publicação.
+  const { data: syncHealth } = useQuery({
+    queryKey: ["site_products", "health"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .schema("store")
+        .from("crm_product_sync_health")
+        .select(
+          "crm_id,divergence,synced_at,crm_updated_at,site_updated_at,last_sync_error,queue_status,queue_attempts,queue_next_attempt_at,queue_last_error",
+        );
+      if (error) throw error;
+      return (data ?? []) as ProductSyncHealth[];
+    },
+    enabled: !!profile,
+  });
+
+  const healthByCrmId = useMemo(
+    () => new Map((syncHealth ?? []).filter((item) => item.crm_id).map((item) => [item.crm_id as string, item])),
+    [syncHealth],
+  );
 
   const storeByCrmId = useMemo(
     () => new Map((storeProducts ?? []).filter((item) => item.crm_id).map((item) => [item.crm_id as string, item])),
@@ -661,6 +688,8 @@ function ProdutosPage() {
                 const skuDisplay = p.internal_sku || p.supplier_sku || "—";
                 const isMarginValid = !isNaN(marginVal);
                 const storeSync = storeByCrmId.get(p.id);
+                const health = healthByCrmId.get(p.id);
+                const syncDetail = health ? describeSyncHealth(health) : null;
 
                 let formattedCost = "R$ 0,00";
                 try {
@@ -709,6 +738,13 @@ function ProdutosPage() {
                               {storeSync.imagens} mídia(s) · {storeSync.opcoes} opção(ões) · {storeSync.tiragens} tiragem(ns)
                             </span>
                           </span>
+                        ) : null}
+                        {syncDetail && syncDetail.summary.length > 0 ? (
+                          <span className="mt-0.5 text-[10px] text-warning" title={syncDetail.dates.join("\n")}>
+                            {syncDetail.summary.join(" · ")}
+                          </span>
+                        ) : syncDetail ? (
+                          <span className="mt-0.5 text-[10px] text-muted-foreground">{syncDetail.dates.join(" · ")}</span>
                         ) : null}
                       </div>
                     </TableCell>

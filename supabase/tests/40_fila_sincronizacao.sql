@@ -171,6 +171,19 @@ begin
   assert (select status from store.product_sync_queue where crm_product_id = '00000000-0000-4000-8000-0000000000ff')
     = 'cancelled', '13: cancelado';
 
+  -- 13b. Publicado antes da assinatura (sem content_hash nem source_updated_at),
+  --      Flow editado antes da publicação: stale por falta de assinatura, não
+  --      "Flow alterado".
+  update store.products set auto_sync = true where id = v_id;
+  perform store.process_product_sync_queue(50);
+  update store.product_sync_queue set status = 'done' where crm_product_id = c_crm and status in ('pending', 'error');
+  update store.products set content_hash = null, source_updated_at = null, sync_status = 'synced',
+    synced_at = (select updated_at from public.products where id = c_crm) + interval '1 minute'
+  where id = v_id;
+  select * into st from store.product_sync_state(v_id);
+  assert st.status = 'stale' and not st.crm_changed and st.divergence = 'sem_assinatura',
+    format('13b: %s', row_to_json(st));
+
   -- 14. Nativo não tem estado de sincronização.
   assert (select status from store.product_sync_state((select id from store.products where sync_origin = 'site' limit 1)))
     = 'native', '14: nativo';
