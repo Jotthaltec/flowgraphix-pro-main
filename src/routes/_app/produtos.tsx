@@ -20,6 +20,7 @@ import { ProductEditor } from "@/components/products/product-editor";
 import { generateCommercialProducts } from "@/integrations/supabase/combination-client";
 import { normalizeUrlForMatch } from "@/lib/importer-persistence";
 import type { ProductSyncStatus } from "@/lib/product-sync";
+import { describePublishSuccess, publishCrmProduct } from "@/lib/store-publication";
 
 export const Route = createFileRoute("/_app/produtos")({ component: ProdutosPage });
 
@@ -74,23 +75,6 @@ type StoreSync = {
   opcoes: number;
   variantes: number;
   tiragens: number;
-};
-
-type PublishResult = {
-  action: "insert" | "update";
-  sync_status: "synced" | "attention";
-  counts: {
-    images: number;
-    option_groups: number;
-    options: number;
-    variants: number;
-    tiers: number;
-    // Presentes a partir da publicação que liga variantes às opções.
-    source_variants?: number;
-    merged_variants?: number;
-    unmatched_variants?: number;
-  };
-  warnings: string[];
 };
 
 const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -414,33 +398,16 @@ function ProdutosPage() {
   });
 
   const publishToStoreMutation = useMutation({
-    mutationFn: async (product: Product) => {
-      const { data, error } = await (supabase as any)
-        .schema("store")
-        .rpc("publish_crm_product", { p_crm_product_id: product.id });
-      if (error) throw error;
-      return data as PublishResult;
-    },
+    // Só confirma depois do retorno do banco; ok:false vira erro (a falha já
+    // ficou registrada em store.sync_log e no status do produto).
+    mutationFn: (product: Product) => publishCrmProduct(supabase as any, product.id),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["site_products"] });
-      const c = result.counts;
-      const linked = c.source_variants
-        ? ` Combinações do Flow: ${c.source_variants} → ${c.variants} na loja` +
-          (c.merged_variants ? ` (${c.merged_variants} SKU(s) de tiragem unidos)` : "") +
-          (c.unmatched_variants ? `, ${c.unmatched_variants} sem correspondência` : "") +
-          "."
-        : "";
-      const summary = `${c.images} mídia(s), ${c.option_groups} grupo(s), ${c.options} opção(ões), ${c.variants} variante(s) e ${c.tiers} tiragem(ns).${linked}`;
-      const message = result.action === "insert"
-        ? "Produto publicado e validado na loja Nexus."
-        : "Produto atualizado e validado na loja Nexus.";
-      if (result.warnings?.length) {
-        toast.warning(message, { description: `${summary} ${result.warnings.join(" ")}` });
-      } else {
-        toast.success(message, { description: summary });
-      }
+      const { level, title, description } = describePublishSuccess(result);
+      toast[level](title, { description });
     },
     onError: (err: Error) => {
+      queryClient.invalidateQueries({ queryKey: ["site_products"] });
       toast.error("Falha ao publicar na loja: " + err.message);
     },
   });
