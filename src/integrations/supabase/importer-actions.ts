@@ -1,6 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { parseFuturaImProduct, externalIdFromUrl } from "@/services/futuraImParser";
-import { collectAxisUrls, collectUnpricedTierUrls, consolidateVariants } from "@/services/variantScan";
+import {
+  collectAxisUrls,
+  collectUnpricedTierUrls,
+  consolidateVariants,
+} from "@/services/variantScan";
 import { validateSupplierUrl } from "@/services/urlValidator";
 import {
   buildFreightPath,
@@ -106,24 +110,30 @@ export const fetchSupplierPage = createServerFn({ method: "POST" })
  */
 export const analyzeSupplierLink = createServerFn({ method: "POST" })
   .inputValidator((data: { url: string }) => data)
-  .handler(async ({ data }): Promise<{ success: true; product: ImportedProduct } | { success: false; error: string }> => {
-    const validation = validateSupplierUrl(data?.url);
-    if (!validation.ok || !validation.url) {
-      return { success: false, error: validation.reason || "URL não permitida." };
-    }
+  .handler(
+    async ({
+      data,
+    }): Promise<
+      { success: true; product: ImportedProduct } | { success: false; error: string }
+    > => {
+      const validation = validateSupplierUrl(data?.url);
+      if (!validation.ok || !validation.url) {
+        return { success: false, error: validation.reason || "URL não permitida." };
+      }
 
-    const page = await fetchSupplierPage({ data: { url: validation.url } });
-    if (!page.success || !page.html) {
-      return { success: false, error: page.error || "Não foi possível obter a página." };
-    }
+      const page = await fetchSupplierPage({ data: { url: validation.url } });
+      if (!page.success || !page.html) {
+        return { success: false, error: page.error || "Não foi possível obter a página." };
+      }
 
-    try {
-      const product = parseFuturaImProduct(page.html, validation.url);
-      return { success: true, product };
-    } catch (err: any) {
-      return { success: false, error: `Erro ao interpretar a página: ${err?.message || err}` };
-    }
-  });
+      try {
+        const product = parseFuturaImProduct(page.html, validation.url);
+        return { success: true, product };
+      } catch (err: any) {
+        return { success: false, error: `Erro ao interpretar a página: ${err?.message || err}` };
+      }
+    },
+  );
 
 // Hosts permitidos para baixar imagens de produto (CDN da FuturaIM).
 const IMAGE_ALLOWED_HOSTS = ["wbl.blob.core.windows.net", "futuraim.com.br", "www.futuraim.com.br"];
@@ -139,7 +149,9 @@ export const fetchImageBytes = createServerFn({ method: "POST" })
   .handler(
     async ({
       data,
-    }): Promise<{ success: true; base64: string; contentType: string } | { success: false; error: string }> => {
+    }): Promise<
+      { success: true; base64: string; contentType: string } | { success: false; error: string }
+    > => {
       let parsed: URL;
       try {
         parsed = new URL((data?.url || "").trim());
@@ -158,9 +170,11 @@ export const fetchImageBytes = createServerFn({ method: "POST" })
         const resp = await fetch(parsed.toString(), { signal: controller.signal });
         if (!resp.ok) return { success: false, error: `HTTP ${resp.status} ao baixar imagem.` };
         const contentType = resp.headers.get("content-type") || "application/octet-stream";
-        if (!/^image\//i.test(contentType)) return { success: false, error: `Conteúdo não é imagem (${contentType}).` };
+        if (!/^image\//i.test(contentType))
+          return { success: false, error: `Conteúdo não é imagem (${contentType}).` };
         const buf = await resp.arrayBuffer();
-        if (buf.byteLength > MAX_IMAGE_BYTES) return { success: false, error: "Imagem excede o tamanho máximo." };
+        if (buf.byteLength > MAX_IMAGE_BYTES)
+          return { success: false, error: "Imagem excede o tamanho máximo." };
         // Converte para base64 sem depender de Buffer (portável).
         let binary = "";
         const bytes = new Uint8Array(buf);
@@ -168,7 +182,8 @@ export const fetchImageBytes = createServerFn({ method: "POST" })
         const base64 = btoa(binary);
         return { success: true, base64, contentType };
       } catch (err: any) {
-        if (err?.name === "AbortError") return { success: false, error: "Timeout ao baixar imagem." };
+        if (err?.name === "AbortError")
+          return { success: false, error: "Timeout ao baixar imagem." };
         return { success: false, error: err?.message || "Erro ao baixar imagem." };
       } finally {
         clearTimeout(timeout);
@@ -190,7 +205,10 @@ export const scanProductVariants = createServerFn({ method: "POST" })
   .handler(
     async ({
       data,
-    }): Promise<{ success: true; product: ImportedProduct; scanned: number } | { success: false; error: string }> => {
+    }): Promise<
+      | { success: true; product: ImportedProduct; scanned: number }
+      | { success: false; error: string }
+    > => {
       const validation = validateSupplierUrl(data?.url);
       if (!validation.ok || !validation.url) {
         return { success: false, error: validation.reason || "URL não permitida." };
@@ -264,7 +282,13 @@ export const getSupplierFreight = createServerFn({ method: "POST" })
     async ({
       data,
     }): Promise<
-      | { success: true; options: FreightOption[]; produto_id: string; cep: string; quoted_at: string }
+      | {
+          success: true;
+          options: FreightOption[];
+          produto_id: string;
+          cep: string;
+          quoted_at: string;
+        }
       | { success: false; error: string }
     > => {
       const validation = validateSupplierUrl(data?.url);
@@ -296,7 +320,10 @@ export const getSupplierFreight = createServerFn({ method: "POST" })
           },
         });
         if (!pageRes.ok) {
-          return { success: false, error: `Falha ao abrir a página do produto (HTTP ${pageRes.status}).` };
+          return {
+            success: false,
+            error: `Falha ao abrir a página do produto (HTTP ${pageRes.status}).`,
+          };
         }
 
         // `getSetCookie` preserva múltiplos Set-Cookie; fallback para o header simples.
@@ -304,12 +331,18 @@ export const getSupplierFreight = createServerFn({ method: "POST" })
           typeof (pageRes.headers as any).getSetCookie === "function"
             ? (pageRes.headers as any).getSetCookie()
             : [pageRes.headers.get("set-cookie") || ""].filter(Boolean);
-        const cookieHeader = rawCookies.map((c) => c.split(";")[0]).filter(Boolean).join("; ");
+        const cookieHeader = rawCookies
+          .map((c) => c.split(";")[0])
+          .filter(Boolean)
+          .join("; ");
 
         const html = await pageRes.text();
         const token = extractAntiForgeryToken(html);
         if (!token) {
-          return { success: false, error: "Token de segurança do fornecedor não encontrado na página." };
+          return {
+            success: false,
+            error: "Token de segurança do fornecedor não encontrado na página.",
+          };
         }
 
         // 2. Cotação do frete.
@@ -367,7 +400,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Extrai links de produto de um HTML, normalizados com o origin. */
 function extractProductLinks(html: string, origin: string): string[] {
   const found = new Set<string>();
-  const re = /\/produto\/[a-z0-9\-]+\?id=\d+/gi;
+  const re = /\/produto\/[a-z0-9-]+\?id=\d+/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(html))) found.add(origin + m[0]);
   return [...found];
@@ -384,7 +417,9 @@ function extractPaginationLinks(html: string, origin: string): string[] {
   let m: RegExpExecArray | null;
   while ((m = re.exec(html))) out.add(m[1]);
   // normaliza para absoluto
-  return [...out].map((h) => (h.startsWith("http") ? h : origin + (h.startsWith("/") ? h : `/${h}`)));
+  return [...out].map((h) =>
+    h.startsWith("http") ? h : origin + (h.startsWith("/") ? h : `/${h}`),
+  );
 }
 
 /**
@@ -399,7 +434,9 @@ export const discoverCatalogLinks = createServerFn({ method: "POST" })
   .handler(
     async ({
       data,
-    }): Promise<{ success: true; links: string[]; pages_crawled: number } | { success: false; error: string }> => {
+    }): Promise<
+      { success: true; links: string[]; pages_crawled: number } | { success: false; error: string }
+    > => {
       const validation = validateSupplierUrl(data?.url);
       if (!validation.ok || !validation.url) {
         return { success: false, error: validation.reason || "URL não permitida." };
@@ -441,7 +478,10 @@ export const discoverCatalogLinks = createServerFn({ method: "POST" })
       }
 
       if (products.size === 0) {
-        return { success: false, error: firstError || "Nenhum link de produto encontrado nesta página." };
+        return {
+          success: false,
+          error: firstError || "Nenhum link de produto encontrado nesta página.",
+        };
       }
       return { success: true, links: [...products], pages_crawled: pagesCrawled };
     },
@@ -461,7 +501,9 @@ export const discoverCatalogLinks = createServerFn({ method: "POST" })
  * Total 0,00 = dimensão fora dos limites → `has_price=false`, jamais "grátis".
  */
 export const resolveLivePrice = createServerFn({ method: "POST" })
-  .inputValidator((data: { url: string; largura: number; altura: number; quantidade: number }) => data)
+  .inputValidator(
+    (data: { url: string; largura: number; altura: number; quantidade: number }) => data,
+  )
   .handler(
     async ({
       data,
@@ -499,19 +541,28 @@ export const resolveLivePrice = createServerFn({ method: "POST" })
           headers: { ...commonHeaders, Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8" },
         });
         if (!pageRes.ok) {
-          return { success: false, error: `Falha ao abrir a página do produto (HTTP ${pageRes.status}).` };
+          return {
+            success: false,
+            error: `Falha ao abrir a página do produto (HTTP ${pageRes.status}).`,
+          };
         }
 
         const rawCookies: string[] =
           typeof (pageRes.headers as any).getSetCookie === "function"
             ? (pageRes.headers as any).getSetCookie()
             : [pageRes.headers.get("set-cookie") || ""].filter(Boolean);
-        const cookieHeader = rawCookies.map((c) => c.split(";")[0]).filter(Boolean).join("; ");
+        const cookieHeader = rawCookies
+          .map((c) => c.split(";")[0])
+          .filter(Boolean)
+          .join("; ");
 
         const html = await pageRes.text();
         const token = extractAntiForgeryToken(html);
         if (!token) {
-          return { success: false, error: "Token de segurança do fornecedor não encontrado na página." };
+          return {
+            success: false,
+            error: "Token de segurança do fornecedor não encontrado na página.",
+          };
         }
         const custom = supportsCustomSize(html);
 
@@ -542,7 +593,10 @@ export const resolveLivePrice = createServerFn({ method: "POST" })
         });
 
         if (priceRes.status !== 200) {
-          return { success: false, error: `Fornecedor não retornou o preço (HTTP ${priceRes.status}).` };
+          return {
+            success: false,
+            error: `Fornecedor não retornou o preço (HTTP ${priceRes.status}).`,
+          };
         }
 
         const buf = await priceRes.arrayBuffer();
@@ -553,7 +607,10 @@ export const resolveLivePrice = createServerFn({ method: "POST" })
 
         const result = parseLivePriceFragment(fragment);
         if (!result) {
-          return { success: false, error: "Não foi possível ler o preço na resposta do fornecedor." };
+          return {
+            success: false,
+            error: "Não foi possível ler o preço na resposta do fornecedor.",
+          };
         }
 
         return {

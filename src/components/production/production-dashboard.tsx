@@ -1,13 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Factory, AlertTriangle, CheckCircle2, Clock, TrendingUp, PackageMinus, BarChart3, Zap } from "lucide-react";
+import {
+  Loader2,
+  Factory,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  TrendingUp,
+  PackageMinus,
+  BarChart3,
+  Zap,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useMemo } from "react";
+import { storeProductionMetrics, type StoreProductionOrder } from "@/lib/store-production";
 
-const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const fmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 export function ProductionDashboard() {
-
   // Cast necessário: tipos do Supabase não foram regenerados após a migration de produção.
   const db = supabase as any;
 
@@ -20,7 +30,7 @@ export function ProductionDashboard() {
         .select("id, order_number, status, priority, expected_delivery, created_at");
       if (error) throw error;
       return (data || []) as any[];
-    }
+    },
   });
 
   // 2. Todos os Itens de Produção
@@ -32,7 +42,7 @@ export function ProductionDashboard() {
         .select("id, status, quantity, production_order_id, created_at");
       if (error) throw error;
       return (data || []) as any[];
-    }
+    },
   });
 
   // 3. Consumo de Materiais (custo total)
@@ -44,7 +54,7 @@ export function ProductionDashboard() {
         .select("actual_qty, unit_cost");
       if (error) throw error;
       return (data || []) as any[];
-    }
+    },
   });
 
   // 4. Refações
@@ -56,46 +66,74 @@ export function ProductionDashboard() {
         .select("id, status, reason, created_at");
       if (error) throw error;
       return (data || []) as any[];
-    }
+    },
   });
 
-  const isLoading = loadingOrders || loadingItems || loadingMat || loadingRew;
+  // 5. OPs dos pedidos da loja: o quadro oficial (migração 20260930030000).
+  const { data: storeOps, isLoading: loadingStore } = useQuery({
+    queryKey: ["dashboard_store_production_orders"],
+    queryFn: async () => {
+      const { data, error } = await db
+        .schema("store")
+        .from("production_orders")
+        .select("id, number, stage, priority, due_date");
+      if (error) throw error;
+      return (data || []) as StoreProductionOrder[];
+    },
+  });
+
+  const isLoading = loadingOrders || loadingItems || loadingMat || loadingRew || loadingStore;
 
   // Métricas calculadas
   const metrics = useMemo(() => {
-    if (!orders || !items || !materials || !reworks) return null;
+    if (!orders || !items || !materials || !reworks || !storeOps) return null;
 
-    const totalOPs = orders.length;
-    const opsEmAndamento = orders.filter(o => o.status === 'em_producao' || o.status === 'aprovado').length;
-    const opsConcluidas = orders.filter(o => o.status === 'concluido').length;
-    const opsUrgentes = orders.filter(o => o.priority === 'urgente' || o.priority === 'alta').length;
+    // OPs internas (orçamentos do Flow) + OPs dos pedidos da loja.
+    const loja = storeProductionMetrics(storeOps);
+    const totalOPs = orders.length + loja.total;
+    const opsEmAndamento =
+      orders.filter((o) => o.status === "em_producao" || o.status === "aprovado").length +
+      loja.inProgress;
+    const opsConcluidas = orders.filter((o) => o.status === "concluido").length + loja.done;
+    const opsUrgentes =
+      orders.filter((o) => o.priority === "urgente" || o.priority === "alta").length + loja.urgent;
 
-    const totalItens = items.length;
-    const itensAguardando = items.filter(i => (i.status || 'aguardando') === 'aguardando').length;
-    const itensPreImpressao = items.filter(i => i.status === 'pre_impressao').length;
-    const itensImpressao = items.filter(i => i.status === 'impressao').length;
-    const itensAcabamento = items.filter(i => i.status === 'acabamento').length;
-    const itensFinalizado = items.filter(i => i.status === 'finalizado').length;
+    const totalItens = items.length + loja.total;
+    const itensAguardando =
+      items.filter((i) => (i.status || "aguardando") === "aguardando").length +
+      loja.buckets.aguardando;
+    const itensPreImpressao =
+      items.filter((i) => i.status === "pre_impressao").length + loja.buckets.pre_impressao;
+    const itensImpressao =
+      items.filter((i) => i.status === "impressao").length + loja.buckets.impressao;
+    const itensAcabamento =
+      items.filter((i) => i.status === "acabamento").length + loja.buckets.acabamento;
+    const itensFinalizado =
+      items.filter((i) => i.status === "finalizado").length + loja.buckets.finalizado;
 
-    const custoTotal = materials.reduce((sum, m) => sum + ((m.actual_qty || 0) * (m.unit_cost || 0)), 0);
+    const custoTotal = materials.reduce(
+      (sum, m) => sum + (m.actual_qty || 0) * (m.unit_cost || 0),
+      0,
+    );
     const totalApontamentos = materials.length;
 
     const totalRefacoes = reworks.length;
-    const refacoesPendentes = reworks.filter(r => r.status === 'pendente').length;
-    const refacoesResolvidas = reworks.filter(r => r.status === 'resolvido').length;
+    const refacoesPendentes = reworks.filter((r) => r.status === "pendente").length;
+    const refacoesResolvidas = reworks.filter((r) => r.status === "resolvido").length;
     const taxaRefacao = totalItens > 0 ? ((totalRefacoes / totalItens) * 100).toFixed(1) : "0.0";
 
     // Itens atrasados (OP com expected_delivery no passado e item não finalizado)
     const today = new Date();
-    today.setHours(0,0,0,0);
-    const opsMap = new Map(orders.map(o => [o.id, o]));
-    const itensAtrasados = items.filter(i => {
-      const op = opsMap.get(i.production_order_id);
-      if (!op?.expected_delivery) return false;
-      const delivery = new Date(op.expected_delivery);
-      delivery.setHours(0,0,0,0);
-      return delivery < today && i.status !== 'finalizado';
-    }).length;
+    today.setHours(0, 0, 0, 0);
+    const opsMap = new Map(orders.map((o) => [o.id, o]));
+    const itensAtrasados =
+      items.filter((i) => {
+        const op = opsMap.get(i.production_order_id);
+        if (!op?.expected_delivery) return false;
+        const delivery = new Date(op.expected_delivery);
+        delivery.setHours(0, 0, 0, 0);
+        return delivery < today && i.status !== "finalizado";
+      }).length + loja.late;
 
     // Distribuição por status para gráfico de barras simples (CSS)
     const statusDist = [
@@ -105,19 +143,32 @@ export function ProductionDashboard() {
       { label: "Acabamento", count: itensAcabamento, color: "bg-violet-500" },
       { label: "Finalizado", count: itensFinalizado, color: "bg-emerald-500" },
     ];
-    const maxCount = Math.max(...statusDist.map(s => s.count), 1);
+    const maxCount = Math.max(...statusDist.map((s) => s.count), 1);
 
     return {
-      totalOPs, opsEmAndamento, opsConcluidas, opsUrgentes,
-      totalItens, itensAtrasados,
-      custoTotal, totalApontamentos,
-      totalRefacoes, refacoesPendentes, refacoesResolvidas, taxaRefacao,
-      statusDist, maxCount
+      totalOPs,
+      opsEmAndamento,
+      opsConcluidas,
+      opsUrgentes,
+      totalItens,
+      itensAtrasados,
+      custoTotal,
+      totalApontamentos,
+      totalRefacoes,
+      refacoesPendentes,
+      refacoesResolvidas,
+      taxaRefacao,
+      statusDist,
+      maxCount,
     };
-  }, [orders, items, materials, reworks]);
+  }, [orders, items, materials, reworks, storeOps]);
 
   if (isLoading) {
-    return <div className="flex justify-center p-12"><Loader2 className="animate-spin h-8 w-8 text-muted-foreground" /></div>;
+    return (
+      <div className="flex justify-center p-12">
+        <Loader2 className="animate-spin h-8 w-8 text-muted-foreground" />
+      </div>
+    );
   }
 
   if (!metrics) return null;
@@ -136,7 +187,11 @@ export function ProductionDashboard() {
         <KPICard
           title="OPs Concluídas"
           value={metrics.opsConcluidas}
-          subtitle={metrics.totalOPs > 0 ? `${((metrics.opsConcluidas / metrics.totalOPs) * 100).toFixed(0)}% de taxa` : "—"}
+          subtitle={
+            metrics.totalOPs > 0
+              ? `${((metrics.opsConcluidas / metrics.totalOPs) * 100).toFixed(0)}% de taxa`
+              : "—"
+          }
           icon={<CheckCircle2 className="h-5 w-5 text-emerald-500" />}
           accentColor="border-emerald-500/50"
         />
@@ -145,7 +200,9 @@ export function ProductionDashboard() {
           value={metrics.itensAtrasados}
           subtitle={metrics.itensAtrasados > 0 ? "Ação necessária!" : "Nenhum atraso"}
           icon={<AlertTriangle className="h-5 w-5 text-red-500" />}
-          accentColor={metrics.itensAtrasados > 0 ? "border-red-500/50 bg-red-500/5" : "border-emerald-500/50"}
+          accentColor={
+            metrics.itensAtrasados > 0 ? "border-red-500/50 bg-red-500/5" : "border-emerald-500/50"
+          }
         />
         <KPICard
           title="Prioridade Alta/Urgente"
@@ -192,13 +249,17 @@ export function ProductionDashboard() {
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
-            {metrics.statusDist.map(s => (
+            {metrics.statusDist.map((s) => (
               <div key={s.label} className="flex items-center gap-3">
-                <span className="text-xs font-medium text-muted-foreground w-28 shrink-0 text-right">{s.label}</span>
+                <span className="text-xs font-medium text-muted-foreground w-28 shrink-0 text-right">
+                  {s.label}
+                </span>
                 <div className="flex-1 h-7 bg-secondary/50 rounded-md overflow-hidden relative">
                   <div
                     className={`h-full ${s.color} rounded-md transition-all duration-500 ease-out`}
-                    style={{ width: `${Math.max((s.count / metrics.maxCount) * 100, s.count > 0 ? 8 : 0)}%` }}
+                    style={{
+                      width: `${Math.max((s.count / metrics.maxCount) * 100, s.count > 0 ? 8 : 0)}%`,
+                    }}
                   />
                   <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-foreground/70">
                     {s.count}
@@ -213,7 +274,14 @@ export function ProductionDashboard() {
   );
 }
 
-function KPICard({ title, value, subtitle, icon, accentColor, isValueString }: {
+function KPICard({
+  title,
+  value,
+  subtitle,
+  icon,
+  accentColor,
+  isValueString,
+}: {
   title: string;
   value: number | string;
   subtitle: string;
@@ -225,10 +293,14 @@ function KPICard({ title, value, subtitle, icon, accentColor, isValueString }: {
     <Card className={`shadow-sm border-l-4 ${accentColor} transition-shadow hover:shadow-md`}>
       <CardContent className="p-4">
         <div className="flex items-start justify-between mb-2">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{title}</p>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            {title}
+          </p>
           {icon}
         </div>
-        <p className={`font-black ${isValueString ? 'text-xl' : 'text-3xl'} text-foreground leading-none mb-1`}>
+        <p
+          className={`font-black ${isValueString ? "text-xl" : "text-3xl"} text-foreground leading-none mb-1`}
+        >
           {value}
         </p>
         <p className="text-[11px] text-muted-foreground">{subtitle}</p>

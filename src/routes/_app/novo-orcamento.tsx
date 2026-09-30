@@ -10,21 +10,36 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  ArrowLeft, ArrowRight, CheckCircle2, Loader2, User, ShoppingCart,
-  Calculator, FileText, Calendar, Percent
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CheckCircle2,
+  Loader2,
+  User,
+  ShoppingCart,
+  Calculator,
+  FileText,
+  Calendar,
+  Percent,
 } from "lucide-react";
 import { QuoteItemBuilder, QuoteItemData } from "@/components/quotes/quote-item-builder";
 
 export const Route = createFileRoute("/_app/novo-orcamento")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    productId: typeof search.productId === "string" && search.productId.trim() ? search.productId : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>): { productId?: string } =>
+    typeof search.productId === "string" && search.productId.trim()
+      ? { productId: search.productId }
+      : {},
   component: NovoOrcamentoPage,
 });
 
-const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const fmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 function NovoOrcamentoPage() {
   const { productId } = Route.useSearch();
@@ -49,7 +64,7 @@ function NovoOrcamentoPage() {
   const { data: clients } = useQuery({
     queryKey: ["clients_list_quote"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .schema("store")
         .from("customers")
         .select("id, name, email, phone")
@@ -68,7 +83,8 @@ function NovoOrcamentoPage() {
   const totalProfit = finalValue - subtotalCost;
   const globalMargin = finalValue > 0 ? (totalProfit / finalValue) * 100 : 0;
 
-  const isFormValid = !!clientId && items.length > 0 && items.every(i => i.product_name.trim() !== "");
+  const isFormValid =
+    !!clientId && items.length > 0 && items.every((i) => i.product_name.trim() !== "");
 
   // Mutation: Salvar
   const saveMutation = useMutation({
@@ -89,7 +105,11 @@ function NovoOrcamentoPage() {
         base_price: item.unit_price,
         internal_cost: item.is_supplier
           ? item.unit_cost
-          : item.unit_cost + Object.values(item.attribute_price_impacts).reduce((sum, value) => sum + (value || 0), 0),
+          : item.unit_cost +
+            Object.values(item.attribute_price_impacts).reduce(
+              (sum, value) => sum + (value || 0),
+              0,
+            ),
         source_origin: item.supplier_id || item.is_supplier ? "supplier_import" : "manual",
         production_days: Number.parseInt(item.production_deadline || "3", 10) || 3,
         position,
@@ -134,7 +154,7 @@ function NovoOrcamentoPage() {
       idempotencyKey.current = `flow-quote:${crypto.randomUUID()}`;
       navigate({ to: "/orcamentos", search: { selectProductId: undefined } });
     },
-    onError: (err) => toast.error("Erro ao gerar: " + err.message)
+    onError: (err) => toast.error("Erro ao gerar: " + err.message),
   });
 
   return (
@@ -145,7 +165,6 @@ function NovoOrcamentoPage() {
       />
 
       <div className="max-w-5xl mx-auto space-y-6 pb-20">
-        
         {/* Seção 1: Cliente */}
         <Card className="border-primary/20 shadow-sm">
           <CardContent className="p-6 space-y-5">
@@ -155,7 +174,9 @@ function NovoOrcamentoPage() {
               </div>
               <div>
                 <h3 className="font-semibold text-lg">1. Dados do Cliente</h3>
-                <p className="text-sm text-muted-foreground">Selecione o cliente e defina os prazos</p>
+                <p className="text-sm text-muted-foreground">
+                  Selecione o cliente e defina os prazos
+                </p>
               </div>
             </div>
 
@@ -164,39 +185,59 @@ function NovoOrcamentoPage() {
                 <div>
                   <Label>Cliente *</Label>
                   <Select value={clientId} onValueChange={setClientId}>
-                    <SelectTrigger className="mt-1"><SelectValue placeholder="Busque e selecione o cliente..." /></SelectTrigger>
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Busque e selecione o cliente..." />
+                    </SelectTrigger>
                     <SelectContent>
-                      {clients?.map(c => (
+                      {clients?.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
                           <div className="flex items-center gap-2">
                             <span>{c.name}</span>
-                            {c.phone && <span className="text-[10px] text-muted-foreground">({c.phone})</span>}
+                            {c.phone && (
+                              <span className="text-[10px] text-muted-foreground">({c.phone})</span>
+                            )}
                           </div>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label className="flex items-center gap-1.5 mt-1">
                       <Calendar className="h-3.5 w-3.5" /> Validade (dias)
                     </Label>
-                    <Input type="number" min="1" value={validUntilDays} onChange={(e) => setValidUntilDays(parseInt(e.target.value) || 15)} />
+                    <Input
+                      type="number"
+                      min="1"
+                      value={validUntilDays}
+                      onChange={(e) => setValidUntilDays(parseInt(e.target.value) || 15)}
+                    />
                   </div>
                   <div>
                     <Label className="flex items-center gap-1.5 mt-1">
                       <Calendar className="h-3.5 w-3.5" /> Prazo (dias)
                     </Label>
-                    <Input type="number" min="1" value={deliveryDays} onChange={(e) => setDeliveryDays(parseInt(e.target.value) || 7)} />
+                    <Input
+                      type="number"
+                      min="1"
+                      value={deliveryDays}
+                      onChange={(e) => setDeliveryDays(parseInt(e.target.value) || 7)}
+                    />
                   </div>
                 </div>
               </div>
 
               <div>
                 <Label>Observações Gerais do Orçamento</Label>
-                <Textarea className="mt-1" rows={5} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Informações adicionais que aparecerão no orçamento..." />
+                <Textarea
+                  className="mt-1"
+                  rows={5}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Informações adicionais que aparecerão no orçamento..."
+                />
               </div>
             </div>
           </CardContent>
@@ -230,27 +271,40 @@ function NovoOrcamentoPage() {
               </div>
               <div>
                 <h3 className="font-semibold text-lg">3. Resumo Financeiro e Fechamento</h3>
-                <p className="text-sm text-muted-foreground">Ajuste descontos e visualize a rentabilidade</p>
+                <p className="text-sm text-muted-foreground">
+                  Ajuste descontos e visualize a rentabilidade
+                </p>
               </div>
             </div>
           </div>
-          
+
           <CardContent className="p-6">
             <div className="grid md:grid-cols-2 gap-8">
               {/* Lista Resumida */}
               <div className="space-y-4">
-                <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground border-b pb-2">Resumo dos {items.length} itens</h4>
+                <h4 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground border-b pb-2">
+                  Resumo dos {items.length} itens
+                </h4>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                   {items.length === 0 ? (
-                    <p className="text-sm text-muted-foreground italic">Nenhum item adicionado ainda.</p>
+                    <p className="text-sm text-muted-foreground italic">
+                      Nenhum item adicionado ainda.
+                    </p>
                   ) : (
                     items.map((item, idx) => {
                       const attrCount = Object.keys(item.attributes).length;
                       return (
-                        <div key={item.id} className="flex items-center justify-between p-2.5 bg-secondary/30 rounded-md text-sm hover:bg-secondary/50 transition-colors">
+                        <div
+                          key={item.id}
+                          className="flex items-center justify-between p-2.5 bg-secondary/30 rounded-md text-sm hover:bg-secondary/50 transition-colors"
+                        >
                           <div className="flex items-center gap-2">
-                            <span className="text-xs font-mono text-muted-foreground w-5">{idx + 1}.</span>
-                            <span className="font-medium truncate max-w-[180px]">{item.product_name}</span>
+                            <span className="text-xs font-mono text-muted-foreground w-5">
+                              {idx + 1}.
+                            </span>
+                            <span className="font-medium truncate max-w-[180px]">
+                              {item.product_name}
+                            </span>
                             <span className="text-xs text-muted-foreground">x{item.quantity}</span>
                             {attrCount > 0 && (
                               <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
@@ -264,14 +318,16 @@ function NovoOrcamentoPage() {
                     })
                   )}
                 </div>
-                
+
                 <div className="pt-2">
                   <Label className="flex items-center gap-1.5">
                     <Percent className="h-4 w-4" /> Desconto Global (R$)
                   </Label>
                   <Input
                     className="mt-1"
-                    type="number" min="0" step="0.01"
+                    type="number"
+                    min="0"
+                    step="0.01"
                     value={globalDiscount}
                     onChange={(e) => setGlobalDiscount(parseFloat(e.target.value) || 0)}
                   />
@@ -286,28 +342,40 @@ function NovoOrcamentoPage() {
                     <p className="font-semibold text-lg">{fmt.format(subtotalPrice)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground uppercase font-medium">Custo Produção</p>
+                    <p className="text-xs text-muted-foreground uppercase font-medium">
+                      Custo Produção
+                    </p>
                     <p className="font-semibold text-lg">{fmt.format(subtotalCost)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground uppercase font-medium">Lucro Estimado</p>
-                    <p className={`font-bold text-lg ${totalProfit >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                    <p className="text-xs text-muted-foreground uppercase font-medium">
+                      Lucro Estimado
+                    </p>
+                    <p
+                      className={`font-bold text-lg ${totalProfit >= 0 ? "text-emerald-600" : "text-red-500"}`}
+                    >
                       {fmt.format(totalProfit)}
                     </p>
                   </div>
                   <div>
-                    <p className="text-xs text-muted-foreground uppercase font-medium">Margem Global</p>
-                    <p className={`font-black text-2xl ${globalMargin >= 30 ? "text-emerald-600" : globalMargin >= 15 ? "text-amber-600" : "text-red-500"}`}>
+                    <p className="text-xs text-muted-foreground uppercase font-medium">
+                      Margem Global
+                    </p>
+                    <p
+                      className={`font-black text-2xl ${globalMargin >= 30 ? "text-emerald-600" : globalMargin >= 15 ? "text-amber-600" : "text-red-500"}`}
+                    >
                       {globalMargin.toFixed(1)}%
                     </p>
                   </div>
                 </div>
-                
+
                 <div className="pt-4 border-t border-primary/10 text-center">
-                  <p className="text-sm text-muted-foreground uppercase font-semibold tracking-widest mb-1">Valor Final para o Cliente</p>
+                  <p className="text-sm text-muted-foreground uppercase font-semibold tracking-widest mb-1">
+                    Valor Final para o Cliente
+                  </p>
                   <p className="text-4xl font-black text-primary">{fmt.format(finalValue)}</p>
                 </div>
-                
+
                 <Button
                   size="lg"
                   className="w-full h-14 text-lg font-bold mt-2 shadow-lg hover:shadow-xl transition-all"

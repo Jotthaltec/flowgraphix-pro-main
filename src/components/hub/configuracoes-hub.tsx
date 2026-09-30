@@ -5,9 +5,17 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { StatusBadge } from "@/components/status-badge";
-import { 
-  Settings, Save, Key, ShieldCheck, Sparkles, 
-  RefreshCw, Loader2, CheckCircle2, XCircle, AlertTriangle
+import {
+  Settings,
+  Save,
+  Key,
+  ShieldCheck,
+  Sparkles,
+  RefreshCw,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
@@ -16,12 +24,33 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { mapSalesChannelToCredentialRow } from "@/lib/channel-legacy-mapping";
 
 // Definição das plataformas suportadas pelo schema canônico do projeto.
-const PLATFORMS = [
-  { key: "mercado_livre", label: "Mercado Livre", hasSecret: true, secretLabel: "Refresh Token", extraFields: [] },
-  { key: "shopee", label: "Shopee API", hasSecret: true, secretLabel: "Partner Key", extraFields: [] },
-] as const;
+type Platform = {
+  key: "mercado_livre" | "shopee";
+  label: string;
+  hasSecret: boolean;
+  secretLabel: string;
+  /** Campos além do segredo (ex.: URL da loja no WooCommerce). */
+  extraFields: readonly { key: string; placeholder: string }[];
+};
 
-type PlatformKey = typeof PLATFORMS[number]["key"];
+const PLATFORMS: readonly Platform[] = [
+  {
+    key: "mercado_livre",
+    label: "Mercado Livre",
+    hasSecret: true,
+    secretLabel: "Refresh Token",
+    extraFields: [],
+  },
+  {
+    key: "shopee",
+    label: "Shopee API",
+    hasSecret: true,
+    secretLabel: "Partner Key",
+    extraFields: [],
+  },
+];
+
+type PlatformKey = Platform["key"];
 
 interface CredentialRow {
   id: string;
@@ -55,7 +84,7 @@ export function ConfiguracoesHub() {
   // Formulários locais de credenciais por plataforma
   const [forms, setForms] = useState<Record<PlatformKey, PlatformForm>>(() => {
     const initial: Record<string, PlatformForm> = {};
-    PLATFORMS.forEach(p => {
+    PLATFORMS.forEach((p) => {
       initial[p.key] = { key: "", secret: "", extraConfig: {}, dirty: false };
     });
     return initial as Record<PlatformKey, PlatformForm>;
@@ -66,7 +95,7 @@ export function ConfiguracoesHub() {
     const savedMargin = localStorage.getItem("hub_global_margin");
     const savedTone = localStorage.getItem("hub_ai_tone");
     const savedAuto = localStorage.getItem("hub_auto_update");
-    
+
     if (savedMargin) setGlobalMargin(parseInt(savedMargin));
     if (savedTone) setAiTone(savedTone);
     if (savedAuto) setEnableAutoUpdate(savedAuto === "true");
@@ -91,9 +120,9 @@ export function ConfiguracoesHub() {
   // Quando credenciais carregam, popular os formulários
   useEffect(() => {
     if (credentials.length > 0) {
-      setForms(prev => {
+      setForms((prev) => {
         const updated = { ...prev };
-        credentials.forEach(cred => {
+        credentials.forEach((cred) => {
           const platformKey = cred.platform as PlatformKey;
           if (updated[platformKey]) {
             updated[platformKey] = {
@@ -116,7 +145,7 @@ export function ConfiguracoesHub() {
       const form = forms[platform];
 
       // Verifica se já existe
-      const existing = credentials.find(c => c.platform === platform);
+      const existing = credentials.find((c) => c.platform === platform);
 
       const config = {
         ...(form.extraConfig || {}),
@@ -136,23 +165,23 @@ export function ConfiguracoesHub() {
           .eq("id", existing.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from("sales_channels")
-          .insert({
-            company_id: profile.company_id,
-            provider: platform,
-            config,
-            status: form.key ? "conectado" : "desconectado",
-            apelido: PLATFORMS.find(p => p.key === platform)?.label ?? platform,
-          });
+        const { error } = await supabase.from("sales_channels").insert({
+          company_id: profile.company_id,
+          provider: platform,
+          config,
+          status: form.key ? "conectado" : "desconectado",
+          apelido: PLATFORMS.find((p) => p.key === platform)?.label ?? platform,
+        });
         if (error) throw error;
       }
     },
     onSuccess: (_data, platform) => {
-      toast.success(`Credenciais do ${PLATFORMS.find(p => p.key === platform)?.label} salvas com sucesso!`);
+      toast.success(
+        `Credenciais do ${PLATFORMS.find((p) => p.key === platform)?.label} salvas com sucesso!`,
+      );
       queryClient.invalidateQueries({ queryKey: ["marketplace_credentials"] });
       // Marca como não-dirty
-      setForms(prev => ({
+      setForms((prev) => ({
         ...prev,
         [platform]: { ...prev[platform], dirty: false },
       }));
@@ -165,19 +194,16 @@ export function ConfiguracoesHub() {
   // ─── Mutation: Desconectar (deletar credencial) ──────────────────────
   const disconnectMutation = useMutation({
     mutationFn: async (platform: PlatformKey) => {
-      const existing = credentials.find(c => c.platform === platform);
+      const existing = credentials.find((c) => c.platform === platform);
       if (!existing) return;
-      const { error } = await supabase
-        .from("sales_channels")
-        .delete()
-        .eq("id", existing.id);
+      const { error } = await supabase.from("sales_channels").delete().eq("id", existing.id);
       if (error) throw error;
     },
     onSuccess: (_data, platform) => {
-      toast.success(`${PLATFORMS.find(p => p.key === platform)?.label} desconectado.`);
+      toast.success(`${PLATFORMS.find((p) => p.key === platform)?.label} desconectado.`);
       queryClient.invalidateQueries({ queryKey: ["marketplace_credentials"] });
       // Limpa o form
-      setForms(prev => ({
+      setForms((prev) => ({
         ...prev,
         [platform]: { key: "", secret: "", extraConfig: {}, dirty: false },
       }));
@@ -189,14 +215,14 @@ export function ConfiguracoesHub() {
 
   // ─── Handlers ─────────────────────────────────────────────────────────
   const updateForm = (platform: PlatformKey, field: "key" | "secret", value: string) => {
-    setForms(prev => ({
+    setForms((prev) => ({
       ...prev,
       [platform]: { ...prev[platform], [field]: value, dirty: true },
     }));
   };
 
   const updateExtraConfig = (platform: PlatformKey, configKey: string, value: string) => {
-    setForms(prev => ({
+    setForms((prev) => ({
       ...prev,
       [platform]: {
         ...prev[platform],
@@ -206,14 +232,20 @@ export function ConfiguracoesHub() {
     }));
   };
 
-  const getCredentialStatus = (platform: PlatformKey): { variant: "success" | "warning" | "destructive" | "muted"; label: string } => {
-    const cred = credentials.find(c => c.platform === platform);
+  const getCredentialStatus = (
+    platform: PlatformKey,
+  ): { variant: "success" | "warning" | "destructive" | "muted"; label: string } => {
+    const cred = credentials.find((c) => c.platform === platform);
     if (!cred) return { variant: "muted", label: "Não configurado" };
     switch (cred.status) {
-      case "connected": return { variant: "success", label: "Conectado" };
-      case "expired": return { variant: "destructive", label: "Expirado" };
-      case "error": return { variant: "destructive", label: "Erro" };
-      default: return { variant: "warning", label: "Pendente" };
+      case "connected":
+        return { variant: "success", label: "Conectado" };
+      case "expired":
+        return { variant: "destructive", label: "Expirado" };
+      case "error":
+        return { variant: "destructive", label: "Erro" };
+      default:
+        return { variant: "warning", label: "Pendente" };
     }
   };
 
@@ -221,13 +253,12 @@ export function ConfiguracoesHub() {
     localStorage.setItem("hub_global_margin", globalMargin.toString());
     localStorage.setItem("hub_ai_tone", aiTone);
     localStorage.setItem("hub_auto_update", enableAutoUpdate.toString());
-    
+
     toast.success("Configurações do Hub salvas com sucesso!");
   };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      
       {/* PREFERÊNCIAS GLOBAIS */}
       <Card className="md:col-span-2 border-t-4 border-slate-500">
         <CardHeader>
@@ -236,20 +267,23 @@ export function ConfiguracoesHub() {
             Preferências Globais do Hub
           </CardTitle>
           <CardDescription>
-            Defina comportamentos automáticos e regras financeiras padrões para as importações de fornecedores.
+            Defina comportamentos automáticos e regras financeiras padrões para as importações de
+            fornecedores.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="global-margin">Margem de Lucro Padrão (%)</Label>
-              <Input 
-                id="global-margin" 
-                type="number" 
+              <Input
+                id="global-margin"
+                type="number"
                 value={globalMargin}
                 onChange={(e) => setGlobalMargin(parseInt(e.target.value) || 0)}
               />
-              <p className="text-[10px] text-muted-foreground">Aplicado a novos produtos importados caso o fornecedor não tenha margem própria.</p>
+              <p className="text-[10px] text-muted-foreground">
+                Aplicado a novos produtos importados caso o fornecedor não tenha margem própria.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -265,7 +299,9 @@ export function ConfiguracoesHub() {
                 <option value="descontraido">Descontraído e Moderno</option>
                 <option value="formal">Formal e Corporativo</option>
               </select>
-              <p className="text-[10px] text-muted-foreground">Define o estilo dos copys gerados para Mercado Livre e Shopee.</p>
+              <p className="text-[10px] text-muted-foreground">
+                Define o estilo dos copys gerados para Mercado Livre e Shopee.
+              </p>
             </div>
           </div>
 
@@ -273,13 +309,18 @@ export function ConfiguracoesHub() {
             <h4 className="text-xs font-bold uppercase text-muted-foreground flex items-center gap-1">
               <Sparkles className="h-3.5 w-3.5 text-warning-foreground" /> Automotização & Sincronia
             </h4>
-            
+
             <div className="flex items-center justify-between p-3 rounded-lg bg-muted/20 border">
               <div className="space-y-0.5">
-                <Label htmlFor="auto-update" className="text-sm font-semibold">Atualização Automática de Preços</Label>
-                <p className="text-xs text-muted-foreground max-w-md">Alertar o gestor caso o custo no site do fornecedor sofra alterações após reanálise.</p>
+                <Label htmlFor="auto-update" className="text-sm font-semibold">
+                  Atualização Automática de Preços
+                </Label>
+                <p className="text-xs text-muted-foreground max-w-md">
+                  Alertar o gestor caso o custo no site do fornecedor sofra alterações após
+                  reanálise.
+                </p>
               </div>
-              <Switch 
+              <Switch
                 id="auto-update"
                 checked={enableAutoUpdate}
                 onCheckedChange={setEnableAutoUpdate}
@@ -287,7 +328,10 @@ export function ConfiguracoesHub() {
             </div>
           </div>
 
-          <Button onClick={handleSavePreferences} className="bg-slate-700 hover:bg-slate-800 text-white flex items-center gap-1.5 self-end">
+          <Button
+            onClick={handleSavePreferences}
+            className="bg-slate-700 hover:bg-slate-800 text-white flex items-center gap-1.5 self-end"
+          >
             <Save className="h-4 w-4" /> Salvar Preferências
           </Button>
         </CardContent>
@@ -314,13 +358,16 @@ export function ConfiguracoesHub() {
               {PLATFORMS.map((platform) => {
                 const status = getCredentialStatus(platform.key);
                 const form = forms[platform.key];
-                const cred = credentials.find(c => c.platform === platform.key);
+                const cred = credentials.find((c) => c.platform === platform.key);
                 const isConnected = cred?.status === "connected";
                 const isSaving = saveMutation.isPending;
                 const isDisconnecting = disconnectMutation.isPending;
 
                 return (
-                  <div key={platform.key} className="space-y-2 pb-3 border-b last:border-b-0 last:pb-0">
+                  <div
+                    key={platform.key}
+                    className="space-y-2 pb-3 border-b last:border-b-0 last:pb-0"
+                  >
                     {/* Header da plataforma */}
                     <div className="flex justify-between items-center">
                       <Label className="text-xs font-semibold">{platform.label}</Label>
@@ -392,7 +439,11 @@ export function ConfiguracoesHub() {
                           className="h-7 text-[10px] text-destructive hover:text-destructive hover:bg-destructive/10"
                           disabled={isDisconnecting}
                           onClick={() => {
-                            if (window.confirm(`Deseja desconectar o ${platform.label}? Os dados de credencial serão removidos.`)) {
+                            if (
+                              window.confirm(
+                                `Deseja desconectar o ${platform.label}? Os dados de credencial serão removidos.`,
+                              )
+                            ) {
                               disconnectMutation.mutate(platform.key);
                             }
                           }}
@@ -415,12 +466,12 @@ export function ConfiguracoesHub() {
           <div className="border-t pt-4 p-3 bg-slate-500/5 rounded border flex gap-2">
             <ShieldCheck className="h-5 w-5 text-emerald-500 shrink-0" />
             <p className="text-[10px] text-muted-foreground">
-              Suas credenciais são armazenadas com segurança no Supabase, protegidas por Row Level Security. Cada empresa acessa apenas suas próprias credenciais.
+              Suas credenciais são armazenadas com segurança no Supabase, protegidas por Row Level
+              Security. Cada empresa acessa apenas suas próprias credenciais.
             </p>
           </div>
         </CardContent>
       </Card>
-
     </div>
   );
 }

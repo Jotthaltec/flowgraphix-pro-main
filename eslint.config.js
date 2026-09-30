@@ -10,7 +10,8 @@ export default tseslint.config(
   // Sem isto, o eslint-plugin-prettier tenta formatar JS minificado de uma
   // linha só — o pior caso para o algoritmo de diff do Prettier, e é isso
   // que fazia `npm run lint` levar dezenas de minutos em vez de segundos.
-  { ignores: ["dist", ".output", ".vinxi", ".vercel"] },
+  // types.ts é gerado (supabase gen types): não se formata nem se revisa à mão.
+  { ignores: ["dist", ".output", ".vinxi", ".vercel", "src/integrations/supabase/types.ts"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

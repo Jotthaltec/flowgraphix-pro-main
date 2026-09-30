@@ -2,14 +2,29 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
-import { Loader2, RefreshCw, Save, AlertTriangle, CheckCircle2, ShieldCheck, Package } from "lucide-react";
+import {
+  Loader2,
+  RefreshCw,
+  Save,
+  AlertTriangle,
+  CheckCircle2,
+  ShieldCheck,
+  Package,
+} from "lucide-react";
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { StatusBadge } from "@/components/status-badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Accordion,
   AccordionContent,
@@ -52,7 +67,8 @@ export function AtualizarPrecos() {
   const toggle = (id: string) =>
     setSelected((s) => {
       const n = new Set(s);
-      n.has(id) ? n.delete(id) : n.add(id);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
 
@@ -135,15 +151,20 @@ export function AtualizarPrecos() {
       <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
         <ShieldCheck className="h-4 w-4 text-primary shrink-0 mt-0.5" />
         <span>
-          Atualiza apenas o <b>custo do fornecedor</b>. O seu preço de venda e a margem são preservados — faixas novas
-          recebem apenas uma sugestão de venda, que você pode revisar. Nada é gravado sem confirmação.
+          Atualiza apenas o <b>custo do fornecedor</b>. O seu preço de venda e a margem são
+          preservados — faixas novas recebem apenas uma sugestão de venda, que você pode revisar.
+          Nada é gravado sem confirmação.
         </span>
       </div>
 
       <Card>
         <CardContent className="p-4 flex flex-wrap items-center gap-3">
           <Button onClick={checkSelected} disabled={checking}>
-            {checking ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+            {checking ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-2" />
+            )}
             Verificar preços ({selected.size})
           </Button>
           {stats.changed > 0 && (
@@ -153,8 +174,12 @@ export function AtualizarPrecos() {
           )}
           <div className="ml-auto flex items-center gap-3 text-xs">
             {stats.changed > 0 && <span className="text-amber-600">{stats.changed} alterados</span>}
-            {stats.unchanged > 0 && <span className="text-emerald-600">{stats.unchanged} iguais</span>}
-            {stats.unavailable > 0 && <span className="text-destructive">{stats.unavailable} indisponíveis</span>}
+            {stats.unchanged > 0 && (
+              <span className="text-emerald-600">{stats.unchanged} iguais</span>
+            )}
+            {stats.unavailable > 0 && (
+              <span className="text-destructive">{stats.unavailable} indisponíveis</span>
+            )}
             {stats.errors > 0 && <span className="text-destructive">{stats.errors} erros</span>}
           </div>
           {(checking || progress > 0) && <Progress value={progress} className="h-2 w-full" />}
@@ -179,7 +204,8 @@ export function AtualizarPrecos() {
               {products.map((p) => {
                 const res = results[p.id];
                 const cmp = res?.comparison;
-                const oldCost = Number(p.cost_price) || (p.quantity_price_table?.[0]?.price ?? null);
+                const oldCost =
+                  Number(p.cost_price) || (p.quantity_price_table?.[0]?.price ?? null);
                 const newCost = res?.fresh?.variants[0]?.price_tiers?.[0]?.total_price ?? null;
                 const firstChanged = cmp?.tiers.find((t) => t.kind === "changed");
                 const deltaPct = firstChanged?.deltaPct ?? null;
@@ -187,16 +213,29 @@ export function AtualizarPrecos() {
                   <Fragment key={p.id}>
                     <TableRow>
                       <TableCell>
-                        <Checkbox checked={selected.has(p.id)} onCheckedChange={() => toggle(p.id)} />
+                        <Checkbox
+                          checked={selected.has(p.id)}
+                          onCheckedChange={() => toggle(p.id)}
+                        />
                       </TableCell>
-                      <TableCell className="font-medium text-sm max-w-[260px] truncate">{p.name}</TableCell>
+                      <TableCell className="font-medium text-sm max-w-[260px] truncate">
+                        {p.name}
+                      </TableCell>
                       <TableCell className="text-sm">{fmtBRL(oldCost)}</TableCell>
                       <TableCell className="text-sm">{res ? fmtBRL(newCost) : "—"}</TableCell>
                       <TableCell className="text-sm">
                         {deltaPct == null ? (
                           "—"
                         ) : (
-                          <span className={deltaPct > 0 ? "text-destructive" : deltaPct < 0 ? "text-emerald-600" : ""}>
+                          <span
+                            className={
+                              deltaPct > 0
+                                ? "text-destructive"
+                                : deltaPct < 0
+                                  ? "text-emerald-600"
+                                  : ""
+                            }
+                          >
                             {deltaPct > 0 ? "+" : ""}
                             {deltaPct}%
                           </span>
@@ -221,7 +260,12 @@ export function AtualizarPrecos() {
                       </TableCell>
                       <TableCell className="text-right">
                         {cmp?.status === "changed" && (
-                          <Button size="sm" variant="outline" disabled={applying.has(p.id)} onClick={() => apply(p)}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={applying.has(p.id)}
+                            onClick={() => apply(p)}
+                          >
                             {applying.has(p.id) ? (
                               <Loader2 className="h-3.5 w-3.5 animate-spin" />
                             ) : (
@@ -237,23 +281,35 @@ export function AtualizarPrecos() {
                           <Accordion type="single" collapsible>
                             <AccordionItem value="d" className="border-0">
                               <AccordionTrigger className="py-1 text-xs">
-                                {cmp.changedCount} alteradas · {cmp.newCount} novas · {cmp.removedCount} removidas
+                                {cmp.changedCount} alteradas · {cmp.newCount} novas ·{" "}
+                                {cmp.removedCount} removidas
                               </AccordionTrigger>
                               <AccordionContent>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-1 text-[11px]">
                                   {cmp.tiers
                                     .filter((t) => t.kind !== "same")
                                     .map((t) => (
-                                      <div key={t.quantity} className="bg-card border rounded px-2 py-1">
+                                      <div
+                                        key={t.quantity}
+                                        className="bg-card border rounded px-2 py-1"
+                                      >
                                         <b>{t.quantity}un</b>{" "}
                                         {t.kind === "new" ? (
-                                          <span className="text-emerald-600">nova {fmtBRL(t.newCost)}</span>
+                                          <span className="text-emerald-600">
+                                            nova {fmtBRL(t.newCost)}
+                                          </span>
                                         ) : t.kind === "removed" ? (
                                           <span className="text-destructive">removida</span>
                                         ) : (
                                           <span>
                                             {fmtBRL(t.oldCost)} → {fmtBRL(t.newCost)}{" "}
-                                            <span className={(t.deltaPct ?? 0) > 0 ? "text-destructive" : "text-emerald-600"}>
+                                            <span
+                                              className={
+                                                (t.deltaPct ?? 0) > 0
+                                                  ? "text-destructive"
+                                                  : "text-emerald-600"
+                                              }
+                                            >
                                               ({(t.deltaPct ?? 0) > 0 ? "+" : ""}
                                               {t.deltaPct}%)
                                             </span>

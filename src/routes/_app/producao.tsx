@@ -2,7 +2,18 @@ import { createFileRoute } from "@tanstack/react-router";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { StatusBadge } from "@/components/status-badge";
-import { Clock, Zap, AlertTriangle, Loader2, Factory, Package, Edit, CheckSquare, Printer, BarChart3 } from "lucide-react";
+import {
+  Clock,
+  Zap,
+  AlertTriangle,
+  Loader2,
+  Factory,
+  Package,
+  Edit,
+  CheckSquare,
+  Printer,
+  BarChart3,
+} from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { ProductionDashboard } from "@/components/production/production-dashboard";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -13,6 +24,7 @@ import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TechnicalSheetEditor } from "@/components/production/technical-sheet-editor";
+import { STORE_STAGES, STORE_STAGE_LABEL } from "@/lib/store-production";
 
 const db = supabase as any;
 
@@ -42,7 +54,7 @@ function ProducaoPage() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  
+
   // States para Ficha Técnica
   const [selectedProductionItemId, setSelectedProductionItemId] = useState<string | null>(null);
 
@@ -52,7 +64,9 @@ function ProducaoPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("orders")
-        .select(`id, order_number, product_desc, machine_section, deadline, priority, production_status, clients(name)`)
+        .select(
+          `id, order_number, product_desc, machine_section, deadline, priority, production_status, clients(name)`,
+        )
         .order("priority", { ascending: false })
         .order("deadline", { ascending: true });
       if (error) throw error;
@@ -65,13 +79,15 @@ function ProducaoPage() {
   const { data: factoryItems, isLoading: loadingFactory } = useQuery({
     queryKey: ["factory_production_items"],
     queryFn: async () => {
-      const { data, error } = await (db)
+      const { data, error } = await db
         .from("production_order_items")
-        .select(`
+        .select(
+          `
           id, quantity, status, product_id,
           production_orders(order_number, expected_delivery, clients(name)),
           products(name)
-        `)
+        `,
+        )
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
@@ -79,40 +95,88 @@ function ProducaoPage() {
     enabled: !!profile,
   });
 
-  const updateOrderStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string, status: string }) => {
-      const { error } = await supabase.from("orders").update({ production_status: status }).eq("id", id);
+  // QUERY: OPs dos pedidos da loja — o quadro oficial (migração 20260930030000).
+  const { data: storeOps, isLoading: loadingStoreOps } = useQuery({
+    queryKey: ["store_production_orders"],
+    queryFn: async () => {
+      const { data, error } = await db
+        .schema("store")
+        .from("production_orders")
+        .select(
+          "id, number, stage, product_name, quantity, due_date, priority, order:orders(number, status, customer:customers(name))",
+        )
+        .order("due_date", { ascending: true, nullsFirst: false });
+      if (error) throw error;
+      return (data || []) as any[];
+    },
+    enabled: !!profile,
+  });
+
+  // Mover a OP conduz o pedido (sempre para frente) no banco: cliente e CRM acompanham.
+  const updateStoreStage = useMutation({
+    mutationFn: async ({ id, stage }: { id: string; stage: string }) => {
+      const { error } = await db
+        .schema("store")
+        .from("production_orders")
+        .update({ stage })
+        .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["orders_production"] }),
-    onError: (err) => toast.error("Erro: " + err.message)
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["store_production_orders"] });
+      queryClient.invalidateQueries({ queryKey: ["orders_production"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard_store_production_orders"] });
+    },
+    onError: (err) => toast.error("Erro: " + err.message),
+  });
+
+  // O kanban move o pedido real da loja (histórico, cliente e OP acompanham);
+  // pedido antigo, só do CRM, continua sendo movido aqui mesmo.
+  const updateOrderStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      const { error } = await db
+        .schema("store")
+        .rpc("crm_move_order", { p_order_id: id, p_column: status });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["orders_production"] });
+      queryClient.invalidateQueries({ queryKey: ["store_production_orders"] });
+    },
+    onError: (err) => toast.error(err.message),
   });
 
   const updateFactoryStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string, status: string }) => {
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
       // Busca status atual para registrar histórico
-      const { data: currentItem } = await (db).from("production_order_items").select("status, production_order_id").eq("id", id).single();
-      const oldStatus = currentItem?.status || 'aguardando';
+      const { data: currentItem } = await db
+        .from("production_order_items")
+        .select("status, production_order_id")
+        .eq("id", id)
+        .single();
+      const oldStatus = currentItem?.status || "aguardando";
 
-      const { error } = await (db).from("production_order_items").update({ status }).eq("id", id);
+      const { error } = await db.from("production_order_items").update({ status }).eq("id", id);
       if (error) throw error;
 
       // Registrar no histórico de produção
       const { data: userData } = await supabase.auth.getUser();
-      await (db).from("production_history").insert([{
-        production_order_id: currentItem?.production_order_id,
-        production_order_item_id: id,
-        action: `Movido de "${oldStatus}" para "${status}"`,
-        old_status: oldStatus,
-        new_status: status,
-        actor_id: userData.user?.id
-      }]);
+      await db.from("production_history").insert([
+        {
+          production_order_id: currentItem?.production_order_id,
+          production_order_item_id: id,
+          action: `Movido de "${oldStatus}" para "${status}"`,
+          old_status: oldStatus,
+          new_status: status,
+          actor_id: userData.user?.id,
+        },
+      ]);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["factory_production_items"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard_production_items"] });
     },
-    onError: (err) => toast.error("Erro: " + err.message)
+    onError: (err) => toast.error("Erro: " + err.message),
   });
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
@@ -134,15 +198,22 @@ function ProducaoPage() {
     setDraggingId(null);
   };
 
+  const handleDropStore = (e: React.DragEvent, stage: string) => {
+    e.preventDefault();
+    const id = e.dataTransfer.getData("itemId");
+    if (id && draggingId === id) updateStoreStage.mutate({ id, stage });
+    setDraggingId(null);
+  };
+
   const handleDragOver = (e: React.DragEvent) => e.preventDefault();
 
   return (
     <>
-      <PageHeader 
-        title="Painel de Produção e PCP" 
-        description="Controle e rastreabilidade visual" 
+      <PageHeader
+        title="Painel de Produção e PCP"
+        description="Controle e rastreabilidade visual"
       />
-      
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2">
         <TabsList className="grid grid-cols-3 max-w-[560px] mb-4">
           <TabsTrigger value="dashboard" className="flex items-center gap-2">
@@ -161,51 +232,157 @@ function ProducaoPage() {
         </TabsContent>
 
         <TabsContent value="pcp">
+          <div className="mb-2 flex items-baseline justify-between">
+            <h2 className="text-sm font-semibold">OPs dos pedidos da loja</h2>
+            <span className="text-xs text-muted-foreground">
+              Mover a OP atualiza o pedido e o que o cliente vê.
+            </span>
+          </div>
+          {loadingStoreOps ? (
+            <div className="flex justify-center p-8">
+              <Loader2 className="animate-spin h-6 w-6 text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="overflow-x-auto pb-4 mb-6">
+              <div className="flex gap-3 min-w-max">
+                {STORE_STAGES.map((stage) => {
+                  const colOps = storeOps?.filter((op) => op.stage === stage) || [];
+                  return (
+                    <div
+                      key={stage}
+                      className="w-56 shrink-0 flex flex-col max-h-[420px]"
+                      onDrop={(e) => handleDropStore(e, stage)}
+                      onDragOver={handleDragOver}
+                    >
+                      <div className="flex items-center justify-between mb-2 px-1">
+                        <h3 className="text-xs font-semibold">{STORE_STAGE_LABEL[stage]}</h3>
+                        <span className="text-[10px] font-bold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">
+                          {colOps.length}
+                        </span>
+                      </div>
+                      <div className="space-y-2 flex-1 overflow-y-auto pr-1 pb-2 min-h-16 rounded-lg">
+                        {colOps.map((op) => (
+                          <Card
+                            key={op.id}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, op.id)}
+                            className="p-2.5 hover:shadow-md cursor-grab active:cursor-grabbing transition-shadow"
+                          >
+                            <div className="flex justify-between items-start mb-1">
+                              <span className="font-mono text-[11px] font-bold text-primary">
+                                {op.number}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground">
+                                {op.order?.number}
+                              </span>
+                            </div>
+                            <p className="font-semibold text-xs leading-tight">{op.product_name}</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">
+                              {op.quantity} un · {op.order?.customer?.name ?? "—"}
+                            </p>
+                            {op.due_date ? (
+                              <p className="text-[10px] text-muted-foreground mt-1">
+                                Prazo:{" "}
+                                {new Date(op.due_date).toLocaleDateString("pt-BR", {
+                                  timeZone: "UTC",
+                                })}
+                              </p>
+                            ) : null}
+                            {/* Mover sem arrastar: o quadro tem 10 etapas e não cabe na tela. */}
+                            <select
+                              aria-label={`Etapa da ${op.number}`}
+                              value={op.stage}
+                              disabled={updateStoreStage.isPending}
+                              onChange={(e) =>
+                                updateStoreStage.mutate({ id: op.id, stage: e.target.value })
+                              }
+                              className="mt-2 w-full rounded-md border bg-background px-1.5 py-1 text-[11px]"
+                            >
+                              {STORE_STAGES.map((s) => (
+                                <option key={s} value={s}>
+                                  {STORE_STAGE_LABEL[s]}
+                                </option>
+                              ))}
+                            </select>
+                          </Card>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <h2 className="text-sm font-semibold mb-2">OPs internas (orçamentos do Flow)</h2>
           {loadingFactory ? (
-            <div className="flex justify-center p-12"><Loader2 className="animate-spin h-8 w-8 text-muted-foreground" /></div>
+            <div className="flex justify-center p-12">
+              <Loader2 className="animate-spin h-8 w-8 text-muted-foreground" />
+            </div>
           ) : (
             <div className="overflow-x-auto pb-4">
               <div className="flex gap-3 min-w-max">
                 {COLUMNS_FACTORY.map((col) => {
-                  const colItems = factoryItems?.filter((i: { status: string | null }) => (i.status || "aguardando") === col.id) || [];
+                  const colItems =
+                    factoryItems?.filter(
+                      (i: { status: string | null }) => (i.status || "aguardando") === col.id,
+                    ) || [];
                   return (
-                    <div 
-                      key={col.id} 
+                    <div
+                      key={col.id}
                       className="w-72 shrink-0 flex flex-col h-[calc(100vh-220px)]"
                       onDrop={(e) => handleDropFactory(e, col.id)}
                       onDragOver={handleDragOver}
                     >
                       <div className="flex items-center justify-between mb-3 px-1">
                         <div className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full" style={{ background: col.color }} />
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ background: col.color }}
+                          />
                           <h3 className="text-sm font-semibold">{col.title}</h3>
                         </div>
                         <span className="text-xs font-bold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">
                           {colItems.length}
                         </span>
                       </div>
-                      
+
                       <div className="space-y-2 flex-1 overflow-y-auto pr-1 pb-4">
                         {colItems.map((item: any) => (
-                          <Card 
-                            key={item.id} 
-                            draggable 
+                          <Card
+                            key={item.id}
+                            draggable
                             onDragStart={(e) => handleDragStart(e, item.id)}
                             className="p-3 hover:shadow-md cursor-grab active:cursor-grabbing transition-shadow group relative"
                           >
                             <div className="flex justify-between items-start mb-2">
-                              <span className="font-mono text-xs font-bold text-primary">{item.production_orders?.order_number}</span>
+                              <span className="font-mono text-xs font-bold text-primary">
+                                {item.production_orders?.order_number}
+                              </span>
                               <StatusBadge variant="muted">Qtd: {item.quantity}</StatusBadge>
                             </div>
-                            <p className="font-semibold text-sm leading-tight text-foreground/90">{item.products?.name || "Produto Genérico"}</p>
-                            <p className="text-[11px] text-muted-foreground mt-1 line-clamp-1">{item.production_orders?.clients?.name}</p>
-                            
+                            <p className="font-semibold text-sm leading-tight text-foreground/90">
+                              {item.products?.name || "Produto Genérico"}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground mt-1 line-clamp-1">
+                              {item.production_orders?.clients?.name}
+                            </p>
+
                             <div className="flex justify-between items-center mt-3 pt-3 border-t border-secondary/50 text-[10px]">
-                              <span className="text-muted-foreground">Prazo: {item.production_orders?.expected_delivery ? new Date(item.production_orders.expected_delivery).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : 'N/D'}</span>
-                              
+                              <span className="text-muted-foreground">
+                                Prazo:{" "}
+                                {item.production_orders?.expected_delivery
+                                  ? new Date(
+                                      item.production_orders.expected_delivery,
+                                    ).toLocaleDateString("pt-BR", { timeZone: "UTC" })
+                                  : "N/D"}
+                              </span>
+
                               <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <span 
-                                  onClick={(e) => { e.stopPropagation(); setSelectedProductionItemId(item.id); }}
+                                <span
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedProductionItemId(item.id);
+                                  }}
                                   className="bg-primary/10 text-primary px-2 py-1 rounded flex items-center gap-1 cursor-pointer hover:bg-primary/20"
                                 >
                                   <Edit className="h-3 w-3" /> Ficha
@@ -238,39 +415,52 @@ function ProducaoPage() {
 
         <TabsContent value="pedidos">
           {loadingOrders ? (
-            <div className="flex justify-center p-12"><Loader2 className="animate-spin h-8 w-8 text-muted-foreground" /></div>
+            <div className="flex justify-center p-12">
+              <Loader2 className="animate-spin h-8 w-8 text-muted-foreground" />
+            </div>
           ) : (
             <div className="overflow-x-auto pb-4">
               <div className="flex gap-3 min-w-max">
                 {COLUMNS_ORDERS.map((col) => {
-                  const colOrders = orders?.filter(o => o.production_status === col.id) || [];
+                  const colOrders = orders?.filter((o) => o.production_status === col.id) || [];
                   return (
-                    <div 
-                      key={col.id} 
+                    <div
+                      key={col.id}
                       className="w-72 shrink-0 flex flex-col h-[calc(100vh-220px)]"
                       onDrop={(e) => handleDropOrder(e, col.id)}
                       onDragOver={handleDragOver}
                     >
                       <div className="flex items-center justify-between mb-3 px-1">
                         <div className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full" style={{ background: col.color }} />
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ background: col.color }}
+                          />
                           <h3 className="text-sm font-semibold">{col.title}</h3>
                         </div>
-                        <span className="text-xs font-bold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{colOrders.length}</span>
+                        <span className="text-xs font-bold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">
+                          {colOrders.length}
+                        </span>
                       </div>
                       <div className="space-y-2 flex-1 overflow-y-auto pr-1 pb-4">
                         {colOrders.map((order) => (
-                          <Card 
-                            key={order.id} 
-                            draggable 
+                          <Card
+                            key={order.id}
+                            draggable
                             onDragStart={(e) => handleDragStart(e, order.id)}
                             className="p-3 hover:shadow-md cursor-grab active:cursor-grabbing transition-shadow"
                           >
                             <div className="flex justify-between items-start mb-2">
-                              <span className="font-mono text-xs font-bold text-primary">{order.order_number}</span>
+                              <span className="font-mono text-xs font-bold text-primary">
+                                {order.order_number}
+                              </span>
                             </div>
-                            <p className="font-semibold text-sm leading-tight">{order.clients?.name}</p>
-                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{order.product_desc}</p>
+                            <p className="font-semibold text-sm leading-tight">
+                              {order.clients?.name}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                              {order.product_desc}
+                            </p>
                           </Card>
                         ))}
                       </div>
@@ -283,11 +473,14 @@ function ProducaoPage() {
         </TabsContent>
       </Tabs>
 
-      <Dialog open={!!selectedProductionItemId} onOpenChange={(open) => !open && setSelectedProductionItemId(null)}>
+      <Dialog
+        open={!!selectedProductionItemId}
+        onOpenChange={(open) => !open && setSelectedProductionItemId(null)}
+      >
         <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto bg-background/95 backdrop-blur">
           {selectedProductionItemId && (
-            <TechnicalSheetEditor 
-              productionOrderItemId={selectedProductionItemId} 
+            <TechnicalSheetEditor
+              productionOrderItemId={selectedProductionItemId}
               onSaved={() => setSelectedProductionItemId(null)}
             />
           )}
