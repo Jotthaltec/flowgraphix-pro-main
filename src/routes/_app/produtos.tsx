@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
@@ -35,7 +35,12 @@ import {
   type WithdrawMode,
 } from "@/lib/store-publication";
 
-export const Route = createFileRoute("/_app/produtos")({ component: ProdutosPage });
+export const Route = createFileRoute("/_app/produtos")({
+  // ?editar=<id> abre o editor do produto (link do painel de integração).
+  validateSearch: (search: Record<string, unknown>): { editar?: string } =>
+    typeof search.editar === "string" && search.editar.trim() ? { editar: search.editar } : {},
+  component: ProdutosPage,
+});
 
 const CATEGORIAS = ["DTF Têxtil", "DTF UV", "Sublimação", "Offset", "Comunicação visual", "Design", "Acabamento"];
 
@@ -562,6 +567,16 @@ function ProdutosPage() {
     setEditingProduct(product);
     setIsModalOpen(true);
   }
+
+  const { editar } = Route.useSearch();
+  useEffect(() => {
+    if (!editar || !dbProducts) return;
+    const product = (dbProducts as Product[]).find((p) => p.id === editar);
+    if (product) handleEdit(product);
+    else toast.error("Produto não encontrado no Flow.");
+    navigate({ to: "/produtos", search: {}, replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editar, dbProducts]);
 
   function handleNew() {
     setEditingProduct(null);

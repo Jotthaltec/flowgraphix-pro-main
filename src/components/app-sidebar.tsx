@@ -17,7 +17,7 @@ import {
   Printer,
   Globe,
   ShoppingCart,
-  Store,
+  Store, Activity
 } from "lucide-react";
 import {
   Sidebar,
@@ -47,6 +47,7 @@ const items = [
   { title: "Produção", url: "/producao", icon: Workflow },
   { title: "Produtos & Serviços", url: "/produtos", icon: Package },
   { title: "Catálogo do site", url: "/produtos-site", icon: Store },
+  { title: "Integração Nexus", url: "/integracao-nexus", icon: Activity },
   { title: "Hub de Fornecedores", url: "/hub-fornecedores", icon: Globe },
   { title: "Custos & Lucro", url: "/custos", icon: Calculator },
   { title: "Financeiro", url: "/financeiro", icon: Wallet },

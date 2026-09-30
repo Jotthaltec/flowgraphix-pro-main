@@ -26,6 +26,7 @@ import { Route as AppOrcamentosRouteImport } from './routes/_app/orcamentos'
 import { Route as AppNovoOrcamentoRouteImport } from './routes/_app/novo-orcamento'
 import { Route as AppMotorProdutosRouteImport } from './routes/_app/motor-produtos'
 import { Route as AppLeadsRouteImport } from './routes/_app/leads'
+import { Route as AppIntegracaoNexusRouteImport } from './routes/_app/integracao-nexus'
 import { Route as AppHubFornecedoresRouteImport } from './routes/_app/hub-fornecedores'
 import { Route as AppFinanceiroRouteImport } from './routes/_app/financeiro'
 import { Route as AppDashboardRouteImport } from './routes/_app/dashboard'
@@ -120,6 +121,11 @@ const AppLeadsRoute = AppLeadsRouteImport.update({
   path: '/leads',
   getParentRoute: () => AppRoute,
 } as any)
+const AppIntegracaoNexusRoute = AppIntegracaoNexusRouteImport.update({
+  id: '/integracao-nexus',
+  path: '/integracao-nexus',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppHubFornecedoresRoute = AppHubFornecedoresRouteImport.update({
   id: '/hub-fornecedores',
   path: '/hub-fornecedores',
@@ -180,6 +186,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AppDashboardRoute
   '/financeiro': typeof AppFinanceiroRoute
   '/hub-fornecedores': typeof AppHubFornecedoresRoute
+  '/integracao-nexus': typeof AppIntegracaoNexusRoute
   '/leads': typeof AppLeadsRoute
   '/motor-produtos': typeof AppMotorProdutosRoute
   '/novo-orcamento': typeof AppNovoOrcamentoRoute
@@ -207,6 +214,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AppDashboardRoute
   '/financeiro': typeof AppFinanceiroRoute
   '/hub-fornecedores': typeof AppHubFornecedoresRoute
+  '/integracao-nexus': typeof AppIntegracaoNexusRoute
   '/leads': typeof AppLeadsRoute
   '/motor-produtos': typeof AppMotorProdutosRoute
   '/novo-orcamento': typeof AppNovoOrcamentoRoute
@@ -236,6 +244,7 @@ export interface FileRoutesById {
   '/_app/dashboard': typeof AppDashboardRoute
   '/_app/financeiro': typeof AppFinanceiroRoute
   '/_app/hub-fornecedores': typeof AppHubFornecedoresRoute
+  '/_app/integracao-nexus': typeof AppIntegracaoNexusRoute
   '/_app/leads': typeof AppLeadsRoute
   '/_app/motor-produtos': typeof AppMotorProdutosRoute
   '/_app/novo-orcamento': typeof AppNovoOrcamentoRoute
@@ -265,6 +274,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/financeiro'
     | '/hub-fornecedores'
+    | '/integracao-nexus'
     | '/leads'
     | '/motor-produtos'
     | '/novo-orcamento'
@@ -292,6 +302,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/financeiro'
     | '/hub-fornecedores'
+    | '/integracao-nexus'
     | '/leads'
     | '/motor-produtos'
     | '/novo-orcamento'
@@ -320,6 +331,7 @@ export interface FileRouteTypes {
     | '/_app/dashboard'
     | '/_app/financeiro'
     | '/_app/hub-fornecedores'
+    | '/_app/integracao-nexus'
     | '/_app/leads'
     | '/_app/motor-produtos'
     | '/_app/novo-orcamento'
@@ -465,6 +477,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppLeadsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/integracao-nexus': {
+      id: '/_app/integracao-nexus'
+      path: '/integracao-nexus'
+      fullPath: '/integracao-nexus'
+      preLoaderRoute: typeof AppIntegracaoNexusRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/hub-fornecedores': {
       id: '/_app/hub-fornecedores'
       path: '/hub-fornecedores'
@@ -540,6 +559,7 @@ interface AppRouteChildren {
   AppDashboardRoute: typeof AppDashboardRoute
   AppFinanceiroRoute: typeof AppFinanceiroRoute
   AppHubFornecedoresRoute: typeof AppHubFornecedoresRoute
+  AppIntegracaoNexusRoute: typeof AppIntegracaoNexusRoute
   AppLeadsRoute: typeof AppLeadsRoute
   AppMotorProdutosRoute: typeof AppMotorProdutosRoute
   AppNovoOrcamentoRoute: typeof AppNovoOrcamentoRoute
@@ -562,6 +582,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDashboardRoute: AppDashboardRoute,
   AppFinanceiroRoute: AppFinanceiroRoute,
   AppHubFornecedoresRoute: AppHubFornecedoresRoute,
+  AppIntegracaoNexusRoute: AppIntegracaoNexusRoute,
   AppLeadsRoute: AppLeadsRoute,
   AppMotorProdutosRoute: AppMotorProdutosRoute,
   AppNovoOrcamentoRoute: AppNovoOrcamentoRoute,
