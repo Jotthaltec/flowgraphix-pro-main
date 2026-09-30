@@ -34,6 +34,9 @@ set local role authenticated;
 do $$ begin
   assert store.is_staff(), 'pré-condição: usuário da equipe';
   assert (select count(*) from store.crm_product_sync_health where name = 'QA acesso') = 1, 'equipe vê';
+  -- A tela lê tudo com select *: inclui o hash, que lê colunas privadas das variantes.
+  assert (select count(*) from (select * from store.crm_product_sync_health) h) >= 1, 'equipe lê todas as colunas';
+  assert (select count(*) from public.site_products where sync_status is not null) >= 1, 'status real no catálogo';
 end $$;
 reset role;
 

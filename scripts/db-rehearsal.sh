@@ -72,6 +72,10 @@ grant execute on all functions in schema public, store to anon, authenticated, s
 -- 20260822185901: as políticas RLS chamam private.is_company_member.
 grant usage on schema private to anon, authenticated, service_role;
 grant execute on all functions in schema private to anon, authenticated, service_role;
+-- 20260928140000: a origem da variante (fornecedor) não é legível pela API.
+revoke select on store.product_variants from anon, authenticated;
+grant select (id, product_id, sku, selection, production_days, available, is_default, position, created_at, updated_at)
+  on store.product_variants to anon, authenticated;
 SQL
     echo "restaurado: $(psql_c -tAc "select count(*) from store.products") produtos no site, $(psql_c -tAc "select count(*) from public.products") no CRM"
     ;;
