@@ -18,6 +18,7 @@
 
 import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
+import type { Database, Tables, TablesInsert } from "@/integrations/supabase/types";
 import { importCombinationsFromProduct } from "@/services/combinationImporter";
 
 // Supabase server-side client (chaves não expostas ao frontend)
@@ -31,7 +32,7 @@ function getServerSupabase() {
     );
   }
 
-  return createClient(url, key);
+  return createClient<Database>(url, key);
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +79,7 @@ export const getFamilyCombinationData = createServerFn({ method: "GET" })
       .eq("family_id", data.family_id)
       .eq("company_id", data.company_id)
       .order("order_index");
-    const groupIds = (groupsRes.data || []).map((g: any) => g.id);
+    const groupIds = (groupsRes.data || []).map((g) => g.id);
 
     const [valuesRes, productsRes] = await Promise.all([
       groupIds.length
@@ -89,7 +90,7 @@ export const getFamilyCombinationData = createServerFn({ method: "GET" })
             .in("group_id", groupIds)
             .eq("is_active", true)
             .order("order_index")
-        : Promise.resolve({ data: [] as any[] }),
+        : Promise.resolve({ data: [] as Tables<"supplier_option_values">[] }),
       sb
         .from("supplier_commercial_products")
         .select("*")
@@ -97,13 +98,13 @@ export const getFamilyCombinationData = createServerFn({ method: "GET" })
         .eq("company_id", data.company_id),
     ]);
 
-    const productIds = (productsRes.data || []).map((p: any) => p.id);
+    const productIds = (productsRes.data || []).map((p) => p.id);
     const productOptionsRes = productIds.length
       ? await sb
           .from("supplier_commercial_product_options")
           .select("*")
           .in("commercial_product_id", productIds)
-      : { data: [] as any[] };
+      : { data: [] as Tables<"supplier_commercial_product_options">[] };
 
     return {
       family: familyRes.data,
@@ -130,25 +131,24 @@ export const getFamilyMatrix = createServerFn({ method: "GET" })
     if (error) throw new Error(`Erro ao carregar matriz: ${error.message}`);
 
     const list = products || [];
-    const active = list.filter((p: any) => p.availability === "available");
+    const active = list.filter((p) => p.availability === "available");
     // §13 validação: alerta para produtos sem external_product_id / sem preço
-    const missingExternalId = list.filter((p: any) => !p.external_product_id).length;
+    const missingExternalId = list.filter((p) => !p.external_product_id).length;
     const missingPrice = list.filter(
-      (p: any) =>
-        p.list_price == null && p.promotional_price == null && p.availability === "available",
+      (p) => p.list_price == null && p.promotional_price == null && p.availability === "available",
     ).length;
 
     return {
       products: list,
       total: list.length,
       active: active.length,
-      unavailable: list.filter((p: any) => p.availability !== "available").length,
-      distinct_quantities: [...new Set(list.map((p: any) => p.quantity))].sort(
+      unavailable: list.filter((p) => p.availability !== "available").length,
+      distinct_quantities: [...new Set(list.map((p) => p.quantity))].sort(
         (a: number, b: number) => a - b,
       ),
-      distinct_materials: [...new Set(list.map((p: any) => p.material).filter(Boolean))],
-      distinct_formats: [...new Set(list.map((p: any) => p.format).filter(Boolean))],
-      distinct_prints: [...new Set(list.map((p: any) => p.print_color).filter(Boolean))],
+      distinct_materials: [...new Set(list.map((p) => p.material).filter(Boolean))],
+      distinct_formats: [...new Set(list.map((p) => p.format).filter(Boolean))],
+      distinct_prints: [...new Set(list.map((p) => p.print_color).filter(Boolean))],
       validation: { missing_external_id: missingExternalId, missing_price: missingPrice },
     };
   });
@@ -213,8 +213,8 @@ export const getServicesForSupplier = createServerFn({ method: "GET" })
     if (error) throw new Error(`Erro ao buscar serviços: ${error.message}`);
 
     // Preços dos serviços
-    const serviceIds = (services || []).map((s: any) => s.id);
-    let prices: any[] = [];
+    const serviceIds = (services || []).map((s) => s.id);
+    let prices: Tables<"supplier_service_prices">[] = [];
     if (serviceIds.length > 0) {
       const pricesQuery = sb
         .from("supplier_service_prices")
@@ -237,7 +237,10 @@ export const getServicesForSupplier = createServerFn({ method: "GET" })
 // 5. Salvar snapshot imutável
 // ---------------------------------------------------------------------------
 export const savePriceSnapshot = createServerFn({ method: "POST" })
-  .inputValidator((input: { snapshot: Record<string, any>; quote_item_id?: string }) => input)
+  .inputValidator(
+    (input: { snapshot: TablesInsert<"supplier_price_snapshots">; quote_item_id?: string }) =>
+      input,
+  )
   .handler(async ({ data }) => {
     const sb = getServerSupabase();
 
@@ -305,7 +308,7 @@ export const revalidateQuoteItem = createServerFn({ method: "POST" })
       .eq("status", "active");
     const nowIso = new Date().toISOString();
     const activePromo = (promos || []).find(
-      (p: any) => (!p.starts_at || p.starts_at <= nowIso) && (!p.ends_at || p.ends_at >= nowIso),
+      (p) => (!p.starts_at || p.starts_at <= nowIso) && (!p.ends_at || p.ends_at >= nowIso),
     );
 
     const isAvailable = current ? current.availability === "available" : false;
@@ -415,7 +418,7 @@ export const runCalculationTests = createServerFn({ method: "POST" })
           .from("supplier_commercial_products")
           .select("id, list_price, promotional_price, production_days, availability, quantity")
           .eq("family_id", data.family_id)
-          .eq("external_product_id", test.external_code)
+          .eq("external_product_id", test.external_code ?? "")
           .eq("quantity", test.quantity)
           .eq("company_id", data.company_id)
           .maybeSingle();
@@ -504,7 +507,7 @@ export const runCalculationTests = createServerFn({ method: "POST" })
           diff_percent: diffPercent,
           error: passed ? null : !priceMatch ? "Preço divergente." : "Prazo divergente.",
         });
-      } catch (err: any) {
+      } catch (err) {
         results.push({
           test_id: test.id,
           name: test.name,
@@ -513,7 +516,7 @@ export const runCalculationTests = createServerFn({ method: "POST" })
           calculated: null,
           diff: null,
           diff_percent: null,
-          error: err.message,
+          error: err instanceof Error ? err.message : String(err),
         });
       }
     }
@@ -569,8 +572,8 @@ export const importProductCombinations = createServerFn({ method: "POST" })
       .eq("product_id", data.product_id)
       .eq("company_id", data.company_id);
 
-    const variantIds = (variants || []).map((v: any) => v.id);
-    let priceTiers: any[] = [];
+    const variantIds = (variants || []).map((v) => v.id);
+    let priceTiers: Tables<"product_price_tiers">[] = [];
     if (variantIds.length > 0) {
       const { data: tiers } = await sb
         .from("product_price_tiers")

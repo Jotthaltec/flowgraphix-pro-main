@@ -1,14 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, AlertTriangle } from "lucide-react";
-import { SupplierCombinationSelector } from "./supplier-combination-selector";
+import {
+  SupplierCombinationSelector,
+  type SupplierCombinationSelectorProps,
+} from "./supplier-combination-selector";
 import { getFamilyCombinationDataClient } from "@/integrations/supabase/combination-client";
 
 interface SupplierCombinationWrapperProps {
   familyId: string;
   companyId: string;
   marginPercent?: number;
-  onCalculationChange: (calc: any) => void;
-  onSelectionChange?: (selection: any) => void;
+  onCalculationChange: SupplierCombinationSelectorProps["onCalculationChange"];
+  onSelectionChange?: SupplierCombinationSelectorProps["onSelectionChange"];
 }
 
 export function SupplierCombinationWrapper({

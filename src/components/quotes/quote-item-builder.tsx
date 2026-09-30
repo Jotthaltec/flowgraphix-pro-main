@@ -28,6 +28,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { SupplierCombinationWrapper } from "./supplier-combination-wrapper";
 import { useAuth } from "@/hooks/use-auth";
 import { Textarea } from "@/components/ui/textarea";
+import type { QuoteItemCalculation } from "@/types/combinationTypes";
 import type { Json } from "@/integrations/supabase/types";
 
 const fmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -80,8 +81,18 @@ type AttributeOption = {
 /** Eixo de variação em products.variations (formato do importador). */
 type VariationValue =
   | string
-  | { value?: string; cost?: number | null; sell?: number | null; external_id?: string | null; tiers?: RawTier[] | null };
-type VariationAxis = { name?: string; values?: VariationValue[]; options?: VariationValue[] } | null;
+  | {
+      value?: string;
+      cost?: number | null;
+      sell?: number | null;
+      external_id?: string | null;
+      tiers?: RawTier[] | null;
+    };
+type VariationAxis = {
+  name?: string;
+  values?: VariationValue[];
+  options?: VariationValue[];
+} | null;
 
 type ProductForTiers = {
   quantity_prices?: Json | null;
@@ -128,9 +139,12 @@ export interface QuoteItemData {
   production_deadline?: string | null;
   source_url?: string | null;
   // Snapshot da configuração no momento (seção 19) — persistido em item_attributes
+  // Duas origens: atributo de fornecedor (value/unit_cost) ou cascata do motor
+  // de combinações (grupo/valor escolhidos).
   selection_snapshot?: Record<
     string,
-    { value: string; external_id?: string | null; unit_cost?: number | null }
+    | { value: string; external_id?: string | null; unit_cost?: number | null }
+    | { group_name: string; value_name: string; value_id: string; external_id: string | null }
   >;
   // Calculated
   total_cost: number;
@@ -139,7 +153,7 @@ export interface QuoteItemData {
   // New Combination Engine
   has_combination_engine?: boolean;
   family_id?: string;
-  calc_snapshot?: Json;
+  calc_snapshot?: QuoteItemCalculation | null;
 }
 
 interface QuoteItemBuilderProps {
@@ -849,8 +863,7 @@ export function QuoteItemBuilder({
                     </span>
                   </div>
                   {editingAttrs.map((attr) => {
-                    const options =
-                      editingOptions.filter((o) => o.attribute_id === attr.id) || [];
+                    const options = editingOptions.filter((o) => o.attribute_id === attr.id) || [];
                     const currentValue = editingItem.attributes[attr.code] || "";
                     const currentImpact = editingItem.attribute_price_impacts[attr.code] || 0;
 

@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { importCombinationsFromProduct } from "@/services/combinationImporter";
 import type { FamilyCombinationData, RawPromotion } from "@/services/combinationEngine";
 
-const db = supabase as any;
+const db = supabase;
 
 // ---------------------------------------------------------------------------
 // Gerar produtos comerciais a partir de um produto do catálogo (Etapa 4)
@@ -65,7 +65,7 @@ export async function generateCommercialProducts(params: {
     );
   }
 
-  const variantIds = variants.map((v: any) => v.id);
+  const variantIds = variants.map((v) => v.id);
   const { data: tiers } = await db
     .from("product_price_tiers")
     .select("*")
@@ -121,7 +121,7 @@ export async function getFamilyCombinationDataClient(
     .eq("family_id", familyId)
     .eq("company_id", companyId)
     .order("order_index");
-  const groupIds = (groups || []).map((g: any) => g.id);
+  const groupIds = (groups || []).map((g) => g.id);
 
   const [valuesRes, productsRes, promosRes] = await Promise.all([
     groupIds.length
@@ -146,7 +146,7 @@ export async function getFamilyCombinationDataClient(
       .eq("status", "active"),
   ]);
 
-  const productIds = (productsRes.data || []).map((p: any) => p.id);
+  const productIds = (productsRes.data || []).map((p) => p.id);
   const productOptionsRes = productIds.length
     ? await db
         .from("supplier_commercial_product_options")
@@ -154,11 +154,13 @@ export async function getFamilyCombinationDataClient(
         .in("commercial_product_id", productIds)
     : { data: [] };
 
+  // lead_time_rule (CHECK no banco) e availability (gravada só pelo importador)
+  // são text no banco; o motor trabalha com as uniões desses valores.
   return {
-    family,
+    family: family as FamilyCombinationData["family"],
     groups: groups || [],
     values: valuesRes.data || [],
-    products: productsRes.data || [],
+    products: (productsRes.data || []) as FamilyCombinationData["products"],
     productOptions: productOptionsRes.data || [],
     promotions: (promosRes.data || []) as RawPromotion[],
   };
@@ -180,15 +182,15 @@ export async function getFamilyMatrixClient(familyId: string, companyId: string)
   return {
     products: list,
     total: list.length,
-    active: list.filter((p: any) => p.availability === "available").length,
-    unavailable: list.filter((p: any) => p.availability !== "available").length,
-    distinct_quantities: ([...new Set(list.map((p: any) => p.quantity))] as number[]).sort(
+    active: list.filter((p) => p.availability === "available").length,
+    unavailable: list.filter((p) => p.availability !== "available").length,
+    distinct_quantities: ([...new Set(list.map((p) => p.quantity))] as number[]).sort(
       (a, b) => a - b,
     ),
     validation: {
-      missing_external_id: list.filter((p: any) => !p.external_product_id).length,
+      missing_external_id: list.filter((p) => !p.external_product_id).length,
       missing_price: list.filter(
-        (p: any) =>
+        (p) =>
           p.list_price == null && p.promotional_price == null && p.availability === "available",
       ).length,
     },

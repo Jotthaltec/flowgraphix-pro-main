@@ -23,18 +23,35 @@ import type { AdapterMatchContext, SupplierAdapter } from "./types";
 
 // --- helpers de leitura tolerante do JSON-LD ------------------------------
 
-function typesOf(node: any): string[] {
-  const t = node?.["@type"];
+/** Nó JSON-LD: objeto arbitrário vindo da página, lido campo a campo. */
+type LdNode = { [key: string]: unknown };
+
+function isNode(v: unknown): v is LdNode {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+/** Texto de um campo escalar (string ou número); qualquer outra coisa vira "". */
+function text(v: unknown): string {
+  return typeof v === "string" || typeof v === "number" ? String(v) : "";
+}
+
+/** Valor numérico ou textual aceito por parsePriceBR; o resto é ausência. */
+function priceLike(v: unknown): string | number | null {
+  return typeof v === "string" || typeof v === "number" ? v : null;
+}
+
+function typesOf(node: unknown): string[] {
+  const t = isNode(node) ? node["@type"] : undefined;
   if (!t) return [];
   return (Array.isArray(t) ? t : [t]).map((x) => String(x).toLowerCase());
 }
 
 /** Achata `@graph` e arrays aninhados num único vetor de nós. */
-function flattenNodes(blocks: any[]): any[] {
-  const out: any[] = [];
-  const visit = (n: any) => {
-    if (!n || typeof n !== "object") return;
+function flattenNodes(blocks: unknown[]): LdNode[] {
+  const out: LdNode[] = [];
+  const visit = (n: unknown) => {
     if (Array.isArray(n)) return n.forEach(visit);
+    if (!isNode(n)) return;
     out.push(n);
     if (Array.isArray(n["@graph"])) n["@graph"].forEach(visit);
   };
@@ -42,24 +59,28 @@ function flattenNodes(blocks: any[]): any[] {
   return out;
 }
 
-function findProductNode(nodes: any[]): any | null {
+function findProductNode(nodes: LdNode[]): LdNode | null {
   return nodes.find((n) => typesOf(n).includes("product")) ?? null;
 }
 
-function findBreadcrumb(nodes: any[]): string[] {
+function findBreadcrumb(nodes: LdNode[]): string[] {
   const bc = nodes.find((n) => typesOf(n).includes("breadcrumblist"));
-  const items: any[] = bc?.itemListElement;
+  const items = bc?.itemListElement;
   if (!Array.isArray(items)) return [];
-  return items.map((el) => cleanText(el?.name || el?.item?.name || "")).filter(Boolean);
+  return items
+    .map((el) =>
+      isNode(el) ? cleanText(text(el.name) || (isNode(el.item) ? text(el.item.name) : "")) : "",
+    )
+    .filter(Boolean);
 }
 
 /** Normaliza `image` (string | array | {url}) numa lista de URLs. */
-function readImages(image: any): ImportedImage[] {
+function readImages(image: unknown): ImportedImage[] {
   const urls: string[] = [];
-  const push = (v: any) => {
+  const push = (v: unknown) => {
     if (!v) return;
     if (typeof v === "string") urls.push(v);
-    else if (typeof v === "object" && typeof v.url === "string") urls.push(v.url);
+    else if (isNode(v) && typeof v.url === "string") urls.push(v.url);
   };
   if (Array.isArray(image)) image.forEach(push);
   else push(image);
@@ -69,22 +90,22 @@ function readImages(image: any): ImportedImage[] {
 }
 
 /** Extrai a primeira oferta útil de `offers` (Offer | AggregateOffer | array). */
-function readOffer(offers: any): { price?: number; currency?: string; availability?: string } {
+function readOffer(offers: unknown): { price?: number; currency?: string; availability?: string } {
   if (!offers) return {};
   const first = Array.isArray(offers) ? offers[0] : offers;
-  if (!first || typeof first !== "object") return {};
+  if (!isNode(first)) return {};
   // AggregateOffer usa lowPrice; Offer usa price.
-  const rawPrice = first.price ?? first.lowPrice ?? first.highPrice;
+  const rawPrice = priceLike(first.price ?? first.lowPrice ?? first.highPrice);
   const price = rawPrice != null ? parsePriceBR(rawPrice) : undefined;
   const currency = typeof first.priceCurrency === "string" ? first.priceCurrency : undefined;
   const availability = typeof first.availability === "string" ? first.availability : undefined;
   return { price: price && price > 0 ? price : undefined, currency, availability };
 }
 
-function readBrand(brand: any): string | undefined {
+function readBrand(brand: unknown): string | undefined {
   if (!brand) return undefined;
   if (typeof brand === "string") return cleanText(brand);
-  if (typeof brand === "object" && typeof brand.name === "string") return cleanText(brand.name);
+  if (isNode(brand) && typeof brand.name === "string") return cleanText(brand.name);
   return undefined;
 }
 
@@ -124,7 +145,7 @@ export const GenericJsonLdAdapter: SupplierAdapter = {
       return emptyProduct(url, domain, collected_at, warnings, errors);
     }
 
-    const original_name = cleanText(product.name || "");
+    const original_name = cleanText(text(product.name));
     if (!original_name) warnings.push("Produto sem nome no JSON-LD.");
 
     const breadcrumb = findBreadcrumb(nodes);
@@ -134,10 +155,10 @@ export const GenericJsonLdAdapter: SupplierAdapter = {
     const { price, currency, availability } = readOffer(product.offers);
     if (price == null) warnings.push("Produto sem preço no JSON-LD.");
 
-    const sku = product.sku != null ? String(product.sku) : undefined;
+    const sku = text(product.sku) || undefined;
     const external_id = sku || externalIdFromUrl(url);
     const brand = readBrand(product.brand);
-    const description = cleanText(product.description || "") || undefined;
+    const description = cleanText(text(product.description)) || undefined;
 
     const currencyCode = currency || "BRL";
     const inStock = availability
@@ -178,15 +199,11 @@ export const GenericJsonLdAdapter: SupplierAdapter = {
       raw_attributes: {},
     };
 
-    const ratingNode = product.aggregateRating;
-    const rating_average =
-      ratingNode?.ratingValue != null ? parsePriceBR(ratingNode.ratingValue) : undefined;
-    const rating_count =
-      ratingNode?.reviewCount != null
-        ? Math.round(parsePriceBR(ratingNode.reviewCount))
-        : ratingNode?.ratingCount != null
-          ? Math.round(parsePriceBR(ratingNode.ratingCount))
-          : undefined;
+    const ratingNode = isNode(product.aggregateRating) ? product.aggregateRating : null;
+    const ratingValue = priceLike(ratingNode?.ratingValue);
+    const reviewCount = priceLike(ratingNode?.reviewCount) ?? priceLike(ratingNode?.ratingCount);
+    const rating_average = ratingValue != null ? parsePriceBR(ratingValue) : undefined;
+    const rating_count = reviewCount != null ? Math.round(parsePriceBR(reviewCount)) : undefined;
 
     return {
       page_type: "product",

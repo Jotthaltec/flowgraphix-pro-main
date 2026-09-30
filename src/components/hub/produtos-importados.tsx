@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json, Tables, TablesUpdate } from "@/integrations/supabase/types";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Table,
@@ -57,6 +58,14 @@ interface ProdutosImportadosProps {
   onNavigateToDrafts: () => void;
 }
 
+/** Produto de fornecedor com o nome do fornecedor embutido. */
+type ImportedProduct = Tables<"products"> & { suppliers: { name: string } | null };
+
+/** Colunas JSONB gravadas pelo importador: lista (ou vazio) e objeto (ou vazio). */
+const jsonArray = <T,>(value: Json | null): T[] => (Array.isArray(value) ? (value as T[]) : []);
+const jsonObject = <T extends object>(value: Json | null): T =>
+  (value && typeof value === "object" && !Array.isArray(value) ? value : {}) as T;
+
 export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -87,10 +96,12 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
   const [bulkStatus, setBulkStatus] = useState("Ativo");
 
   // Estado para o modal de variações de marketplace
-  const [marketplaceModalProduct, setMarketplaceModalProduct] = useState<any>(null);
+  const [marketplaceModalProduct, setMarketplaceModalProduct] = useState<ImportedProduct | null>(
+    null,
+  );
   // Estados para edição manual de produto
   const [openEditModal, setOpenEditModal] = useState(false);
-  const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [editingProduct, setEditingProduct] = useState<ImportedProduct | null>(null);
   const [editName, setEditName] = useState("");
   const [editSku, setEditSku] = useState("");
   const [editCategory, setEditCategory] = useState("");
@@ -181,7 +192,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
       queryClient.invalidateQueries({ queryKey: ["imported-products"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(`Erro ao deletar: ${err.message}`);
     },
   });
@@ -208,7 +219,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
       queryClient.invalidateQueries({ queryKey: ["imported-products"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(`Erro ao desvincular: ${err.message}`);
     },
   });
@@ -218,7 +229,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
   // Núcleo reutilizável de sincronização: busca a página do fornecedor, aplica
   // as regras de mapeamento e grava os campos atualizados. Usado tanto na
   // sincronização individual quanto na sincronização em massa.
-  const syncProductWithSupplier = async (product: any) => {
+  const syncProductWithSupplier = async (product: ImportedProduct) => {
     if (!product.source_url)
       throw new Error("Este produto não possui link de fornecedor vinculado.");
 
@@ -274,7 +285,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
       image_url: extracted.main_image_url || product.main_image_url,
       gallery_images:
         extracted.gallery_images.length > 0 ? extracted.gallery_images : product.gallery_images,
-      specifications: { ...product.specifications, ...extracted.specifications },
+      specifications: { ...jsonObject(product.specifications), ...extracted.specifications },
       variations: extracted.variations.length > 0 ? extracted.variations : product.variations,
       quantity_prices:
         extracted.quantity_prices.length > 0 ? extracted.quantity_prices : product.quantity_prices,
@@ -301,7 +312,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
   // Mutação para enriquecer/sincronizar produto com o fornecedor
   const [enrichingProductId, setEnrichingProductId] = useState<string | null>(null);
   const enrichMutation = useMutation({
-    mutationFn: async (product: any) => {
+    mutationFn: async (product: ImportedProduct) => {
       setEnrichingProductId(product.id);
       return syncProductWithSupplier(product);
     },
@@ -311,7 +322,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
       queryClient.invalidateQueries({ queryKey: ["products"] });
       setEnrichingProductId(null);
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(`Erro ao enriquecer dados: ${err.message}`);
       setEnrichingProductId(null);
     },
@@ -366,7 +377,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
       setOpenEditModal(false);
       setEditingProduct(null);
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(`Erro ao salvar edições: ${err.message}`);
     },
   });
@@ -376,7 +387,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
   // Sincronização em massa: percorre os produtos selecionados sequencialmente
   // (evita disparar N fetches simultâneos contra o fornecedor) e reporta progresso.
   const bulkSyncMutation = useMutation({
-    mutationFn: async (productsToSync: any[]) => {
+    mutationFn: async (productsToSync: ImportedProduct[]) => {
       let ok = 0;
       let failed = 0;
       setBulkSync({ running: true, done: 0, total: productsToSync.length });
@@ -404,7 +415,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
       setBulkSync(null);
       setSelectedIds(new Set());
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(`Erro na sincronização em massa: ${err.message}`);
       setBulkSync(null);
     },
@@ -412,8 +423,8 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
 
   // Edição em massa: aplica somente os campos com toggle ativo aos produtos selecionados.
   const bulkEditMutation = useMutation({
-    mutationFn: async (productsToEdit: any[]) => {
-      const patch: Record<string, any> = { updated_at: new Date().toISOString() };
+    mutationFn: async (productsToEdit: ImportedProduct[]) => {
+      const patch: TablesUpdate<"products"> = { updated_at: new Date().toISOString() };
       if (bulkApplyCategory) patch.category = bulkCategory;
       if (bulkApplySubcategory) patch.subcategory = bulkSubcategory;
       if (bulkApplyDeadline) {
@@ -434,10 +445,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
           rowPatch.sale_price = suggestedPrice;
           rowPatch.min_price = suggestedPrice * 0.9;
         }
-        const { error } = await supabase
-          .from("products")
-          .update(rowPatch as any)
-          .eq("id", p.id);
+        const { error } = await supabase.from("products").update(rowPatch).eq("id", p.id);
         if (error) throw error;
       }
       return productsToEdit.length;
@@ -449,7 +457,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
       setOpenBulkEditModal(false);
       setSelectedIds(new Set());
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(`Erro na edição em massa: ${err.message}`);
     },
   });
@@ -476,7 +484,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
       queryClient.invalidateQueries({ queryKey: ["products"] });
       setSelectedIds(new Set());
     },
-    onError: (err: any) => toast.error(`Erro ao desvincular: ${err.message}`),
+    onError: (err: Error) => toast.error(`Erro ao desvincular: ${err.message}`),
   });
 
   const bulkDeleteMutation = useMutation({
@@ -491,10 +499,10 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
       queryClient.invalidateQueries({ queryKey: ["products"] });
       setSelectedIds(new Set());
     },
-    onError: (err: any) => toast.error(`Erro ao deletar: ${err.message}`),
+    onError: (err: Error) => toast.error(`Erro ao deletar: ${err.message}`),
   });
 
-  const handleEditClick = (product: any) => {
+  const handleEditClick = (product: ImportedProduct) => {
     setEditingProduct(product);
     setEditName(product.name || "");
     setEditSku(product.supplier_sku || "");
@@ -507,16 +515,12 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
     setEditMainImageUrl(product.main_image_url || "");
 
     // Tratando dados em JSONB de forma segura
-    setEditGalleryImages(Array.isArray(product.gallery_images) ? product.gallery_images : []);
-    setEditSpecifications(
-      typeof product.specifications === "object" && product.specifications !== null
-        ? product.specifications
-        : {},
-    );
-    setEditVariations(Array.isArray(product.variations) ? product.variations : []);
-    setEditQuantityPrices(Array.isArray(product.quantity_prices) ? product.quantity_prices : []);
-    setEditExtraServices(Array.isArray(product.extra_services) ? product.extra_services : []);
-    setEditTemplateLinks(Array.isArray(product.template_links) ? product.template_links : []);
+    setEditGalleryImages(jsonArray(product.gallery_images));
+    setEditSpecifications(jsonObject(product.specifications));
+    setEditVariations(jsonArray(product.variations));
+    setEditQuantityPrices(jsonArray(product.quantity_prices));
+    setEditExtraServices(jsonArray(product.extra_services));
+    setEditTemplateLinks(jsonArray(product.template_links));
 
     // Reset inputs temporários
     setNewGalleryUrl("");

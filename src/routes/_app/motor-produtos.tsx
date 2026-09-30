@@ -46,6 +46,18 @@ import { Label } from "@/components/ui/label";
 
 export const Route = createFileRoute("/_app/motor-produtos")({ component: MotorProdutosPage });
 
+/** Empresa do usuário logado; sem ela não há onde gravar o cadastro técnico. */
+async function currentCompanyId(): Promise<string> {
+  const { data: userData } = await supabase.auth.getUser();
+  const { data: profileData } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("user_id", userData.user?.id || "")
+    .single();
+  if (!profileData?.company_id) throw new Error("Empresa não identificada.");
+  return profileData.company_id;
+}
+
 function MotorProdutosPage() {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
@@ -99,12 +111,9 @@ function MotorProdutosPage() {
   const { data: models, isLoading: loadingModels } = useQuery({
     queryKey: ["product_models"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("product_models")
-        .select("*")
-        .order("name");
+      const { data, error } = await supabase.from("product_models").select("*").order("name");
       if (error) throw error;
-      return data as any[];
+      return data;
     },
     enabled: !!profile,
   });
@@ -112,22 +121,18 @@ function MotorProdutosPage() {
   // Mutations - Grupos
   const saveGroupMutation = useMutation({
     mutationFn: async (payload: { id?: string; name: string }) => {
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("user_id", (await supabase.auth.getUser()).data.user?.id || "")
-        .single();
+      const companyId = await currentCompanyId();
 
       if (payload.id) {
-        const { error } = await (supabase as any)
+        const { error } = await supabase
           .from("technical_attribute_groups")
           .update({ name: payload.name })
           .eq("id", payload.id);
         if (error) throw error;
       } else {
-        const { error } = await (supabase as any)
+        const { error } = await supabase
           .from("technical_attribute_groups")
-          .insert([{ name: payload.name, company_id: profileData?.company_id }]);
+          .insert([{ name: payload.name, company_id: companyId }]);
         if (error) throw error;
       }
     },
@@ -142,11 +147,7 @@ function MotorProdutosPage() {
   // Mutations - Atributos
   const saveAttributeMutation = useMutation({
     mutationFn: async (payload: typeof attrForm) => {
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("user_id", (await supabase.auth.getUser()).data.user?.id || "")
-        .single();
+      const companyId = await currentCompanyId();
 
       const dbPayload = {
         name: payload.name,
@@ -154,17 +155,17 @@ function MotorProdutosPage() {
         type: payload.type,
         group_id: payload.group_id && payload.group_id !== "none" ? payload.group_id : null,
         is_required: payload.is_required,
-        company_id: profileData?.company_id,
+        company_id: companyId,
       };
 
       if (payload.id) {
-        const { error } = await (supabase as any)
+        const { error } = await supabase
           .from("technical_attributes")
           .update(dbPayload)
           .eq("id", payload.id);
         if (error) throw error;
       } else {
-        const { error } = await (supabase as any).from("technical_attributes").insert([dbPayload]);
+        const { error } = await supabase.from("technical_attributes").insert([dbPayload]);
         if (error) throw error;
       }
     },
@@ -179,26 +180,22 @@ function MotorProdutosPage() {
   // Mutations - Models
   const saveModelMutation = useMutation({
     mutationFn: async (payload: { id?: string; name: string; description: string }) => {
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("user_id", (await supabase.auth.getUser()).data.user?.id || "")
-        .single();
+      const companyId = await currentCompanyId();
 
       const dbPayload = {
         name: payload.name,
         description: payload.description,
-        company_id: profileData?.company_id,
+        company_id: companyId,
       };
 
       if (payload.id) {
-        const { error } = await (supabase as any)
+        const { error } = await supabase
           .from("product_models")
           .update(dbPayload)
           .eq("id", payload.id);
         if (error) throw error;
       } else {
-        const { error } = await (supabase as any).from("product_models").insert([dbPayload]);
+        const { error } = await supabase.from("product_models").insert([dbPayload]);
         if (error) throw error;
       }
     },
@@ -279,7 +276,7 @@ function MotorProdutosPage() {
                     </TableCell>
                   </TableRow>
                 ) : null}
-                {models?.map((m: any) => (
+                {models?.map((m) => (
                   <TableRow key={m.id}>
                     <TableCell className="font-medium">{m.name}</TableCell>
                     <TableCell className="text-muted-foreground">{m.description || "-"}</TableCell>
@@ -330,7 +327,7 @@ function MotorProdutosPage() {
                     </TableCell>
                   </TableRow>
                 ) : null}
-                {groups?.map((g: any) => (
+                {groups?.map((g) => (
                   <TableRow key={g.id}>
                     <TableCell className="font-medium">{g.name}</TableCell>
                     <TableCell>
@@ -379,7 +376,7 @@ function MotorProdutosPage() {
                     </TableCell>
                   </TableRow>
                 ) : null}
-                {attributes?.map((a: any) => (
+                {attributes?.map((a) => (
                   <TableRow key={a.id}>
                     <TableCell className="font-medium">{a.name}</TableCell>
                     <TableCell className="font-mono text-xs">{a.code}</TableCell>
@@ -398,7 +395,7 @@ function MotorProdutosPage() {
                             code: a.code,
                             type: a.type,
                             group_id: a.group_id || "none",
-                            is_required: a.is_required,
+                            is_required: a.is_required ?? false,
                           });
                           setIsAttributeModalOpen(true);
                         }}
@@ -508,7 +505,7 @@ function MotorProdutosPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Sem grupo</SelectItem>
-                  {groups?.map((g: any) => (
+                  {groups?.map((g) => (
                     <SelectItem key={g.id} value={g.id}>
                       {g.name}
                     </SelectItem>

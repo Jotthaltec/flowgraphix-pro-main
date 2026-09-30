@@ -62,7 +62,7 @@ describe("buildProductRow leva TODAS as variações para a tabela products", () 
     fixture("futuraim-cartao-de-visita.html"),
     "https://www.futuraim.com.br/produto/cartao-de-visita?id=4627",
   );
-  const row = buildProductRow(product, { companyId: "c1", marginPercent: 50 }) as any;
+  const row = buildProductRow(product, { companyId: "c1", marginPercent: 50 });
 
   it("grava os eixos de variação (Material/Formato/Cor/...) em products.variations", () => {
     // Deve espelhar os eixos extraídos pelo parser — não pode vir vazio.
@@ -70,13 +70,13 @@ describe("buildProductRow leva TODAS as variações para a tabela products", () 
     expect(Array.isArray(row.variations)).toBe(true);
     expect(row.variations.length).toBe(product.variant_axes.length);
 
-    const nomes = row.variations.map((v: any) => v.name);
+    const nomes = row.variations.map((v) => v.name);
     expect(nomes).toContain("Formato");
 
     // Cada eixo carrega suas opções no formato lido pelo editor ({ value }).
-    const formato = row.variations.find((v: any) => v.name === "Formato");
-    expect(formato.values.length).toBeGreaterThan(0);
-    expect(formato.values[0]).toHaveProperty("value");
+    const formato = row.variations.find((v) => v.name === "Formato");
+    expect(formato?.values.length).toBeGreaterThan(0);
+    expect(formato?.values[0]).toHaveProperty("value");
   });
 
   it("marca o produto como importado do fornecedor e não perde extras/gabaritos", () => {

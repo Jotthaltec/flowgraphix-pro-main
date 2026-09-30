@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { podarPayload, VALOR_REDIGIDO } from "@/services/channels";
 
+/** Leitura livre do payload podado nos asserts (qualquer profundidade). */
+type Podado = { [key: string]: Podado };
+
 describe("podarPayload", () => {
   it("redige dado pessoal em qualquer profundidade", () => {
     const podado = podarPayload({
@@ -12,7 +15,7 @@ describe("podarPayload", () => {
         billing_info: { doc_number: "12345678901" },
       },
       shipping: { receiver_address: { city: { name: "Recife" }, zip_code: "50000-000" } },
-    }) as Record<string, any>;
+    }) as Podado;
 
     expect(podado.id).toBe(200000123);
     // Apelido não é dado sensível e ajuda a identificar o pedido no canal.
@@ -31,7 +34,7 @@ describe("podarPayload", () => {
       shipping: { description: "Envio expresso", cost: 25 },
       client_ip: "200.1.2.3",
       ipAddress: "10.0.0.1",
-    }) as Record<string, any>;
+    }) as Podado;
 
     expect(podado.shipping.description).toBe("Envio expresso");
     expect(podado.shipping.cost).toBe(25);
@@ -55,7 +58,7 @@ describe("podarPayload", () => {
   it("redige dentro de arrays", () => {
     const podado = podarPayload({
       payments: [{ id: 1, payer: { email: "x@y.com" } }],
-    }) as Record<string, any>;
+    }) as Podado;
 
     expect(podado.payments[0].id).toBe(1);
     expect(podado.payments[0].payer).toBe(VALOR_REDIGIDO);

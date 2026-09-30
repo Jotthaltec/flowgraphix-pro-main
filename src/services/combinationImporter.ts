@@ -23,17 +23,47 @@
  * 5. Importa extras e serviços
  */
 
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database, Json, Tables, TablesInsert } from "@/integrations/supabase/types";
 import { buildCombinationHash } from "./combinationEngine";
 
 // ---------------------------------------------------------------------------
 // Tipos internos
 // ---------------------------------------------------------------------------
 
+type Db = SupabaseClient<Database>;
+type ProductRow = Tables<"products">;
+type VariantRow = Tables<"product_variants">;
+type TierRow = Tables<"product_price_tiers">;
+type ExtraRow = Tables<"product_extras">;
+
+/** Opção de um eixo em products.variations (texto ou objeto, conforme o importador). */
+type VariationOption =
+  | string
+  | { value?: string; name?: string; label?: string; external_id?: string | null };
+type VariationAxis = { name?: string; values?: VariationOption[]; options?: VariationOption[] };
+type ExtraService = {
+  name?: string;
+  label?: string;
+  description?: string | null;
+  price?: number | null;
+};
+
+function variationAxes(
+  product: Pick<ProductRow, "variations"> | null | undefined,
+): VariationAxis[] {
+  return Array.isArray(product?.variations) ? (product.variations as VariationAxis[]) : [];
+}
+
+function axisOptions(axis: VariationAxis): VariationOption[] {
+  return Array.isArray(axis.values) ? axis.values : Array.isArray(axis.options) ? axis.options : [];
+}
+
 interface ImportSource {
-  product: any;
-  variants: any[];
-  priceTiers: any[];
-  extras: any[];
+  product: ProductRow;
+  variants: VariantRow[];
+  priceTiers: TierRow[];
+  extras: ExtraRow[];
   supplierId: string;
   companyId: string;
   executedBy?: string | null;
@@ -73,7 +103,7 @@ function codeFromName(name: string): string {
  * width_mm, production_days…) viravam 0 — o que fazia um preço promocional
  * inexistente virar "R$ 0,00" e sequestrar o preço oficial.
  */
-function num(value: any): number | null {
+function num(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
@@ -109,7 +139,7 @@ function getAxisOrder(name: string): number {
 }
 
 /** Campos fixos da variante mapeados para eixos (name, value). */
-function variantAxisFields(variant: any): Array<[string, string | null]> {
+function variantAxisFields(variant: VariantRow): Array<[string, string | null]> {
   return [
     ["Modelo", variant.model],
     ["Material", variant.material],
@@ -122,8 +152,8 @@ function variantAxisFields(variant: any): Array<[string, string | null]> {
 
 /** Extrai eixos de variação a partir das variações JSONB + campos das variantes. */
 function detectAxes(
-  product: any,
-  variants: any[],
+  product: ProductRow,
+  variants: VariantRow[],
 ): Array<{
   name: string;
   normalizedName: string;
@@ -157,16 +187,10 @@ function detectAxes(
   }
 
   // 1. Das variations JSONB do produto
-  const variations: any[] = Array.isArray(product.variations) ? product.variations : [];
-  for (const v of variations) {
+  for (const v of variationAxes(product)) {
     if (!v?.name) continue;
     const axis = ensureAxis(v.name);
-    const options: any[] = Array.isArray(v.values)
-      ? v.values
-      : Array.isArray(v.options)
-        ? v.options
-        : [];
-    for (const opt of options) {
+    for (const opt of axisOptions(v)) {
       const optName = typeof opt === "string" ? opt : opt?.value || opt?.name || String(opt);
       const optNorm = normalize(optName);
       const externalId = typeof opt === "object" ? opt?.external_id || null : null;
@@ -196,7 +220,7 @@ function detectAxes(
 // ---------------------------------------------------------------------------
 
 export async function importCombinationsFromProduct(
-  supabase: any,
+  supabase: Db,
   source: ImportSource,
 ): Promise<ImportResult> {
   const { product, variants, priceTiers, extras, supplierId, companyId, executedBy } = source;
@@ -219,7 +243,7 @@ export async function importCombinationsFromProduct(
     company_id: companyId,
     supplier_id: supplierId,
     catalog_product_id: product.id,
-    external_id: product.supplier_sku || product.external_id || null,
+    external_id: product.supplier_sku || null,
     name: product.name,
     slug: product.name ? normalize(product.name).replace(/_/g, "-") : null,
     category: product.category || null,
@@ -367,7 +391,7 @@ export async function importCombinationsFromProduct(
   }
 
   // Helper: option_value_ids de uma variante
-  function variantOptionValueIds(variant: any): string[] {
+  function variantOptionValueIds(variant: VariantRow): string[] {
     const ids: string[] = [];
     for (const [fieldName, value] of variantAxisFields(variant)) {
       if (!value) continue;
@@ -387,7 +411,7 @@ export async function importCombinationsFromProduct(
       continue;
     }
 
-    const variantTiers = priceTiers.filter((t: any) => t.variant_id === variant.id);
+    const variantTiers = priceTiers.filter((t) => t.variant_id === variant.id);
     if (variantTiers.length === 0) {
       warnings.push(`Variante ${variant.external_id || variant.id} sem tiragens/preços.`);
       continue;
@@ -428,7 +452,7 @@ export async function importCombinationsFromProduct(
       const combinationHash = buildCombinationHash(optionValueIds, quantity);
       const completeName = buildCompleteName(product, variant, quantity);
 
-      const payload: Record<string, any> = {
+      const payload: TablesInsert<"supplier_commercial_products"> = {
         company_id: companyId,
         supplier_id: supplierId,
         family_id: familyId,
@@ -454,11 +478,11 @@ export async function importCombinationsFromProduct(
         promotional_price: promoPrice,
         currency: tier.currency || "BRL",
         combination_hash: combinationHash,
-        source_url: variant.url || product.source_url || null,
+        source_url: product.source_url || null,
         raw_source_data: {
           variant_id: variant.id,
           tier_id: tier.id,
-          tier,
+          tier: tier as unknown as Json,
           variant_external_id: variant.external_id,
         },
         last_synced_at: new Date().toISOString(),
@@ -467,7 +491,17 @@ export async function importCombinationsFromProduct(
       if (externalProductId) seenExternalIds.add(externalProductId);
 
       // Buscar existente pela chave (supplier_id, external_product_id) ou pelo hash
-      let existing: any = null;
+      type ExistingCommercial = Pick<
+        Tables<"supplier_commercial_products">,
+        | "id"
+        | "version"
+        | "list_price"
+        | "promotional_price"
+        | "availability"
+        | "production_days"
+        | "external_product_id"
+      >;
+      let existing: ExistingCommercial | null = null;
       if (externalProductId) {
         const r = await supabase
           .from("supplier_commercial_products")
@@ -648,7 +682,9 @@ export async function importCombinationsFromProduct(
   }
 
   // 6. Serviços (dos extra_services do produto)
-  const extraServices: any[] = Array.isArray(product.extra_services) ? product.extra_services : [];
+  const extraServices = Array.isArray(product.extra_services)
+    ? (product.extra_services as ExtraService[])
+    : [];
   for (const svc of extraServices) {
     const svcName = svc.name || svc.label || "";
     if (!svcName) continue;
@@ -725,7 +761,7 @@ export async function importCombinationsFromProduct(
 
 /** Sincroniza a junção produto comercial ↔ opções (substitui o conjunto). */
 async function syncProductOptions(
-  supabase: any,
+  supabase: Db,
   commercialProductId: string,
   optionValueIds: string[],
 ) {
@@ -742,7 +778,7 @@ async function syncProductOptions(
 }
 
 /** Monta o nome completo do produto comercial. */
-function buildCompleteName(product: any, variant: any, quantity: number): string {
+function buildCompleteName(product: ProductRow, variant: VariantRow, quantity: number): string {
   const parts = [product.name];
   const attrs = [
     variant.material,
@@ -763,18 +799,12 @@ function buildCompleteName(product: any, variant: any, quantity: number): string
  * por área ("cm²"/"m²"). Nesses casos o preço tem mínimo, limites e faixas —
  * a família vai para LIVE_RESOLVER e o preço é sempre consultado (§8).
  */
-function detectCustomSize(product: any, variants: any[]): boolean {
+function detectCustomSize(product: ProductRow, variants: VariantRow[]): boolean {
   const CUSTOM = /(tamanho|medida)[_\s-]*personaliz|cm2|cm²|m2|m²/i;
   if (CUSTOM.test(String(product?.name || ""))) return true;
 
-  const variations: any[] = Array.isArray(product?.variations) ? product.variations : [];
-  for (const v of variations) {
-    const options: any[] = Array.isArray(v?.values)
-      ? v.values
-      : Array.isArray(v?.options)
-        ? v.options
-        : [];
-    for (const opt of options) {
+  for (const v of variationAxes(product)) {
+    for (const opt of axisOptions(v)) {
       const label = typeof opt === "string" ? opt : opt?.value || opt?.name || "";
       if (CUSTOM.test(String(label))) return true;
     }

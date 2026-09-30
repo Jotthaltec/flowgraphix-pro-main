@@ -26,7 +26,7 @@ describe("futuraImParser (HTML real da FuturaIM)", () => {
     const ld = extractJsonLd(html);
     const product = ld.find((o) => String(o["@type"]).includes("Product"));
     expect(product).toBeTruthy();
-    expect(product.sku).toBe(4627);
+    expect(product?.sku).toBe(4627);
     const services = ld.filter((o) => String(o["@type"]).includes("Service"));
     expect(services.length).toBeGreaterThanOrEqual(1);
   });
@@ -88,7 +88,7 @@ describe("futuraImParser (HTML real da FuturaIM)", () => {
     expect(p.extras.some((e) => /cria[cç][aã]o de arte/i.test(e.name))).toBe(true);
 
     // Não copiamos textos de avaliação — apenas agregados opcionais
-    expect((p as any).reviews).toBeUndefined();
+    expect("reviews" in p).toBe(false);
   });
 
   it("processa também o banner sem quebrar", () => {

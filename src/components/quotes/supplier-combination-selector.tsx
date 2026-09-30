@@ -61,6 +61,11 @@ import type {
   PriceStatus,
   SelectedExtra,
   SelectedService,
+  SupplierExtra,
+  SupplierExtraCompatibility,
+  SupplierExtraPrice,
+  SupplierService,
+  SupplierServicePrice,
 } from "@/types/combinationTypes";
 
 const fmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -72,11 +77,11 @@ const fmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" 
 export interface SupplierCombinationSelectorProps {
   /** Dados da família carregados pelo parent (via getFamilyCombinationData). */
   familyData: FamilyCombinationData & {
-    extras?: any[];
-    extraCompatibility?: any[];
-    extraPrices?: any[];
-    services?: any[];
-    servicePrices?: any[];
+    extras?: SupplierExtra[];
+    extraCompatibility?: SupplierExtraCompatibility[];
+    extraPrices?: SupplierExtraPrice[];
+    services?: SupplierService[];
+    servicePrices?: SupplierServicePrice[];
     promotions?: RawPromotion[];
   };
   /** Callback quando o cálculo muda (cada seleção recalcula). */
@@ -228,8 +233,8 @@ export function SupplierCombinationSelector({
       setFreightOptions(res.options);
       setFreightIdx(0);
       setFreightQuotedAt(res.quoted_at);
-    } catch (e: any) {
-      setFreightError(e?.message || "Erro ao cotar o frete.");
+    } catch (e) {
+      setFreightError(e instanceof Error && e.message ? e.message : "Erro ao cotar o frete.");
     } finally {
       setFreightLoading(false);
     }
@@ -265,8 +270,8 @@ export function SupplierCombinationSelector({
       }
       setLivePrice(res.result);
       setLiveQuotedAt(res.quoted_at);
-    } catch (e: any) {
-      setLiveError(e?.message || "Erro ao consultar o preço.");
+    } catch (e) {
+      setLiveError(e instanceof Error && e.message ? e.message : "Erro ao consultar o preço.");
     } finally {
       setLiveLoading(false);
     }
@@ -302,9 +307,9 @@ export function SupplierCombinationSelector({
       }));
 
     const selectedServices: SelectedService[] = (familyData.services || [])
-      .filter((s: any) => selectedServiceIds.has(s.id))
-      .map((s: any) => {
-        const sp = (familyData.servicePrices || []).find((p: any) => p.service_id === s.id);
+      .filter((s) => selectedServiceIds.has(s.id))
+      .map((s) => {
+        const sp = (familyData.servicePrices || []).find((p) => p.service_id === s.id);
         return { service_id: s.id, name: s.name, price: sp?.price || 0 };
       });
 
@@ -368,7 +373,8 @@ export function SupplierCombinationSelector({
   // Notificar parent quando a seleção em cascata muda
   useEffect(() => {
     if (!onSelRef.current) return;
-    const snap: Record<string, any> = {};
+    const snap: Parameters<NonNullable<SupplierCombinationSelectorProps["onSelectionChange"]>>[0] =
+      {};
     for (const [groupId, valueId] of selection.entries()) {
       const group = familyData.groups.find((g) => g.id === groupId);
       const value = familyData.values.find((v) => v.id === valueId);
@@ -641,8 +647,8 @@ export function SupplierCombinationSelector({
         <div className="space-y-2">
           <Label className="text-xs font-medium">Serviços Complementares</Label>
           <div className="space-y-1">
-            {familyData.services.map((svc: any) => {
-              const sp = (familyData.servicePrices || []).find((p: any) => p.service_id === svc.id);
+            {familyData.services.map((svc) => {
+              const sp = (familyData.servicePrices || []).find((p) => p.service_id === svc.id);
               return (
                 <label
                   key={svc.id}

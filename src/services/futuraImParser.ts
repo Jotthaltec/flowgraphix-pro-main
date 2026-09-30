@@ -64,9 +64,49 @@ function stripTags(s: string): string {
   return cleanText(decodeEntities((s || "").replace(/<[^>]+>/g, " ")));
 }
 
+/** Oferta schema.org como a FuturaIM publica (valores podem vir como texto). */
+type LdOffer = {
+  price?: string | number;
+  priceCurrency?: string;
+  availability?: string;
+  url?: string;
+};
+
+/**
+ * Objeto JSON-LD lido da página. Só os campos que o parser usa são tipados; o
+ * conteúdo é externo, então todos são opcionais.
+ */
+export type LdObject = {
+  "@type"?: string | string[];
+  name?: string;
+  serviceType?: string;
+  sku?: string | number;
+  description?: string;
+  image?: string | { url?: string } | Array<string | { url?: string }>;
+  offers?: LdOffer | LdOffer[];
+  review?: Array<{ reviewRating?: { ratingValue?: string | number } }>;
+  brand?: { name?: string };
+  [key: string]: unknown;
+};
+
+type DataLayerItem = {
+  item_id?: string;
+  item_name?: string;
+  item_brand?: string;
+  item_category?: string;
+  price?: string | number;
+};
+
+/** Evento `view_item` do dataLayer (GTM). */
+export type DataLayerEvent = {
+  event?: string;
+  ecommerce?: { value?: number; items?: DataLayerItem[] };
+  items?: DataLayerItem[];
+};
+
 /** Extrai todos os blocos JSON-LD (lida com atributos sem aspas do HTML minificado). */
-export function extractJsonLd(html: string): any[] {
-  const out: any[] = [];
+export function extractJsonLd(html: string): LdObject[] {
+  const out: LdObject[] = [];
   const re = /<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(html))) {
@@ -81,14 +121,14 @@ export function extractJsonLd(html: string): any[] {
   return out;
 }
 
-function ldType(obj: any): string[] {
+function ldType(obj: LdObject | null | undefined): string[] {
   const t = obj?.["@type"];
   if (!t) return [];
   return Array.isArray(t) ? t.map(String) : [String(t)];
 }
 
 /** Lê o objeto do dataLayer `view_item` (estado embutido do GTM). */
-export function extractDataLayerItem(html: string): any | null {
+export function extractDataLayerItem(html: string): DataLayerEvent | null {
   const m = html.match(/dataLayer\.push\((\{[^]*?"event"\s*:\s*"view_item"[^]*?\})\);/);
   if (!m) return null;
   try {
@@ -255,7 +295,7 @@ export function extractVariantAxes(html: string): ImportedVariantAxis[] {
 // Imagens (seção 17) — usamos as imagens limpas do JSON-LD do produto
 // ---------------------------------------------------------------------------
 
-function buildImages(productLd: any, ogImage?: string): ImportedImage[] {
+function buildImages(productLd: LdObject | undefined, ogImage?: string): ImportedImage[] {
   const urls: string[] = [];
   if (productLd?.image) {
     const imgs = Array.isArray(productLd.image) ? productLd.image : [productLd.image];
@@ -280,7 +320,7 @@ function buildImages(productLd: any, ogImage?: string): ImportedImage[] {
 // Extras / serviços adicionais (seção 20) — vêm de JSON-LD @type Service
 // ---------------------------------------------------------------------------
 
-function buildExtras(ld: any[]): ImportedExtra[] {
+function buildExtras(ld: LdObject[]): ImportedExtra[] {
   const extras: ImportedExtra[] = [];
   for (const obj of ld) {
     if (!ldType(obj).includes("Service")) continue;
@@ -383,7 +423,7 @@ export function parseFuturaImProduct(html: string, sourceUrl: string): ImportedP
   let rating_count: number | undefined;
   if (Array.isArray(productLd?.review) && productLd.review.length) {
     const ratings = productLd.review
-      .map((r: any) => Number(r?.reviewRating?.ratingValue))
+      .map((r) => Number(r?.reviewRating?.ratingValue))
       .filter((n: number) => Number.isFinite(n));
     if (ratings.length) {
       rating_count = ratings.length;
