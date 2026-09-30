@@ -71,12 +71,14 @@ export function parsePublishResult(data: unknown): PublishResult {
   return { ...result, warnings: result.warnings ?? [] };
 }
 
+// Sintaxe de método de propósito: aceita o cliente Supabase tipado (cujo `rpc`
+// só recebe nomes de função conhecidos) e também os dublês dos testes.
 type RpcClient = {
-  schema: (schema: string) => {
-    rpc: (
+  schema(schema: "store"): {
+    rpc(
       fn: string,
       args: Record<string, unknown>,
-    ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+    ): PromiseLike<{ data: unknown; error: { message: string } | null }>;
   };
 };
 

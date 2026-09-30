@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json, Tables, TablesInsert } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { readQuantityPricingRows, writeQuantityPricingRows } from "@/lib/product-quantity-pricing";
@@ -141,20 +142,20 @@ type ChecklistItem = { id: string; label: string; done: boolean };
 type HistoryEntry = { date: string; action: string; user: string; origin: string; detail?: string };
 
 const uid = () => Math.random().toString(36).slice(2, 10);
-const num = (v: any) => {
+const num = (v: unknown) => {
   const n = Number(v);
   return isNaN(n) ? 0 : n;
 };
 
-interface ProductEditorProps {
+interface ProductEditorProps<P extends ProductRow = ProductRow> {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  product: any | null;
+  product: P | null;
   suppliers?: { id: string; name: string }[];
   onSaved?: () => void;
   onRequestQuote?: (productId: string) => void;
-  onRequestMarketplace?: (product: any) => void;
-  onRequestDuplicate?: (product: any) => void;
+  onRequestMarketplace?: (product: P) => void;
+  onRequestDuplicate?: (product: P) => void;
 }
 
 function emptyForm() {
@@ -253,9 +254,103 @@ function emptyForm() {
 
 type FormState = ReturnType<typeof emptyForm>;
 
-function fromProduct(p: any): FormState {
+/** Linha de public.products como o editor recebe. */
+type ProductRow = Tables<"products">;
+
+type SetField = <K extends keyof FormState>(key: K, value: FormState[K]) => void;
+type TabBase = { f: FormState; set: SetField };
+type Pricing = {
+  suggested: number;
+  finalPrice: number;
+  costTotal: number;
+  profit: number;
+  realMargin: number;
+  markup: number;
+  belowMin: boolean;
+};
+
+const errorMessage = (err: unknown, fallback: string) =>
+  err instanceof Error && err.message ? err.message : fallback;
+
+/** Campos avançados que o editor guarda em products.editor_meta. */
+type EditorMeta = {
+  barcode?: string;
+  tags?: string[];
+  pricing?: Partial<{
+    use_auto_price: boolean;
+    sale_price_manual: number;
+    commission_pct: number;
+    fixed_fee: number;
+    packaging_cost: number;
+    freight_cost: number;
+    taxes_pct: number;
+    promo_price: number;
+    promo_start: string;
+    promo_end: string;
+    min_margin_alert: number;
+  }>;
+  variation_rows?: VariationRow[];
+  supplier?: Partial<{ deadline: string; last_import: string; sync_status: string; notes: string }>;
+  media?: Partial<{ video_url: string; files: FileRow[] }>;
+  marketplace?: Partial<{
+    ml_category: string;
+    shopee_title: string;
+    shopee_description: string;
+    shopee_category: string;
+    store_title: string;
+    seo_title: string;
+    seo_description: string;
+    keywords: string;
+    warranty: string;
+    production_time: string;
+    condition: string;
+    status: string;
+  }>;
+  production?: Partial<{
+    available_quote: boolean;
+    available_order: boolean;
+    available_marketplace: boolean;
+    production_step: string;
+    internal_time: string;
+    production_notes: string;
+    needs_art: boolean;
+    needs_approval: boolean;
+    allow_art_charge: boolean;
+    art_creation_value: number;
+    art_check_value: number;
+    checklist: ChecklistItem[];
+  }>;
+  commercial?: Partial<{
+    allow_discount: boolean;
+    max_discount_pct: number;
+    highlight: boolean;
+    recurring: boolean;
+    on_request: boolean;
+    outsourced: boolean;
+    requires_signal: boolean;
+    signal_pct: number;
+    commercial_notes: string;
+    whatsapp_message: string;
+  }>;
+  history?: HistoryEntry[];
+};
+
+/** Eixo de variação do fornecedor em products.variations (formatos antigos e novos). */
+type SupplierOption =
+  | string
+  | number
+  | { value?: string | number; cost?: number | null; sell?: number | null };
+type SupplierAxis = { name?: string; values?: SupplierOption[]; options?: SupplierOption[] };
+
+const supplierAxes = (value: Json | null | undefined): SupplierAxis[] =>
+  Array.isArray(value) ? (value as SupplierAxis[]) : [];
+
+function fromProduct(p: ProductRow): FormState {
   const f = emptyForm();
-  const m = p?.editor_meta && typeof p.editor_meta === "object" ? p.editor_meta : {};
+  const m: EditorMeta =
+    p.editor_meta && typeof p.editor_meta === "object" && !Array.isArray(p.editor_meta)
+      ? (p.editor_meta as EditorMeta)
+      : {};
   f.name = p.name || "";
   f.commercial_name = p.commercial_name || "";
   f.internal_sku = p.internal_sku || "";
@@ -293,9 +388,8 @@ function fromProduct(p: any): FormState {
   if (Array.isArray(m.variation_rows) && m.variation_rows.length) {
     f.variation_rows = m.variation_rows;
   } else {
-    const supplierAxes = Array.isArray(p.variations) ? p.variations : [];
     const seeded: VariationRow[] = [];
-    for (const axis of supplierAxes) {
+    for (const axis of supplierAxes(p.variations)) {
       const opts = Array.isArray(axis?.values)
         ? axis.values
         : Array.isArray(axis?.options)
@@ -339,7 +433,7 @@ function fromProduct(p: any): FormState {
   f.supplier_notes = sup.notes || "";
 
   f.main_image_url = p.main_image_url || p.image_url || "";
-  f.gallery = Array.isArray(p.gallery_images) ? p.gallery_images : [];
+  f.gallery = Array.isArray(p.gallery_images) ? (p.gallery_images as string[]) : [];
   const md = m.media || {};
   f.video_url = md.video_url || "";
   f.files = Array.isArray(md.files) ? md.files : [];
@@ -460,7 +554,7 @@ function Pending({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function ProductEditor({
+export function ProductEditor<P extends ProductRow = ProductRow>({
   open,
   onOpenChange,
   product,
@@ -469,7 +563,7 @@ export function ProductEditor({
   onRequestQuote,
   onRequestMarketplace,
   onRequestDuplicate,
-}: ProductEditorProps) {
+}: ProductEditorProps<P>) {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -492,7 +586,7 @@ export function ProductEditor({
     setF((prev) => ({ ...prev, [key]: value }));
 
   const isService = f.type === "service";
-  const visibleTabs = TABS.filter((t) => !(isService && (t as any).hideForService));
+  const visibleTabs = TABS.filter((t) => !(isService && "hideForService" in t && t.hideForService));
 
   /* ---------- cálculo de preços ---------- */
   const pricing = useMemo(() => {
@@ -652,7 +746,7 @@ export function ProductEditor({
       // tabela de quantidade -> coluna real (compatível com o modal de marketplace)
       const quantity_prices = writeQuantityPricingRows(f.qty_rows);
 
-      const corePayload: any = {
+      const corePayload: TablesInsert<"products"> = {
         company_id,
         name: f.name.trim(),
         commercial_name: f.commercial_name || f.name.trim(),
@@ -687,12 +781,12 @@ export function ProductEditor({
         production_deadline: f.supplier_deadline || null,
       };
 
-      const fullPayload = { ...corePayload, editor_meta };
+      const fullPayload = { ...corePayload, editor_meta: editor_meta as Json };
 
       // Persistência resiliente: tenta com editor_meta; se a coluna ainda não existir
       // (migração não aplicada), salva os campos core e avisa.
       let metaSaved = true;
-      async function run(payload: any) {
+      async function run(payload: TablesInsert<"products">) {
         if (isEditing) {
           return supabase.from("products").update(payload).eq("id", product.id);
         }
@@ -719,7 +813,7 @@ export function ProductEditor({
       onSaved?.();
       if (closeAfter) onOpenChange(false);
     },
-    onError: (err: any) => toast.error(err.message || "Erro ao salvar produto."),
+    onError: (err: unknown) => toast.error(errorMessage(err, "Erro ao salvar produto.")),
   });
 
   const deleteMutation = useMutation({
@@ -736,7 +830,7 @@ export function ProductEditor({
       onOpenChange(false);
       onSaved?.();
     },
-    onError: (err: any) => toast.error(err.message || "Erro ao excluir."),
+    onError: (err: unknown) => toast.error(errorMessage(err, "Erro ao excluir.")),
   });
 
   const archiveMutation = useMutation({
@@ -755,7 +849,7 @@ export function ProductEditor({
       toast.success("Produto arquivado.");
       onSaved?.();
     },
-    onError: (err: any) => toast.error(err.message || "Erro ao arquivar."),
+    onError: (err: unknown) => toast.error(errorMessage(err, "Erro ao arquivar.")),
   });
 
   /* ---------- ações de linhas (variações / qty / etc.) ---------- */
@@ -778,9 +872,8 @@ export function ProductEditor({
       { ...row, id: uid(), name: `${row.name} (cópia)` },
     ]);
   const importSupplierVariations = () => {
-    const raw = Array.isArray(product?.variations) ? product.variations : [];
     const rows: VariationRow[] = [];
-    for (const v of raw) {
+    for (const v of supplierAxes(product?.variations)) {
       const arr = Array.isArray(v?.values)
         ? v.values
         : Array.isArray(v?.options)
@@ -1035,7 +1128,7 @@ export function ProductEditor({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <h2 className="text-base font-bold truncate">{f.name || "Novo Produto"}</h2>
-                <StatusBadge variant={statusVariant as any}>{f.status}</StatusBadge>
+                <StatusBadge variant={statusVariant}>{f.status}</StatusBadge>
                 <StatusBadge variant="muted">
                   {ORIGENS.find((o) => o.value === f.origin)?.label || f.origin}
                 </StatusBadge>
@@ -1254,7 +1347,19 @@ export function ProductEditor({
 
 /* ============================ ABAS ============================ */
 
-function BasicTab({ f, set, tagInput, setTagInput, addTag, removeTag }: any) {
+function BasicTab({
+  f,
+  set,
+  tagInput,
+  setTagInput,
+  addTag,
+  removeTag,
+}: TabBase & {
+  tagInput: string;
+  setTagInput: (value: string) => void;
+  addTag: () => void;
+  removeTag: (tag: string) => void;
+}) {
   return (
     <div className="space-y-5 max-w-3xl">
       <SectionTitle>Identificação</SectionTitle>
@@ -1442,7 +1547,7 @@ function MetricCard({
   );
 }
 
-function PricingTab({ f, set, pricing }: any) {
+function PricingTab({ f, set, pricing }: TabBase & { pricing: Pricing }) {
   return (
     <div className="space-y-5 max-w-3xl">
       <SectionTitle>Custos & Margem</SectionTitle>
@@ -1605,7 +1710,14 @@ function VariationsTab({
   importSupplierVariations,
   updVariation,
   delVariation,
-}: any) {
+}: {
+  f: FormState;
+  addVariation: () => void;
+  dupVariation: (row: VariationRow) => void;
+  importSupplierVariations: () => void;
+  updVariation: (id: string, patch: Partial<VariationRow>) => void;
+  delVariation: (id: string) => void;
+}) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -1722,7 +1834,21 @@ function VariationsTab({
   );
 }
 
-function QuantityTab({ f, addQty, updQty, delQty, genQtyTiers, recalcQty }: any) {
+function QuantityTab({
+  f,
+  addQty,
+  updQty,
+  delQty,
+  genQtyTiers,
+  recalcQty,
+}: {
+  f: FormState;
+  addQty: () => void;
+  updQty: (id: string, patch: Partial<QtyRow>) => void;
+  delQty: (id: string) => void;
+  genQtyTiers: () => void;
+  recalcQty: () => void;
+}) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -1845,7 +1971,12 @@ function QuantityTab({ f, addQty, updQty, delQty, genQtyTiers, recalcQty }: any)
   );
 }
 
-function SupplierTab({ f, set, suppliers, reimportSupplier }: any) {
+function SupplierTab({
+  f,
+  set,
+  suppliers,
+  reimportSupplier,
+}: TabBase & { suppliers: { id: string; name: string }[]; reimportSupplier: () => void }) {
   return (
     <div className="space-y-5 max-w-3xl">
       <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2">
@@ -1858,7 +1989,7 @@ function SupplierTab({ f, set, suppliers, reimportSupplier }: any) {
           <Select
             value={f.supplier_id || "none"}
             onValueChange={(v) => {
-              const s = suppliers.find((x: any) => x.id === v);
+              const s = suppliers.find((x) => x.id === v);
               set("supplier_id", v === "none" ? "" : v);
               set("supplier_name", s?.name || "");
             }}
@@ -1868,7 +1999,7 @@ function SupplierTab({ f, set, suppliers, reimportSupplier }: any) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">Nenhum</SelectItem>
-              {suppliers.map((s: any) => (
+              {suppliers.map((s) => (
                 <SelectItem key={s.id} value={s.id}>
                   {s.name}
                 </SelectItem>
@@ -1940,7 +2071,21 @@ function SupplierTab({ f, set, suppliers, reimportSupplier }: any) {
   );
 }
 
-function MediaTab({ f, set, addGalleryUrl, removeGallery, addFile, updFile, delFile }: any) {
+function MediaTab({
+  f,
+  set,
+  addGalleryUrl,
+  removeGallery,
+  addFile,
+  updFile,
+  delFile,
+}: TabBase & {
+  addGalleryUrl: (url: string) => void;
+  removeGallery: (index: number) => void;
+  addFile: () => void;
+  updFile: (id: string, patch: Partial<FileRow>) => void;
+  delFile: (id: string) => void;
+}) {
   const [galInput, setGalInput] = useState("");
   return (
     <div className="space-y-5 max-w-3xl">
@@ -2072,7 +2217,17 @@ function MediaTab({ f, set, addGalleryUrl, removeGallery, addFile, updFile, delF
   );
 }
 
-function MarketplaceTab({ f, set, genCopy, exportCsv, onRequestMarketplace }: any) {
+function MarketplaceTab({
+  f,
+  set,
+  genCopy,
+  exportCsv,
+  onRequestMarketplace,
+}: TabBase & {
+  genCopy: (platform: "ml" | "shopee" | "seo") => void;
+  exportCsv: () => void;
+  onRequestMarketplace?: () => void;
+}) {
   return (
     <div className="space-y-5 max-w-3xl">
       <div className="flex items-center gap-2 text-sm text-muted-foreground bg-muted/50 border rounded-md px-3 py-2">
@@ -2230,7 +2385,12 @@ function ProductionTab({
   addChecklistItem,
   updChecklist,
   delChecklist,
-}: any) {
+}: TabBase & {
+  addChecklistDefault: () => void;
+  addChecklistItem: () => void;
+  updChecklist: (id: string, patch: Partial<ChecklistItem>) => void;
+  delChecklist: (id: string) => void;
+}) {
   return (
     <div className="space-y-5 max-w-3xl">
       <SectionTitle>Disponibilidade</SectionTitle>
@@ -2357,7 +2517,7 @@ function ProductionTab({
   );
 }
 
-function CommercialTab({ f, set }: any) {
+function CommercialTab({ f, set }: TabBase) {
   return (
     <div className="space-y-5 max-w-3xl">
       <SectionTitle>Descontos & destaque</SectionTitle>
@@ -2438,7 +2598,7 @@ function CommercialTab({ f, set }: any) {
   );
 }
 
-function HistoryTab({ f, product }: any) {
+function HistoryTab({ f, product }: { f: FormState; product: ProductRow | null }) {
   return (
     <div className="space-y-5 max-w-3xl">
       <SectionTitle>Resumo</SectionTitle>

@@ -101,8 +101,8 @@ export function AtualizarPrecos() {
       });
       qc.invalidateQueries({ queryKey: ["products"] });
       qc.invalidateQueries({ queryKey: ["imported-products-price"] });
-    } catch (e: any) {
-      toast.error(`Falha ao atualizar ${row.name}: ${e?.message || e}`);
+    } catch (e) {
+      toast.error(`Falha ao atualizar ${row.name}: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setApplying((s) => {
         const n = new Set(s);

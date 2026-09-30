@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/table";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useState, useMemo } from "react";
 import {
@@ -105,35 +106,11 @@ const FILTER_OPTIONS = [
   { value: "marketplace", label: "Marketplace", icon: Store },
 ];
 
-type Product = {
-  id: string;
-  name: string;
-  commercial_name: string | null;
-  type: string | null;
-  origin: string | null;
-  supplier_id: string | null;
-  supplier_name: string | null;
-  source_url: string | null;
-  supplier_sku: string | null;
-  internal_sku: string | null;
-  category: string;
-  subcategory: string | null;
-  description: string | null;
-  technical_description: string | null;
-  image_url: string | null;
-  main_image_url: string | null;
-  cost_price: number | null;
-  base_cost: number | null;
-  margin_percent: number | null;
-  target_margin: number | null;
-  sale_price: number | null;
-  suggested_price: number | null;
-  unit_measure: string | null;
-  status: string | null;
-  marketplace_title: string | null;
-  imported_from_supplier: boolean | null;
-  active: boolean | null;
-};
+/** Linha de public.products com o "ativo" derivado do status. */
+type Product = Tables<"products"> & { active: boolean };
+
+/** Item do Hub de Fornecedores (supplier_imports + nome do fornecedor). */
+type HubImportItem = Tables<"supplier_imports"> & { suppliers: { name: string } | null };
 
 type StoreSync = {
   crm_id: string | null;
@@ -221,7 +198,7 @@ function ProdutosPage() {
   const { data: syncHealth } = useQuery({
     queryKey: ["site_products", "health"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .schema("store")
         .from("crm_product_sync_health")
         .select(
@@ -268,7 +245,7 @@ function ProdutosPage() {
   });
 
   const importFromHubMutation = useMutation({
-    mutationFn: async ({ item, type }: { item: any; type: "product" | "service" }) => {
+    mutationFn: async ({ item, type }: { item: HubImportItem; type: "product" | "service" }) => {
       const { data: profileData } = await supabase
         .from("profiles")
         .select("company_id")
@@ -290,8 +267,8 @@ function ProdutosPage() {
           .eq("company_id", profileData.company_id)
           .not("source_url", "is", null);
         existingId =
-          (candidates || []).find((c: any) => normalizeUrlForMatch(c.source_url) === targetUrl)
-            ?.id ?? null;
+          (candidates || []).find((c) => normalizeUrlForMatch(c.source_url) === targetUrl)?.id ??
+          null;
       }
 
       if (!existingId && item.supplier_sku) {
@@ -319,10 +296,13 @@ function ProdutosPage() {
       const cost = Number(item.current_price) || 0;
       const suggested = parseFloat((cost * (1 + margin / 100)).toFixed(2));
 
+      const productName = item.product_name?.trim();
+      if (!productName) throw new Error("Item do Hub sem nome de produto.");
+
       const payload = {
         company_id: profileData.company_id,
-        name: item.product_name,
-        commercial_name: item.product_name,
+        name: productName,
+        commercial_name: productName,
         type: type,
         origin: "supplier_import",
         supplier_id: item.supplier_id,
@@ -340,7 +320,7 @@ function ProdutosPage() {
         suggested_price: suggested,
         sale_price: suggested,
         min_price: parseFloat((suggested * 0.9).toFixed(2)),
-        description: item.product_name,
+        description: productName,
         main_image_url: item.main_image_url || null,
         image_url: item.main_image_url || null,
         gallery_images: item.gallery_images || null,
@@ -545,7 +525,7 @@ function ProdutosPage() {
   const publishToStoreMutation = useMutation({
     // Só confirma depois do retorno do banco; ok:false vira erro (a falha já
     // ficou registrada em store.sync_log e no status do produto).
-    mutationFn: (product: Product) => publishCrmProduct(supabase as any, product.id),
+    mutationFn: (product: Product) => publishCrmProduct(supabase, product.id),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["site_products"] });
       const { level, title, description } = describePublishSuccess(result);
@@ -567,7 +547,7 @@ function ProdutosPage() {
       product: Product;
       mode: WithdrawMode;
       reason: string;
-    }) => withdrawCrmProduct(supabase as any, product.id, mode, reason),
+    }) => withdrawCrmProduct(supabase, product.id, mode, reason),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["site_products"] });
       const queued = result.cancelled_queue_items
@@ -621,7 +601,7 @@ function ProdutosPage() {
         toast.warning(result.warnings[0], { duration: 8000 });
       }
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error("Erro ao gerar combinações: " + err.message);
     },
   });
@@ -673,7 +653,7 @@ function ProdutosPage() {
           ".",
       );
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error("Erro na catalogação em massa: " + err.message);
     },
   });
@@ -1124,7 +1104,7 @@ function ProdutosPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {hubCatalogItems.map((item: any) => {
+                    {hubCatalogItems.map((item) => {
                       // "Já no catálogo" é decidido pela existência real em `products`,
                       // não pelo flag extraction_status (que pode estar dessincronizado).
                       const isAlreadyImported =
@@ -1137,7 +1117,7 @@ function ProdutosPage() {
                             {item.main_image_url ? (
                               <img
                                 src={item.main_image_url}
-                                alt={item.product_name}
+                                alt={item.product_name ?? ""}
                                 className="h-9 w-9 rounded-md object-cover border"
                               />
                             ) : (

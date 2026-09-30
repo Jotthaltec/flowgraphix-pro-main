@@ -347,7 +347,7 @@ export function ImportadorProdutos() {
       .map((r) => r.product_id!);
     const slugs = new Map<string, string>();
     if (publishedIds.length) {
-      const { data } = await (supabase as any)
+      const { data } = await supabase
         .from("site_products")
         .select("crm_id,slug")
         .in("crm_id", publishedIds);
@@ -410,7 +410,7 @@ export function ImportadorProdutos() {
   async function publishOne(item: QueueItem, productId: string, tally: RunTally) {
     patch(item.id, { status: "publicando", error: undefined });
     try {
-      const result = await publishCrmProduct(supabase as any, productId);
+      const result = await publishCrmProduct(supabase, productId);
       const status = statusAfterPublish(result);
       if (status === "publicado") tally.published++;
       else tally.publishedWithWarnings++;
@@ -425,9 +425,9 @@ export function ImportadorProdutos() {
       });
       if (item.dbId)
         await updateImportItem(item.dbId, { status, warnings: result.warnings, errors: [] });
-    } catch (e: any) {
+    } catch (e) {
       tally.failedPublish++;
-      const message = e?.message || "Falha ao publicar na loja.";
+      const message = e instanceof Error && e.message ? e.message : "Falha ao publicar na loja.";
       patch(item.id, { status: "erro_publicacao", error: message });
       if (item.dbId)
         await updateImportItem(item.dbId, { status: "erro_publicacao", errors: [message] });
@@ -470,9 +470,9 @@ export function ImportadorProdutos() {
         copyImages: options.copyImagesToStorage,
         productStatus: productStatusRule(dest),
       });
-    } catch (e: any) {
+    } catch (e) {
       tally.failedSave++;
-      const message = e?.message || "Falha ao salvar.";
+      const message = e instanceof Error && e.message ? e.message : "Falha ao salvar.";
       patch(item.id, { status: "erro", error: message });
       if (item.dbId) await updateImportItem(item.dbId, { status: "erro", errors: [message] });
       return;
@@ -990,7 +990,7 @@ function PreviewCard({
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <StatusBadge variant={statusVariant as any}>
+              <StatusBadge variant={statusVariant}>
                 {IMPORT_STATUS_LABEL[item.status] ?? item.status}
               </StatusBadge>
               {item.publication?.slug && (

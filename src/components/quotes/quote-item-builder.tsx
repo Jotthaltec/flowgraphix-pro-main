@@ -28,9 +28,70 @@ import { StatusBadge } from "@/components/status-badge";
 import { SupplierCombinationWrapper } from "./supplier-combination-wrapper";
 import { useAuth } from "@/hooks/use-auth";
 import { Textarea } from "@/components/ui/textarea";
+import type { Json } from "@/integrations/supabase/types";
 
 const fmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const db = supabase as any;
+
+/** Linha de tiragem como o importador grava (formatos antigos e novos convivem). */
+type RawTier = {
+  quantity?: number | string | null;
+  price?: number | null;
+  unit_price?: number | null;
+  unitPrice?: number | null;
+  sellPrice?: number | null;
+  unitSellPrice?: number | null;
+  unitCost?: number | null;
+  unitSell?: number | null;
+  external_id?: string | null;
+};
+
+/** Variação importada ou manual, antes de virar atributo do orçamento. */
+type VariationRow = {
+  type: string;
+  name: string;
+  cost?: number | null;
+  price?: number | null;
+  external_id?: string | null;
+  tiers?: RawTier[] | null;
+};
+
+/** Atributo configurável: do Motor (technical_attributes) ou sintético (variações). */
+type AttributeDef = {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+  is_required: boolean | null;
+  default_value?: string | null;
+};
+
+/** Opção de atributo: do Motor ou sintética (com custo real da combinação varrida). */
+type AttributeOption = {
+  id: string;
+  attribute_id: string;
+  value: string;
+  label: string | null;
+  price_impact: number | null;
+  real_cost?: number | null;
+  external_id?: string | null;
+  tiers?: RawTier[] | null;
+};
+
+/** Eixo de variação em products.variations (formato do importador). */
+type VariationValue =
+  | string
+  | { value?: string; cost?: number | null; sell?: number | null; external_id?: string | null; tiers?: RawTier[] | null };
+type VariationAxis = { name?: string; values?: VariationValue[]; options?: VariationValue[] } | null;
+
+type ProductForTiers = {
+  quantity_prices?: Json | null;
+  quantity_price_table?: Json | null;
+  margin_percent?: number | null;
+  target_margin?: number | null;
+};
+
+const asTiers = (value: Json | null | undefined): RawTier[] | null =>
+  Array.isArray(value) ? (value as RawTier[]) : null;
 
 /** Faixa de preço por quantidade (tiragem real do fornecedor — seção 7). */
 export interface QuoteTier {
@@ -52,7 +113,7 @@ export interface QuoteItemData {
   quantity: number;
   unit_cost: number;
   unit_price: number;
-  attributes: Record<string, any>; // { attr_code: value }
+  attributes: Record<string, string>; // { attr_code: value }
   attribute_price_impacts: Record<string, number>; // { attr_code: price_impact }
   notes: string;
   // Origem / configuração importada
@@ -78,7 +139,7 @@ export interface QuoteItemData {
   // New Combination Engine
   has_combination_engine?: boolean;
   family_id?: string;
-  calc_snapshot?: any;
+  calc_snapshot?: Json;
 }
 
 interface QuoteItemBuilderProps {
@@ -92,16 +153,12 @@ function generateId() {
 }
 
 /** Lê as faixas de preço reais do produto importado (seção 7). Não fabrica nada. */
-function readTiers(product: any): QuoteTier[] {
-  const raw = Array.isArray(product?.quantity_prices)
-    ? product.quantity_prices
-    : Array.isArray(product?.quantity_price_table)
-      ? product.quantity_price_table
-      : [];
+function readTiers(product: ProductForTiers | null | undefined): QuoteTier[] {
+  const raw = asTiers(product?.quantity_prices) ?? asTiers(product?.quantity_price_table) ?? [];
   const margin = Number(product?.margin_percent ?? product?.target_margin) || 0;
   const factor = 1 + margin / 100;
   const tiers: QuoteTier[] = raw
-    .map((t: any) => {
+    .map((t: RawTier) => {
       const quantity = Number(t.quantity) || 0;
       const totalCost = Number(t.price ?? (t.unit_price ? t.unit_price * quantity : 0)) || 0;
       const unitCost =
@@ -123,7 +180,7 @@ function readTiers(product: any): QuoteTier[] {
 }
 
 /** Converte as tiragens de uma opção (combinação varrida) em QuoteTier[]. */
-function tiersFromOption(optTiers: any[]): QuoteTier[] {
+function tiersFromOption(optTiers: RawTier[] | null | undefined): QuoteTier[] {
   if (!Array.isArray(optTiers)) return [];
   return optTiers
     .map((t) => {
@@ -177,7 +234,7 @@ export function QuoteItemBuilder({
   const { data: catalogProducts } = useQuery({
     queryKey: ["products_catalog_quote"],
     queryFn: async () => {
-      const { data, error } = await db
+      const { data, error } = await supabase
         .from("products")
         .select(
           `
@@ -193,25 +250,27 @@ export function QuoteItemBuilder({
         .or("status.eq.Ativo,status.is.null")
         .order("name");
       if (error) throw error;
-      return (data || []) as any[];
+      return data || [];
     },
   });
 
   // Motor: atributos e opções (com preço)
+  type CatalogProduct = NonNullable<typeof catalogProducts>[number];
+
   const { data: motorData } = useQuery({
     queryKey: ["motor_attributes_for_quote"],
     queryFn: async () => {
       const [groupsRes, attrsRes, optionsRes, modelsRes, modelAttrsRes] = await Promise.all([
-        db.from("technical_attribute_groups").select("*").order("order_index"),
-        db.from("technical_attributes").select("*").eq("is_active", true).order("created_at"),
-        db.from("technical_attribute_options").select("*").order("order_index"),
-        db.from("product_models").select("*"),
-        db.from("product_model_attributes").select("*").order("order_index"),
+        supabase.from("technical_attribute_groups").select("*").order("order_index"),
+        supabase.from("technical_attributes").select("*").eq("is_active", true).order("created_at"),
+        supabase.from("technical_attribute_options").select("*").order("order_index"),
+        supabase.from("product_models").select("*"),
+        supabase.from("product_model_attributes").select("*").order("order_index"),
       ]);
       return {
         groups: groupsRes.data || [],
-        attributes: attrsRes.data || [],
-        options: optionsRes.data || [],
+        attributes: (attrsRes.data || []) as AttributeDef[],
+        options: (optionsRes.data || []) as AttributeOption[],
         models: modelsRes.data || [],
         modelAttributes: modelAttrsRes.data || [],
       };
@@ -238,7 +297,7 @@ export function QuoteItemBuilder({
     );
   }, [catalogProducts, productSearch, productFilterOrigin]);
 
-  function addItem(product?: any) {
+  function addItem(product?: CatalogProduct) {
     const isSupplier = !!(
       product &&
       (product.imported_from_supplier === true || product.origin === "supplier_import")
@@ -272,7 +331,7 @@ export function QuoteItemBuilder({
       notes: product?.technical_description || product?.description || "",
       is_supplier: isSupplier,
       has_combination_engine: hasCombinationEngine,
-      family_id: familyId,
+      family_id: familyId ?? undefined,
       margin_percent_target: marginTarget,
       tiers: tiers.length ? tiers : undefined,
       production_deadline: product?.production_deadline || product?.avg_production_time || null,
@@ -366,15 +425,15 @@ export function QuoteItemBuilder({
       item.total_price > 0 ? ((item.total_price - item.total_cost) / item.total_price) * 100 : 0;
   }
 
-  function handleAttributeChange(idx: number, attrCode: string, value: any, attrId?: string) {
+  function handleAttributeChange(idx: number, attrCode: string, value: string, attrId?: string) {
     const item = items[idx];
     const newAttributes = { ...item.attributes, [attrCode]: value };
     const { attributes: attrDefs, options } = getProductAttributes(item.product_id);
     const option =
       attrId && options
-        ? options.find((o: any) => o.attribute_id === attrId && o.value === value)
+        ? options.find((o) => o.attribute_id === attrId && o.value === value)
         : null;
-    const attrDef = attrDefs?.find((a: any) => a.id === attrId);
+    const attrDef = attrDefs?.find((a) => a.id === attrId);
 
     // Produto importado: o preço é POR COMBINAÇÃO (não aditivo). Guardamos a
     // seleção no snapshot (seção 19) e, quando a opção tem custo real (varredura),
@@ -435,35 +494,39 @@ export function QuoteItemBuilder({
   }
 
   // Resolver atributos de um produto baseado no model_id ou variações manuais
-  function getProductAttributes(productId: string | null, modelId?: string | null) {
+  function getProductAttributes(
+    productId: string | null,
+    modelId?: string | null,
+  ): { attributes: AttributeDef[]; options: AttributeOption[] } {
     if (!motorData) return { attributes: [], options: [] };
     const product = catalogProducts?.find((p) => p.id === productId);
     const mId = modelId || product?.model_id;
 
     if (mId) {
       const modelAttrIds = motorData.modelAttributes
-        .filter((ma: any) => ma.model_id === mId)
-        .sort((a: any, b: any) => a.order_index - b.order_index)
-        .map((ma: any) => ma.attribute_id);
+        .filter((ma) => ma.model_id === mId)
+        .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
+        .map((ma) => ma.attribute_id);
       return {
-        attributes: motorData.attributes.filter((a: any) => modelAttrIds.includes(a.id)),
+        attributes: motorData.attributes.filter((a) => modelAttrIds.includes(a.id)),
         options: motorData.options,
       };
     }
 
     // Fallback: Gerar atributos sintéticos a partir de variations antigas
     if (product) {
-      const legacyVariations: any[] = [];
+      const legacyVariations: VariationRow[] = [];
       // Variações do fornecedor
       if (Array.isArray(product.variations)) {
-        product.variations.forEach((v: any) => {
+        (product.variations as VariationAxis[]).forEach((v) => {
           const arr = Array.isArray(v?.values)
             ? v.values
             : Array.isArray(v?.options)
               ? v.options
               : null;
-          if (v?.name && arr) {
-            arr.forEach((val: any) => {
+          const axisName = v?.name;
+          if (axisName && arr) {
+            arr.forEach((val) => {
               const isObj = typeof val === "object" && val !== null;
               const optName = isObj && "value" in val ? val.value : String(val);
               // Custo/preço REAIS da combinação (varredura). Sem varredura ficam
@@ -473,7 +536,7 @@ export function QuoteItemBuilder({
               const external_id = isObj ? (val.external_id ?? null) : null;
               const tiers = isObj && Array.isArray(val.tiers) ? val.tiers : null;
               legacyVariations.push({
-                type: v.name,
+                type: axisName,
                 name: String(optName),
                 cost,
                 price,
@@ -485,22 +548,20 @@ export function QuoteItemBuilder({
         });
       }
       // Variações manuais (editor_meta)
-      if (
-        product.editor_meta?.variation_rows &&
-        Array.isArray(product.editor_meta.variation_rows)
-      ) {
-        legacyVariations.push(...product.editor_meta.variation_rows);
+      const editorMeta = product.editor_meta as { variation_rows?: VariationRow[] } | null;
+      if (Array.isArray(editorMeta?.variation_rows)) {
+        legacyVariations.push(...editorMeta.variation_rows);
       }
 
       if (legacyVariations.length > 0) {
-        const grouped = legacyVariations.reduce((acc: any, row: any) => {
+        const grouped = legacyVariations.reduce<Record<string, VariationRow[]>>((acc, row) => {
           if (!acc[row.type]) acc[row.type] = [];
           acc[row.type].push(row);
           return acc;
         }, {});
 
-        const syntheticAttrs: any[] = [];
-        const syntheticOpts: any[] = [];
+        const syntheticAttrs: AttributeDef[] = [];
+        const syntheticOpts: AttributeOption[] = [];
 
         Object.keys(grouped).forEach((type, i) => {
           const attrId = `legacy-attr-${i}`;
@@ -511,7 +572,7 @@ export function QuoteItemBuilder({
             type: "select",
             is_required: false,
           });
-          grouped[type].forEach((row: any, j: number) => {
+          grouped[type].forEach((row, j) => {
             // Base cost para calcular impacto (usado só no modelo aditivo/manual).
             const baseCost = Number(product.base_cost) || 0;
             const hasRealCost = row.cost != null && !Number.isNaN(Number(row.cost));
@@ -656,7 +717,7 @@ export function QuoteItemBuilder({
                   });
                 }}
                 onSelectionChange={(sel) => {
-                  updateItem(editingIdx, { selection_snapshot: sel as any });
+                  updateItem(editingIdx, { selection_snapshot: sel });
                 }}
               />
             </div>
@@ -787,9 +848,9 @@ export function QuoteItemBuilder({
                       Variações e Materiais
                     </span>
                   </div>
-                  {editingAttrs.map((attr: any) => {
+                  {editingAttrs.map((attr) => {
                     const options =
-                      editingOptions.filter((o: any) => o.attribute_id === attr.id) || [];
+                      editingOptions.filter((o) => o.attribute_id === attr.id) || [];
                     const currentValue = editingItem.attributes[attr.code] || "";
                     const currentImpact = editingItem.attribute_price_impacts[attr.code] || 0;
 
@@ -819,7 +880,7 @@ export function QuoteItemBuilder({
                               />
                             </SelectTrigger>
                             <SelectContent>
-                              {options.map((opt: any) => (
+                              {options.map((opt) => (
                                 <SelectItem key={opt.id} value={opt.value}>
                                   <div className="flex items-center justify-between w-full gap-4">
                                     <span>{opt.label}</span>
@@ -829,9 +890,9 @@ export function QuoteItemBuilder({
                                             {fmt.format(opt.real_cost)}/un
                                           </span>
                                         )
-                                      : opt.price_impact > 0 && (
+                                      : (opt.price_impact ?? 0) > 0 && (
                                           <span className="text-[10px] text-amber-600 font-semibold">
-                                            +{fmt.format(opt.price_impact)}
+                                            +{fmt.format(opt.price_impact ?? 0)}
                                           </span>
                                         )}
                                   </div>
@@ -842,7 +903,7 @@ export function QuoteItemBuilder({
                         ) : attr.type === "boolean" ? (
                           <div className="flex items-center gap-2">
                             <Switch
-                              checked={currentValue === "true" || currentValue === true}
+                              checked={currentValue === "true"}
                               onCheckedChange={(v) =>
                                 handleAttributeChange(
                                   editingIdx,
