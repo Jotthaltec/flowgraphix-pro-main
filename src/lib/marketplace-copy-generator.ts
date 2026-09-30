@@ -15,15 +15,15 @@ export interface MarketplaceCopy {
 }
 
 export interface VariationOption {
-  key: string;   // Ex: "Tiragem", "Cor", "Material", "Formato"
+  key: string; // Ex: "Tiragem", "Cor", "Material", "Formato"
   value: string; // Ex: "100 unidades", "4x0 Frente", "Couchê Fosco 300g"
 }
 
 export interface ProductVariationCombo {
-  label: string;           // Ex: "100 un · Frente · Couchê 300g"
+  label: string; // Ex: "100 un · Frente · Couchê 300g"
   quantity?: number;
-  price: number;           // Custo do fornecedor para esta combinação
-  sellPrice: number;       // Preço de venda sugerido
+  price: number; // Custo do fornecedor para esta combinação
+  sellPrice: number; // Preço de venda sugerido
   variations: VariationOption[];
 }
 
@@ -31,25 +31,31 @@ export interface ProductVariationCombo {
  * Gera combinações de anúncios a partir de tiragens e variações selecionadas
  */
 export function buildVariationCombos(
-  quantityPrices: Array<{ quantity: number; price: number; sellPrice?: number; unitPrice?: number }>,
+  quantityPrices: Array<{
+    quantity: number;
+    price: number;
+    sellPrice?: number;
+    unitPrice?: number;
+  }>,
   selectedVariations: Record<string, string[]>, // Ex: { "Cor": ["4x0", "4x4"], "Material": ["Couchê 300g"] }
-  marginPercent: number
+  marginPercent: number,
 ): ProductVariationCombo[] {
   const combos: ProductVariationCombo[] = [];
 
   // Monta os grupos de variações selecionadas (excluindo grupos vazios)
-  const varKeys = Object.keys(selectedVariations).filter(k => selectedVariations[k].length > 0);
+  const varKeys = Object.keys(selectedVariations).filter((k) => selectedVariations[k].length > 0);
 
   // Se não há variações, gera um anúncio por tiragem
   if (varKeys.length === 0) {
     for (const qp of quantityPrices) {
-      const sellPrice = qp.sellPrice ?? parseFloat((qp.price * (1 + marginPercent / 100)).toFixed(2));
+      const sellPrice =
+        qp.sellPrice ?? parseFloat((qp.price * (1 + marginPercent / 100)).toFixed(2));
       combos.push({
         label: `${qp.quantity} unidades`,
         quantity: qp.quantity,
         price: qp.price,
         sellPrice,
-        variations: [{ key: "Tiragem", value: `${qp.quantity} unidades` }]
+        variations: [{ key: "Tiragem", value: `${qp.quantity} unidades` }],
       });
     }
     return combos;
@@ -58,12 +64,12 @@ export function buildVariationCombos(
   // Gera o produto cartesiano das variações selecionadas
   const cartesian = (arrays: string[][]): string[][] => {
     return arrays.reduce<string[][]>(
-      (acc, curr) => acc.flatMap(a => curr.map(b => [...a, b])),
-      [[]]
+      (acc, curr) => acc.flatMap((a) => curr.map((b) => [...a, b])),
+      [[]],
     );
   };
 
-  const varValues = varKeys.map(k => selectedVariations[k]);
+  const varValues = varKeys.map((k) => selectedVariations[k]);
   const varCombinations = cartesian(varValues);
 
   // Para cada tiragem × cada combinação de variações
@@ -73,23 +79,17 @@ export function buildVariationCombos(
     for (const combo of varCombinations) {
       const varList: VariationOption[] = combo.map((val, idx) => ({
         key: varKeys[idx],
-        value: val
+        value: val,
       }));
 
-      const labelParts = [
-        `${qp.quantity} un`,
-        ...combo
-      ];
+      const labelParts = [`${qp.quantity} un`, ...combo];
 
       combos.push({
         label: labelParts.join(" · "),
         quantity: qp.quantity,
         price: qp.price,
         sellPrice,
-        variations: [
-          { key: "Tiragem", value: `${qp.quantity} unidades` },
-          ...varList
-        ]
+        variations: [{ key: "Tiragem", value: `${qp.quantity} unidades` }, ...varList],
       });
     }
   }
@@ -107,22 +107,23 @@ export function generateMarketplaceCopy(
   marginPercent: number,
   specifications: Record<string, string>,
   productionDeadline: string,
-  combo?: ProductVariationCombo
+  combo?: ProductVariationCombo,
 ): MarketplaceCopy {
-  const calculatedPrice = combo?.sellPrice ?? parseFloat((costPrice * (1 + marginPercent / 100)).toFixed(2));
+  const calculatedPrice =
+    combo?.sellPrice ?? parseFloat((costPrice * (1 + marginPercent / 100)).toFixed(2));
   const varLabel = combo?.label ?? "Padrão";
   const qty = combo?.quantity;
 
   // Limpa o nome do produto de termos técnicos desnecessários
-  let baseTitle = productName.replace(/(?:fornecedor|zap|printi|card|atual|gabarito|cdr|pdf|original)/gi, "").trim();
+  const baseTitle = productName
+    .replace(/(?:fornecedor|zap|printi|card|atual|gabarito|cdr|pdf|original)/gi, "")
+    .trim();
 
   // Enriquece o título com a variação
   let varTitleSuffix = "";
   if (combo?.variations) {
     // Remove "Tiragem" do sufixo do título — ela vai no começo
-    const varParts = combo.variations
-      .filter(v => v.key !== "Tiragem")
-      .map(v => v.value);
+    const varParts = combo.variations.filter((v) => v.key !== "Tiragem").map((v) => v.value);
     if (varParts.length > 0) varTitleSuffix = " " + varParts.join(" ");
   }
 
@@ -137,21 +138,21 @@ export function generateMarketplaceCopy(
     "comunicacao visual",
   ];
   if (combo?.variations) {
-    combo.variations.forEach(v => {
+    combo.variations.forEach((v) => {
       if (v.value) keywords.push(v.value.toLowerCase());
     });
   }
-  Object.keys(specifications).forEach(key => {
+  Object.keys(specifications).forEach((key) => {
     if (specifications[key]) keywords.push(specifications[key].toLowerCase());
   });
 
   // Monta as especificações da variação atual
   const comboSpecsText = combo?.variations
-    ? combo.variations.map(v => `• ${v.key}: ${v.value}`).join("\n")
+    ? combo.variations.map((v) => `• ${v.key}: ${v.value}`).join("\n")
     : "";
 
   const baseSpecsText = Object.entries(specifications)
-    .filter(([k]) => !combo?.variations?.some(v => v.key === k)) // evita repetição
+    .filter(([k]) => !combo?.variations?.some((v) => v.key === k)) // evita repetição
     .map(([key, val]) => `• ${key}: ${val}`)
     .join("\n");
 
@@ -183,7 +184,11 @@ Após a confirmação do pagamento, nossa equipe entrará em contato via chat pa
       break;
 
     case "shopee":
-      title = `🔥 ${qtyText}${baseTitle}${varTitleSuffix} Personalizado Premium Alta Qualidade 🔥`.substring(0, 150);
+      title =
+        `🔥 ${qtyText}${baseTitle}${varTitleSuffix} Personalizado Premium Alta Qualidade 🔥`.substring(
+          0,
+          150,
+        );
       description = `🛒 GRÁFICA RÁPIDA PREMIUM NA SHOPEE! 🛒
 
 ${qty ? `🎯 Este anúncio é referente à tiragem de ${qty} unidades.` : ""}
@@ -207,8 +212,12 @@ ${allSpecsText || "• Impressão de alta fidelidade fotográfica\n• Acabament
       
       <h3>📋 Detalhes do Produto:</h3>
       <ul>
-        ${combo?.variations?.map(v => `<li><strong>${v.key}:</strong> ${v.value}</li>`).join("\n") ?? ""}
-        ${Object.entries(specifications).map(([key, val]) => `<li><strong>${key}:</strong> ${val}</li>`).join("\n") || `<li>Impressão de alta resolução</li>`}
+        ${combo?.variations?.map((v) => `<li><strong>${v.key}:</strong> ${v.value}</li>`).join("\n") ?? ""}
+        ${
+          Object.entries(specifications)
+            .map(([key, val]) => `<li><strong>${key}:</strong> ${val}</li>`)
+            .join("\n") || `<li>Impressão de alta resolução</li>`
+        }
       </ul>
 
       <h3>⏱️ Prazo de Produção:</h3>
@@ -227,23 +236,37 @@ ${allSpecsText || "• Impressão de alta fidelidade fotográfica\n• Acabament
         <h3>Especificações Técnicas:</h3>
         <table class="table-product-specs" style="width: 100%; border-collapse: collapse; margin-top: 15px;">
           <tbody>
-            ${combo?.variations?.map(v => `
+            ${
+              combo?.variations
+                ?.map(
+                  (v) => `
               <tr style="border-bottom: 1px solid #eee;">
                 <td style="padding: 8px; font-weight: bold; width: 30%;">${v.key}</td>
                 <td style="padding: 8px;">${v.value}</td>
               </tr>
-            `).join("\n") ?? ""}
-            ${Object.entries(specifications).filter(([k]) => !combo?.variations?.some(v => v.key === k)).map(([key, val]) => `
+            `,
+                )
+                .join("\n") ?? ""
+            }
+            ${
+              Object.entries(specifications)
+                .filter(([k]) => !combo?.variations?.some((v) => v.key === k))
+                .map(
+                  ([key, val]) => `
               <tr style="border-bottom: 1px solid #eee;">
                 <td style="padding: 8px; font-weight: bold; width: 30%;">${key}</td>
                 <td style="padding: 8px;">${val}</td>
               </tr>
-            `).join("\n") || `
+            `,
+                )
+                .join("\n") ||
+              `
               <tr style="border-bottom: 1px solid #eee;">
                 <td style="padding: 8px; font-weight: bold;">Impressão</td>
                 <td style="padding: 8px;">Alta Resolução OffSet/Digital</td>
               </tr>
-            `}
+            `
+            }
           </tbody>
         </table>
 

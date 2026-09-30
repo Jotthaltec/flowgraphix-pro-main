@@ -14,7 +14,7 @@ import { Readable } from "node:stream";
 export function toWebRequest(req, { fallbackHost = "localhost" } = {}) {
   const host = req.headers.host ?? fallbackHost;
   const forwardedProto = req.headers["x-forwarded-proto"];
-  const proto = (Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto ?? "https")
+  const proto = (Array.isArray(forwardedProto) ? forwardedProto[0] : (forwardedProto ?? "https"))
     .split(",")[0]
     .trim();
 

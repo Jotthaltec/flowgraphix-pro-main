@@ -45,13 +45,13 @@ const config = {
       "react/jsx-runtime",
       "react/jsx-dev-runtime",
       "@tanstack/react-query",
-      "@tanstack/query-core"
-    ]
+      "@tanstack/query-core",
+    ],
   },
   server: {
     host: "::",
     port: 8080,
-  }
+  },
 } satisfies UserConfig;
 
 export default defineConfig(({ command, mode }) => {

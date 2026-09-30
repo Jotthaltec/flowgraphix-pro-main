@@ -28,11 +28,22 @@ const db = supabase as any;
 export interface StructuredResult {
   ok: boolean;
   warnings: string[];
-  counts: { variants: number; tiers: number; attributes: number; images: number; templates: number; extras: number };
+  counts: {
+    variants: number;
+    tiers: number;
+    attributes: number;
+    images: number;
+    templates: number;
+    extras: number;
+  };
 }
 
 /** Busca o id de uma linha por igualdade; cria se não existir. Retorna o id ou null. */
-async function ensureRow(table: string, match: Record<string, any>, insert: Record<string, any>): Promise<string | null> {
+async function ensureRow(
+  table: string,
+  match: Record<string, any>,
+  insert: Record<string, any>,
+): Promise<string | null> {
   try {
     let q = db.from(table).select("id");
     for (const [k, v] of Object.entries(match)) q = v === null ? q.is(k, null) : q.eq(k, v);
@@ -107,7 +118,12 @@ export async function persistStructured(
     for (const attr of buildAttributeRows(product)) {
       const { data: a, error } = await db
         .from("product_attributes")
-        .insert({ company_id: companyId, product_id: productId, name: attr.name, normalized_name: attr.normalized_name })
+        .insert({
+          company_id: companyId,
+          product_id: productId,
+          name: attr.name,
+          normalized_name: attr.normalized_name,
+        })
         .select("id")
         .single();
       if (error || !a) continue;
@@ -174,7 +190,11 @@ export async function persistStructured(
 
     const segIds: string[] = [];
     for (const seg of cls.segments) {
-      const id = await ensureRow("product_segments", { company_id: companyId, name: seg }, { slug: null });
+      const id = await ensureRow(
+        "product_segments",
+        { company_id: companyId, name: seg },
+        { slug: null },
+      );
       if (id) segIds.push(id);
     }
 
@@ -186,7 +206,9 @@ export async function persistStructured(
       reason: cls.reason,
     };
     if (segIds.length) {
-      await db.from("product_category_mappings").insert(segIds.map((segment_id) => ({ ...baseMapping, segment_id })));
+      await db
+        .from("product_category_mappings")
+        .insert(segIds.map((segment_id) => ({ ...baseMapping, segment_id })));
     } else {
       await db.from("product_category_mappings").insert({ ...baseMapping, segment_id: null });
     }

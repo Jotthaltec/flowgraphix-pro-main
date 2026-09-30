@@ -3,7 +3,13 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { parseFuturaImProduct } from "@/services/futuraImParser";
-import { collectAxisUrls, collectVariantUrls, collectUnpricedTierUrls, consolidateVariants, attachVariantPrices } from "@/services/variantScan";
+import {
+  collectAxisUrls,
+  collectVariantUrls,
+  collectUnpricedTierUrls,
+  consolidateVariants,
+  attachVariantPrices,
+} from "@/services/variantScan";
 import type { ImportedProduct } from "@/types/importedProduct";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -65,7 +71,15 @@ describe("variantScan", () => {
         {
           ...p.variants[0],
           price_tiers: [
-            { quantity: 500, unit: "unidade", total_price: 0, unit_price: 0, currency: "BRL", external_id: "555", collected_at: "x" },
+            {
+              quantity: 500,
+              unit: "unidade",
+              total_price: 0,
+              unit_price: 0,
+              currency: "BRL",
+              external_id: "555",
+              collected_at: "x",
+            },
           ],
         },
       ],
@@ -75,8 +89,14 @@ describe("variantScan", () => {
   });
 
   it("consolidateVariants junta variantes reais e marca scan completo", () => {
-    const a = parseFuturaImProduct(fx("futuraim-cartao-de-visita.html"), "https://www.futuraim.com.br/produto/cartao?id=4627");
-    const b = parseFuturaImProduct(fx("futuraim-adesivo-vinil.html"), "https://www.futuraim.com.br/produto/adesivo-em-vinil?id=11867");
+    const a = parseFuturaImProduct(
+      fx("futuraim-cartao-de-visita.html"),
+      "https://www.futuraim.com.br/produto/cartao?id=4627",
+    );
+    const b = parseFuturaImProduct(
+      fx("futuraim-adesivo-vinil.html"),
+      "https://www.futuraim.com.br/produto/adesivo-em-vinil?id=11867",
+    );
     const merged = consolidateVariants([a, b]);
     expect(merged.variant_scan_status).toBe("complete");
     const ids = merged.variants.map((v) => v.external_id);
@@ -104,16 +124,37 @@ describe("variantScan", () => {
       attributes: [],
       available: true,
       price_tiers: [
-        { quantity: 100, unit: "unidade", total_price: 100 + i * 20, unit_price: (100 + i * 20) / 100, currency: "BRL", collected_at: "x" },
-        { quantity: 500, unit: "unidade", total_price: 400 + i * 50, unit_price: (400 + i * 50) / 500, currency: "BRL", collected_at: "x" },
+        {
+          quantity: 100,
+          unit: "unidade",
+          total_price: 100 + i * 20,
+          unit_price: (100 + i * 20) / 100,
+          currency: "BRL",
+          collected_at: "x",
+        },
+        {
+          quantity: 500,
+          unit: "unidade",
+          total_price: 400 + i * 50,
+          unit_price: (400 + i * 50) / 500,
+          currency: "BRL",
+          collected_at: "x",
+        },
       ],
       raw_attributes: {},
     }));
-    const enriched = attachVariantPrices({ ...base, variants: [...base.variants, ...fakeVariants] });
+    const enriched = attachVariantPrices({
+      ...base,
+      variants: [...base.variants, ...fakeVariants],
+    });
     const eFormato = enriched.variant_axes.find((a) => a.normalized_name === "formato")!;
-    const enrichedOpts = eFormato.options.filter((o) => opts.some((x) => x.external_id === o.external_id));
+    const enrichedOpts = eFormato.options.filter((o) =>
+      opts.some((x) => x.external_id === o.external_id),
+    );
     // Cada opção varrida recebeu SEU custo (menor tiragem) e a quantidade de referência.
-    expect(enrichedOpts.every((o) => typeof o.unit_price === "number" && o.unit_price! > 0)).toBe(true);
+    expect(enrichedOpts.every((o) => typeof o.unit_price === "number" && o.unit_price! > 0)).toBe(
+      true,
+    );
     expect(enrichedOpts.map((o) => o.unit_price)).toEqual([1, 1.2]);
     expect(enrichedOpts.every((o) => o.ref_quantity === 100)).toBe(true);
     // E a TABELA COMPLETA de tiragens da combinação (para o orçamento espelhar o site).
@@ -123,6 +164,8 @@ describe("variantScan", () => {
     expect(enrichedOpts[1].tiers!.map((t) => t.total_price)).toEqual([120, 450]);
     // Nada é fabricado: sem variantes coletadas, opções ficam sem preço.
     const untouched = attachVariantPrices({ ...base, variants: [] });
-    expect(untouched.variant_axes.every((a) => a.options.every((o) => o.unit_price === undefined))).toBe(true);
+    expect(
+      untouched.variant_axes.every((a) => a.options.every((o) => o.unit_price === undefined)),
+    ).toBe(true);
   });
 });

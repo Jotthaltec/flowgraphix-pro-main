@@ -51,7 +51,12 @@ export function normalizeAllowlist(domains: string[] | undefined): string[] {
   if (!domains || !domains.length) return ALLOWED_DOMAINS;
   const set = new Set(
     domains
-      .map((d) => (d || "").trim().toLowerCase().replace(/^www\./, ""))
+      .map((d) =>
+        (d || "")
+          .trim()
+          .toLowerCase()
+          .replace(/^www\./, ""),
+      )
       .filter(Boolean),
   );
   return Array.from(set);
@@ -92,7 +97,10 @@ export function validateSupplierUrl(rawUrl: string, opts?: ValidateOptions): Val
   const domain = host.replace(/^www\./, "");
   const allowed = allowlist.some((d) => host === d || host === `www.${d}` || domain === d);
   if (!allowed) {
-    return { ok: false, reason: `Domínio não permitido: ${host}. Permitidos: ${allowlist.join(", ")}.` };
+    return {
+      ok: false,
+      reason: `Domínio não permitido: ${host}. Permitidos: ${allowlist.join(", ")}.`,
+    };
   }
 
   return { ok: true, url: parsed.toString(), domain };

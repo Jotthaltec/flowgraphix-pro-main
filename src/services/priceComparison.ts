@@ -75,7 +75,8 @@ export function comparePriceTiers(
       kind = "same";
     }
 
-    const deltaAbs = oldCost != null && newCost != null ? parseFloat((newCost - oldCost).toFixed(2)) : null;
+    const deltaAbs =
+      oldCost != null && newCost != null ? parseFloat((newCost - oldCost).toFixed(2)) : null;
     const deltaPct =
       oldCost != null && newCost != null && oldCost > 0
         ? parseFloat((((newCost - oldCost) / oldCost) * 100).toFixed(2))

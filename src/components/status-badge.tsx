@@ -13,13 +13,22 @@ const styles: Record<Variant, string> = {
 };
 
 export function StatusBadge({
-  children, variant = "default", className,
-}: { children: React.ReactNode; variant?: Variant; className?: string }) {
+  children,
+  variant = "default",
+  className,
+}: {
+  children: React.ReactNode;
+  variant?: Variant;
+  className?: string;
+}) {
   return (
-    <span className={cn(
-      "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium whitespace-nowrap",
-      styles[variant], className
-    )}>
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium whitespace-nowrap",
+        styles[variant],
+        className,
+      )}
+    >
       {children}
     </span>
   );

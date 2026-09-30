@@ -2,21 +2,50 @@ import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Progress } from "@/components/ui/progress";
 import { StatusBadge } from "@/components/status-badge";
 import {
-  Search, ExternalLink, Download, Trash2, ShoppingCart,
-  RefreshCcw, Link2Off, Loader2, PackageX, FileSpreadsheet,
-  Edit3, Save, Plus, Trash, Layers, X, CheckSquare
+  Search,
+  ExternalLink,
+  Download,
+  Trash2,
+  ShoppingCart,
+  RefreshCcw,
+  Link2Off,
+  Loader2,
+  PackageX,
+  FileSpreadsheet,
+  Edit3,
+  Save,
+  Plus,
+  Trash,
+  Layers,
+  X,
+  CheckSquare,
 } from "lucide-react";
 import { fetchSupplierPage } from "@/integrations/supabase/importer-actions";
 import { extractProductFromHtml } from "@/lib/supplier-extractor";
@@ -39,7 +68,11 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [openBulkEditModal, setOpenBulkEditModal] = useState(false);
   // Barra de progresso da sincronização em massa
-  const [bulkSync, setBulkSync] = useState<{ running: boolean; done: number; total: number } | null>(null);
+  const [bulkSync, setBulkSync] = useState<{
+    running: boolean;
+    done: number;
+    total: number;
+  } | null>(null);
 
   // Campos da edição em massa — cada campo só é aplicado se seu toggle estiver ligado
   const [bulkApplyCategory, setBulkApplyCategory] = useState(false);
@@ -65,16 +98,30 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
   const [editCost, setEditCost] = useState(0);
   const [editMargin, setEditMargin] = useState(50);
   const [editDeadline, setEditDeadline] = useState("");
-  
+
   // Estados para o editor completo com tudo e mais um pouco
   const [editDescription, setEditDescription] = useState("");
   const [editMainImageUrl, setEditMainImageUrl] = useState("");
   const [editGalleryImages, setEditGalleryImages] = useState<string[]>([]);
   const [editSpecifications, setEditSpecifications] = useState<Record<string, string>>({});
-  const [editVariations, setEditVariations] = useState<Array<{ name: string; values: string[] }>>([]);
-  const [editQuantityPrices, setEditQuantityPrices] = useState<Array<{ quantity: number; price: number; unitPrice: number; sellPrice?: number; unitSellPrice?: number }>>([]);
-  const [editExtraServices, setEditExtraServices] = useState<Array<{ name: string; price: number }>>([]);
-  const [editTemplateLinks, setEditTemplateLinks] = useState<Array<{ name: string; url: string }>>([]);
+  const [editVariations, setEditVariations] = useState<Array<{ name: string; values: string[] }>>(
+    [],
+  );
+  const [editQuantityPrices, setEditQuantityPrices] = useState<
+    Array<{
+      quantity: number;
+      price: number;
+      unitPrice: number;
+      sellPrice?: number;
+      unitSellPrice?: number;
+    }>
+  >([]);
+  const [editExtraServices, setEditExtraServices] = useState<
+    Array<{ name: string; price: number }>
+  >([]);
+  const [editTemplateLinks, setEditTemplateLinks] = useState<Array<{ name: string; url: string }>>(
+    [],
+  );
   const [activeTab, setActiveTab] = useState("geral");
 
   // Estados temporários para campos de adição dinâmica no editor
@@ -94,10 +141,12 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
-        .select(`
+        .select(
+          `
           *,
           suppliers:supplier_id (name)
-        `)
+        `,
+        )
         // Fonte única: TODO produto de fornecedor (origin = supplier_import),
         // independente de qual fluxo o importou (imported_from_supplier true/false).
         // Assim Hub e Produtos enxergam exatamente o mesmo conjunto.
@@ -105,7 +154,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
-    }
+    },
   });
 
   // Busca fornecedores para o filtro
@@ -118,16 +167,13 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
         .order("name", { ascending: true });
       if (error) throw error;
       return data;
-    }
+    },
   });
 
   // Mutação para deletar produto do CRM
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("products")
-        .delete()
-        .eq("id", id);
+      const { error } = await supabase.from("products").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -137,7 +183,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
     },
     onError: (err: any) => {
       toast.error(`Erro ao deletar: ${err.message}`);
-    }
+    },
   });
 
   // Mutação para desvincular do fornecedor
@@ -152,7 +198,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
           // origin passa a "manual": tira o produto do Hub (que agora filtra por
           // origin) e o converte definitivamente em produto próprio do catálogo.
           origin: "manual",
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .eq("id", id);
       if (error) throw error;
@@ -164,7 +210,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
     },
     onError: (err: any) => {
       toast.error(`Erro ao desvincular: ${err.message}`);
-    }
+    },
   });
 
   // Geração de rascunhos de marketplace agora é feita pelo MarketplaceVariationsModal
@@ -173,7 +219,8 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
   // as regras de mapeamento e grava os campos atualizados. Usado tanto na
   // sincronização individual quanto na sincronização em massa.
   const syncProductWithSupplier = async (product: any) => {
-    if (!product.source_url) throw new Error("Este produto não possui link de fornecedor vinculado.");
+    if (!product.source_url)
+      throw new Error("Este produto não possui link de fornecedor vinculado.");
 
     // 1. Fetch do HTML atualizado — fetcher seguro (anti-SSRF: HTTPS-only,
     //    bloqueio de IPs/redes internas, allowlist de domínio, timeout e limite).
@@ -202,27 +249,42 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
     const updatedFields = {
       name: extracted.product_name || product.name,
       commercial_name: extracted.product_name || product.name,
-      type: 'product',
-      origin: 'supplier_import',
-      description: extracted.specifications["Descrição"] || product.description || extracted.product_name || product.name,
+      type: "product",
+      origin: "supplier_import",
+      description:
+        extracted.specifications["Descrição"] ||
+        product.description ||
+        extracted.product_name ||
+        product.name,
       base_cost: baseCost,
       cost_price: baseCost,
       suggested_price: suggestedPrice,
       sale_price: suggestedPrice,
       min_price: suggestedPrice * 0.9,
-      avg_production_time: extracted.production_deadline !== "5 dias úteis" ? extracted.production_deadline : (product.avg_production_time || "5 dias úteis"),
-      production_deadline: extracted.production_deadline !== "5 dias úteis" ? extracted.production_deadline : (product.avg_production_time || "5 dias úteis"),
+      avg_production_time:
+        extracted.production_deadline !== "5 dias úteis"
+          ? extracted.production_deadline
+          : product.avg_production_time || "5 dias úteis",
+      production_deadline:
+        extracted.production_deadline !== "5 dias úteis"
+          ? extracted.production_deadline
+          : product.avg_production_time || "5 dias úteis",
       supplier_sku: extracted.supplier_sku || product.supplier_sku,
       main_image_url: extracted.main_image_url || product.main_image_url,
       image_url: extracted.main_image_url || product.main_image_url,
-      gallery_images: extracted.gallery_images.length > 0 ? extracted.gallery_images : product.gallery_images,
+      gallery_images:
+        extracted.gallery_images.length > 0 ? extracted.gallery_images : product.gallery_images,
       specifications: { ...product.specifications, ...extracted.specifications },
       variations: extracted.variations.length > 0 ? extracted.variations : product.variations,
-      quantity_prices: extracted.quantity_prices.length > 0 ? extracted.quantity_prices : product.quantity_prices,
-      quantity_price_table: extracted.quantity_prices.length > 0 ? extracted.quantity_prices : product.quantity_prices,
-      extra_services: extracted.extra_services.length > 0 ? extracted.extra_services : product.extra_services,
-      template_links: extracted.template_links.length > 0 ? extracted.template_links : product.template_links,
-      updated_at: new Date().toISOString()
+      quantity_prices:
+        extracted.quantity_prices.length > 0 ? extracted.quantity_prices : product.quantity_prices,
+      quantity_price_table:
+        extracted.quantity_prices.length > 0 ? extracted.quantity_prices : product.quantity_prices,
+      extra_services:
+        extracted.extra_services.length > 0 ? extracted.extra_services : product.extra_services,
+      template_links:
+        extracted.template_links.length > 0 ? extracted.template_links : product.template_links,
+      updated_at: new Date().toISOString(),
     };
 
     const { data, error } = await supabase
@@ -252,7 +314,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
     onError: (err: any) => {
       toast.error(`Erro ao enriquecer dados: ${err.message}`);
       setEnrichingProductId(null);
-    }
+    },
   });
 
   // Mutação para salvar a edição manual do produto
@@ -267,8 +329,8 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
         .update({
           name: editName,
           commercial_name: editName,
-          type: 'product',
-          origin: 'supplier_import',
+          type: "product",
+          origin: "supplier_import",
           description: editDescription,
           supplier_sku: editSku,
           category: editCategory,
@@ -291,7 +353,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
           quantity_price_table: editQuantityPrices,
           extra_services: editExtraServices,
           template_links: editTemplateLinks,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .eq("id", editingProduct.id);
 
@@ -306,7 +368,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
     },
     onError: (err: any) => {
       toast.error(`Erro ao salvar edições: ${err.message}`);
-    }
+    },
   });
 
   // ─── AÇÕES EM MASSA ──────────────────────────────────────────────────────
@@ -333,7 +395,9 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
       if (failed === 0) {
         toast.success(`${ok} produto(s) sincronizado(s) com o fornecedor!`);
       } else {
-        toast.warning(`${ok} sincronizado(s), ${failed} com falha (ex.: sem link ou fora da allowlist).`);
+        toast.warning(
+          `${ok} sincronizado(s), ${failed} com falha (ex.: sem link ou fora da allowlist).`,
+        );
       }
       queryClient.invalidateQueries({ queryKey: ["imported-products"] });
       queryClient.invalidateQueries({ queryKey: ["products"] });
@@ -343,7 +407,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
     onError: (err: any) => {
       toast.error(`Erro na sincronização em massa: ${err.message}`);
       setBulkSync(null);
-    }
+    },
   });
 
   // Edição em massa: aplica somente os campos com toggle ativo aos produtos selecionados.
@@ -370,7 +434,10 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
           rowPatch.sale_price = suggestedPrice;
           rowPatch.min_price = suggestedPrice * 0.9;
         }
-        const { error } = await supabase.from("products").update(rowPatch as any).eq("id", p.id);
+        const { error } = await supabase
+          .from("products")
+          .update(rowPatch as any)
+          .eq("id", p.id);
         if (error) throw error;
       }
       return productsToEdit.length;
@@ -384,7 +451,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
     },
     onError: (err: any) => {
       toast.error(`Erro na edição em massa: ${err.message}`);
-    }
+    },
   });
 
   // Desvincular / deletar em massa
@@ -392,7 +459,13 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
     mutationFn: async (ids: string[]) => {
       const { error } = await supabase
         .from("products")
-        .update({ imported_from_supplier: false, supplier_id: null, import_status: "manual", origin: "manual", updated_at: new Date().toISOString() })
+        .update({
+          imported_from_supplier: false,
+          supplier_id: null,
+          import_status: "manual",
+          origin: "manual",
+          updated_at: new Date().toISOString(),
+        })
         .in("id", ids);
       if (error) throw error;
       return ids.length;
@@ -403,7 +476,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
       queryClient.invalidateQueries({ queryKey: ["products"] });
       setSelectedIds(new Set());
     },
-    onError: (err: any) => toast.error(`Erro ao desvincular: ${err.message}`)
+    onError: (err: any) => toast.error(`Erro ao desvincular: ${err.message}`),
   });
 
   const bulkDeleteMutation = useMutation({
@@ -418,7 +491,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
       queryClient.invalidateQueries({ queryKey: ["products"] });
       setSelectedIds(new Set());
     },
-    onError: (err: any) => toast.error(`Erro ao deletar: ${err.message}`)
+    onError: (err: any) => toast.error(`Erro ao deletar: ${err.message}`),
   });
 
   const handleEditClick = (product: any) => {
@@ -432,15 +505,19 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
     setEditDeadline(product.avg_production_time || product.production_deadline || "5 dias úteis");
     setEditDescription(product.description || "");
     setEditMainImageUrl(product.main_image_url || "");
-    
+
     // Tratando dados em JSONB de forma segura
     setEditGalleryImages(Array.isArray(product.gallery_images) ? product.gallery_images : []);
-    setEditSpecifications(typeof product.specifications === 'object' && product.specifications !== null ? product.specifications : {});
+    setEditSpecifications(
+      typeof product.specifications === "object" && product.specifications !== null
+        ? product.specifications
+        : {},
+    );
     setEditVariations(Array.isArray(product.variations) ? product.variations : []);
     setEditQuantityPrices(Array.isArray(product.quantity_prices) ? product.quantity_prices : []);
     setEditExtraServices(Array.isArray(product.extra_services) ? product.extra_services : []);
     setEditTemplateLinks(Array.isArray(product.template_links) ? product.template_links : []);
-    
+
     // Reset inputs temporários
     setNewGalleryUrl("");
     setNewSpecKey("");
@@ -451,23 +528,26 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
     setNewExtraPrice(0);
     setNewTemplateName("");
     setNewTemplateUrl("");
-    
+
     setActiveTab("geral");
     setOpenEditModal(true);
   };
 
   // Filtra produtos na tela
-  const filteredProducts = products.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          (p.supplier_sku && p.supplier_sku.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredProducts = products.filter((p) => {
+    const matchesSearch =
+      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (p.supplier_sku && p.supplier_sku.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesSupplier = selectedSupplier ? p.supplier_id === selectedSupplier : true;
     return matchesSearch && matchesSupplier;
   });
 
   // ─── SELEÇÃO EM MASSA (helpers) ──────────────────────────────────────────
   const selectedProducts = filteredProducts.filter((p) => selectedIds.has(p.id));
-  const allVisibleSelected = filteredProducts.length > 0 && filteredProducts.every((p) => selectedIds.has(p.id));
-  const someVisibleSelected = filteredProducts.some((p) => selectedIds.has(p.id)) && !allVisibleSelected;
+  const allVisibleSelected =
+    filteredProducts.length > 0 && filteredProducts.every((p) => selectedIds.has(p.id));
+  const someVisibleSelected =
+    filteredProducts.some((p) => selectedIds.has(p.id)) && !allVisibleSelected;
 
   const toggleSelectAll = () => {
     setSelectedIds((prev) => {
@@ -515,12 +595,19 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
     }
 
     const headers = [
-      "Nome do Produto", "SKU Interno", "SKU Fornecedor", "Categoria", 
-      "Subcategoria", "Custo Fornecedor (R$)", "Venda CRM (R$)", 
-      "Margem (%)", "URL Origem", "Status do Vínculo"
+      "Nome do Produto",
+      "SKU Interno",
+      "SKU Fornecedor",
+      "Categoria",
+      "Subcategoria",
+      "Custo Fornecedor (R$)",
+      "Venda CRM (R$)",
+      "Margem (%)",
+      "URL Origem",
+      "Status do Vínculo",
     ];
 
-    const rows = filteredProducts.map(p => [
+    const rows = filteredProducts.map((p) => [
       `"${p.name.replace(/"/g, '""')}"`,
       `"${p.supplier_sku ? "HUB-" + p.supplier_sku : "HUB-" + p.id.substring(0, 6)}"`,
       `"${p.supplier_sku || ""}"`,
@@ -530,15 +617,18 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
       p.sale_price || p.suggested_price || 0,
       p.margin_percent || p.target_margin || 0,
       `"${p.source_url || ""}"`,
-      `"${p.import_status || "imported"}"`
+      `"${p.import_status || "imported"}"`,
     ]);
 
-    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `produtos_importados_hub_${new Date().toISOString().split("T")[0]}.csv`);
+    link.setAttribute(
+      "download",
+      `produtos_importados_hub_${new Date().toISOString().split("T")[0]}.csv`,
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -554,26 +644,26 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
             Produtos Importados no CRM
           </CardTitle>
           <CardDescription>
-            Visualize os produtos gráficos que vieram do Hub de Fornecedores e estão ativos no catálogo.
+            Visualize os produtos gráficos que vieram do Hub de Fornecedores e estão ativos no
+            catálogo.
           </CardDescription>
         </div>
-        <Button 
-          onClick={exportToCSV} 
-          variant="outline" 
-          size="sm" 
+        <Button
+          onClick={exportToCSV}
+          variant="outline"
+          size="sm"
           className="border-emerald-500/20 text-emerald-500 hover:bg-emerald-500/5 hover:border-emerald-500/40 flex items-center gap-1.5 self-start sm:self-center"
         >
           <Download className="h-4 w-4" /> Exportar CSV
         </Button>
       </CardHeader>
       <CardContent className="pt-6 space-y-4">
-        
         {/* FILTROS E BUSCA */}
         <div className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Buscar por nome ou SKU do fornecedor..." 
+            <Input
+              placeholder="Buscar por nome ou SKU do fornecedor..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-9"
@@ -585,8 +675,10 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
             className="h-10 px-3 rounded-md border border-input bg-card text-sm w-full md:w-56 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <option value="">Todos os Fornecedores</option>
-            {suppliers.map(s => (
-              <option key={s.id} value={s.id}>{s.name}</option>
+            {suppliers.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
             ))}
           </select>
         </div>
@@ -636,7 +728,11 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                   size="sm"
                   variant="outline"
                   onClick={() => {
-                    if (window.confirm(`Desvincular ${selectedIds.size} produto(s) do fornecedor? Eles continuam no CRM como produtos manuais.`)) {
+                    if (
+                      window.confirm(
+                        `Desvincular ${selectedIds.size} produto(s) do fornecedor? Eles continuam no CRM como produtos manuais.`,
+                      )
+                    ) {
                       bulkUnlinkMutation.mutate(Array.from(selectedIds));
                     }
                   }}
@@ -649,7 +745,11 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                   size="sm"
                   variant="outline"
                   onClick={() => {
-                    if (window.confirm(`Deletar ${selectedIds.size} produto(s) do CRM? Esta ação não pode ser desfeita.`)) {
+                    if (
+                      window.confirm(
+                        `Deletar ${selectedIds.size} produto(s) do CRM? Esta ação não pode ser desfeita.`,
+                      )
+                    ) {
                       bulkDeleteMutation.mutate(Array.from(selectedIds));
                     }
                   }}
@@ -683,7 +783,9 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                 <TableRow>
                   <TableHead className="w-10">
                     <Checkbox
-                      checked={allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false}
+                      checked={
+                        allVisibleSelected ? true : someVisibleSelected ? "indeterminate" : false
+                      }
                       onCheckedChange={toggleSelectAll}
                       aria-label="Selecionar todos"
                     />
@@ -708,7 +810,10 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                   const sale = p.sale_price || p.suggested_price || 0;
 
                   return (
-                    <TableRow key={p.id} data-state={selectedIds.has(p.id) ? "selected" : undefined}>
+                    <TableRow
+                      key={p.id}
+                      data-state={selectedIds.has(p.id) ? "selected" : undefined}
+                    >
                       <TableCell>
                         <Checkbox
                           checked={selectedIds.has(p.id)}
@@ -719,7 +824,11 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                       <TableCell>
                         <div className="h-10 w-10 border rounded bg-muted flex items-center justify-center overflow-hidden">
                           {p.main_image_url ? (
-                            <img src={p.main_image_url} alt={p.name} className="object-cover h-full w-full" />
+                            <img
+                              src={p.main_image_url}
+                              alt={p.name}
+                              className="object-cover h-full w-full"
+                            />
                           ) : (
                             <PackageX className="h-5 w-5 text-muted-foreground/30" />
                           )}
@@ -728,20 +837,26 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                       <TableCell className="font-semibold max-w-xs truncate">
                         <div>
                           <p className="truncate">{p.name}</p>
-                          <span className="text-[10px] text-muted-foreground font-mono">ID: {p.id.substring(0, 8)}...</span>
+                          <span className="text-[10px] text-muted-foreground font-mono">
+                            ID: {p.id.substring(0, 8)}...
+                          </span>
                         </div>
                       </TableCell>
-                      <TableCell className="font-mono text-xs">{p.supplier_sku || "Manual"}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        {p.supplier_sku || "Manual"}
+                      </TableCell>
                       <TableCell>
-                        <StatusBadge variant="info">
-                          {p.suppliers?.name || "Indireto"}
-                        </StatusBadge>
+                        <StatusBadge variant="info">{p.suppliers?.name || "Indireto"}</StatusBadge>
                       </TableCell>
                       <TableCell>
                         <StatusBadge variant="muted">{p.category || "Impressos"}</StatusBadge>
                       </TableCell>
-                      <TableCell>R$ {cost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</TableCell>
-                      <TableCell className="text-emerald-500 font-bold">R$ {sale.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</TableCell>
+                      <TableCell>
+                        R$ {cost.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell className="text-emerald-500 font-bold">
+                        R$ {sale.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      </TableCell>
                       <TableCell className="text-primary font-semibold">{marginPercent}%</TableCell>
                       <TableCell>
                         <StatusBadge variant={p.status === "Ativo" ? "success" : "muted"}>
@@ -750,9 +865,9 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                       </TableCell>
                       <TableCell className="text-right space-x-1 whitespace-nowrap">
                         {p.source_url && (
-                          <a 
-                            href={p.source_url} 
-                            target="_blank" 
+                          <a
+                            href={p.source_url}
+                            target="_blank"
                             rel="noopener noreferrer"
                             className="inline-flex items-center justify-center h-8 w-8 rounded-md border hover:bg-muted"
                             title="Ver link original no Fornecedor"
@@ -761,9 +876,9 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                           </a>
                         )}
                         {p.source_url && (
-                          <Button 
-                            size="icon" 
-                            variant="outline" 
+                          <Button
+                            size="icon"
+                            variant="outline"
                             onClick={() => enrichMutation.mutate(p)}
                             disabled={enrichMutation.isPending}
                             title="Enriquecer e Sincronizar com Fornecedor"
@@ -776,29 +891,33 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                             )}
                           </Button>
                         )}
-                        <Button 
-                          size="icon" 
-                          variant="outline" 
+                        <Button
+                          size="icon"
+                          variant="outline"
                           onClick={() => handleEditClick(p)}
                           title="Editar Informações CRM"
                           className="h-8 w-8 text-primary hover:bg-primary/10 border-primary/20"
                         >
                           <Edit3 className="h-4 w-4" />
                         </Button>
-                        <Button 
-                          size="icon" 
-                          variant="outline" 
+                        <Button
+                          size="icon"
+                          variant="outline"
                           onClick={() => setMarketplaceModalProduct(p)}
                           title="Gerar Anúncios de Marketplace com Variações"
                           className="h-8 w-8 text-rose-500 hover:bg-rose-500/10 border-rose-500/20"
                         >
                           <ShoppingCart className="h-4 w-4" />
                         </Button>
-                        <Button 
-                          size="icon" 
-                          variant="outline" 
+                        <Button
+                          size="icon"
+                          variant="outline"
                           onClick={() => {
-                            if (window.confirm("Desvincular o produto do fornecedor? Ele continuará no CRM, mas não receberá mais atualizações de custo.")) {
+                            if (
+                              window.confirm(
+                                "Desvincular o produto do fornecedor? Ele continuará no CRM, mas não receberá mais atualizações de custo.",
+                              )
+                            ) {
                               unlinkMutation.mutate(p.id);
                             }
                           }}
@@ -808,11 +927,15 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                         >
                           <Link2Off className="h-4 w-4" />
                         </Button>
-                        <Button 
-                          size="icon" 
-                          variant="outline" 
+                        <Button
+                          size="icon"
+                          variant="outline"
                           onClick={() => {
-                            if (window.confirm("Tem certeza que deseja deletar este produto do catálogo do CRM? Esta ação não pode ser desfeita.")) {
+                            if (
+                              window.confirm(
+                                "Tem certeza que deseja deletar este produto do catálogo do CRM? Esta ação não pode ser desfeita.",
+                              )
+                            ) {
                               deleteMutation.mutate(p.id);
                             }
                           }}
@@ -834,7 +957,8 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
             <PackageX className="h-12 w-12 text-muted-foreground/30 mb-4 animate-bounce" />
             <h4 className="font-semibold text-base">Nenhum Produto Importado</h4>
             <p className="text-sm max-w-sm mt-1">
-              Você ainda não importou produtos de fornecedores gráficos. Acesse a aba "Importar por Link" para cadastrar seu primeiro produto!
+              Você ainda não importou produtos de fornecedores gráficos. Acesse a aba "Importar por
+              Link" para cadastrar seu primeiro produto!
             </p>
           </div>
         )}
@@ -849,7 +973,8 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
               Editor de Produto CRM Completo
             </DialogTitle>
             <DialogDescription>
-              Ajuste detalhadamente os dados comerciais, mídias, especificações e acabamentos importados do fornecedor.
+              Ajuste detalhadamente os dados comerciais, mídias, especificações e acabamentos
+              importados do fornecedor.
             </DialogDescription>
           </DialogHeader>
 
@@ -866,37 +991,37 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
             <TabsContent value="geral" className="space-y-4 pt-1">
               <div className="space-y-1.5">
                 <Label htmlFor="edit-name">Nome do Produto no CRM</Label>
-                <Input 
-                  id="edit-name" 
-                  value={editName} 
-                  onChange={(e) => setEditName(e.target.value)} 
+                <Input
+                  id="edit-name"
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
                   placeholder="Nome comercial do produto"
                 />
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="edit-sku">SKU Fornecedor</Label>
-                  <Input 
-                    id="edit-sku" 
-                    value={editSku} 
-                    onChange={(e) => setEditSku(e.target.value)} 
+                  <Input
+                    id="edit-sku"
+                    value={editSku}
+                    onChange={(e) => setEditSku(e.target.value)}
                     placeholder="Código do produto"
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="edit-category">Categoria</Label>
-                  <Input 
-                    id="edit-category" 
-                    value={editCategory} 
-                    onChange={(e) => setEditCategory(e.target.value)} 
+                  <Input
+                    id="edit-category"
+                    value={editCategory}
+                    onChange={(e) => setEditCategory(e.target.value)}
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="edit-subcategory">Subcategoria</Label>
-                  <Input 
-                    id="edit-subcategory" 
-                    value={editSubcategory} 
-                    onChange={(e) => setEditSubcategory(e.target.value)} 
+                  <Input
+                    id="edit-subcategory"
+                    value={editSubcategory}
+                    onChange={(e) => setEditSubcategory(e.target.value)}
                   />
                 </div>
               </div>
@@ -904,16 +1029,16 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                 <div className="space-y-1.5 col-span-2">
                   <Label htmlFor="edit-source-url">Link de Origem no Fornecedor</Label>
                   <div className="flex gap-2">
-                    <Input 
-                      id="edit-source-url" 
-                      value={editingProduct?.source_url || "Sem link original"} 
-                      disabled 
-                      className="bg-muted text-muted-foreground font-mono text-xs flex-1 truncate" 
+                    <Input
+                      id="edit-source-url"
+                      value={editingProduct?.source_url || "Sem link original"}
+                      disabled
+                      className="bg-muted text-muted-foreground font-mono text-xs flex-1 truncate"
                     />
                     {editingProduct?.source_url && (
-                      <a 
-                        href={editingProduct.source_url} 
-                        target="_blank" 
+                      <a
+                        href={editingProduct.source_url}
+                        target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center justify-center px-3 rounded-md border bg-card hover:bg-muted text-xs font-semibold gap-1"
                       >
@@ -924,19 +1049,19 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="edit-deadline">Prazo Médio Produção</Label>
-                  <Input 
-                    id="edit-deadline" 
-                    value={editDeadline} 
-                    onChange={(e) => setEditDeadline(e.target.value)} 
+                  <Input
+                    id="edit-deadline"
+                    value={editDeadline}
+                    onChange={(e) => setEditDeadline(e.target.value)}
                   />
                 </div>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="edit-desc">Descrição Rica / Detalhes de Impressão</Label>
-                <Textarea 
-                  id="edit-desc" 
-                  value={editDescription} 
-                  onChange={(e) => setEditDescription(e.target.value)} 
+                <Textarea
+                  id="edit-desc"
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
                   rows={5}
                   placeholder="Instruções de gabarito, tipo de papel, acabamento incluso e restrições de montagem da arte..."
                 />
@@ -948,27 +1073,30 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
               <div className="grid grid-cols-2 gap-3 p-3 bg-muted/40 rounded-lg border">
                 <div className="space-y-1.5">
                   <Label htmlFor="edit-cost">Custo Base de Fábrica (R$)</Label>
-                  <Input 
-                    id="edit-cost" 
-                    type="number" 
+                  <Input
+                    id="edit-cost"
+                    type="number"
                     step="0.01"
-                    value={editCost} 
-                    onChange={(e) => setEditCost(parseFloat(e.target.value) || 0)} 
+                    value={editCost}
+                    onChange={(e) => setEditCost(parseFloat(e.target.value) || 0)}
                   />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="edit-margin">Margem Geral Sugerida (%)</Label>
-                  <Input 
-                    id="edit-margin" 
-                    type="number" 
-                    value={editMargin} 
-                    onChange={(e) => setEditMargin(parseInt(e.target.value) || 0)} 
+                  <Input
+                    id="edit-margin"
+                    type="number"
+                    value={editMargin}
+                    onChange={(e) => setEditMargin(parseInt(e.target.value) || 0)}
                   />
                 </div>
                 <div className="col-span-2 pt-1 text-xs text-muted-foreground flex justify-between font-semibold">
                   <span>Preço Unitário Geral Estimado:</span>
                   <span className="text-emerald-500 font-bold text-sm">
-                    R$ {(editCost * (1 + editMargin / 100)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    R${" "}
+                    {(editCost * (1 + editMargin / 100)).toLocaleString("pt-BR", {
+                      minimumFractionDigits: 2,
+                    })}
                   </span>
                 </div>
               </div>
@@ -976,21 +1104,30 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
               {/* Tabela de Preços por Quantidade */}
               <div className="space-y-2 pt-2">
                 <div className="flex items-center justify-between">
-                  <Label className="font-semibold text-sm">Preços por Tiragem (Grade de Quantidades)</Label>
+                  <Label className="font-semibold text-sm">
+                    Preços por Tiragem (Grade de Quantidades)
+                  </Label>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      const newQty = editQuantityPrices.length > 0 
-                        ? editQuantityPrices[editQuantityPrices.length - 1].quantity * 2 
-                        : 100;
+                      const newQty =
+                        editQuantityPrices.length > 0
+                          ? editQuantityPrices[editQuantityPrices.length - 1].quantity * 2
+                          : 100;
                       const newCost = editCost;
                       const factor = 1 + editMargin / 100;
                       const newSell = parseFloat((newCost * factor).toFixed(2));
                       setEditQuantityPrices([
                         ...editQuantityPrices,
-                        { quantity: newQty, price: newCost, unitPrice: newCost / newQty, sellPrice: newSell, unitSellPrice: newSell / newQty }
+                        {
+                          quantity: newQty,
+                          price: newCost,
+                          unitPrice: newCost / newQty,
+                          sellPrice: newSell,
+                          unitSellPrice: newSell / newQty,
+                        },
                       ]);
                     }}
                     className="text-xs flex items-center gap-1 h-8"
@@ -1025,7 +1162,8 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                                   ...updated[idx],
                                   quantity: val,
                                   unitPrice: qp.price / val,
-                                  unitSellPrice: (qp.sellPrice || (qp.price * (1 + editMargin / 100))) / val
+                                  unitSellPrice:
+                                    (qp.sellPrice || qp.price * (1 + editMargin / 100)) / val,
                                 };
                                 setEditQuantityPrices(updated);
                               }}
@@ -1039,14 +1177,16 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                               value={qp.price}
                               onChange={(e) => {
                                 const val = parseFloat(e.target.value) || 0;
-                                const sellVal = parseFloat((val * (1 + editMargin / 100)).toFixed(2));
+                                const sellVal = parseFloat(
+                                  (val * (1 + editMargin / 100)).toFixed(2),
+                                );
                                 const updated = [...editQuantityPrices];
                                 updated[idx] = {
                                   ...updated[idx],
                                   price: val,
                                   unitPrice: val / qp.quantity,
                                   sellPrice: sellVal,
-                                  unitSellPrice: sellVal / qp.quantity
+                                  unitSellPrice: sellVal / qp.quantity,
                                 };
                                 setEditQuantityPrices(updated);
                               }}
@@ -1054,20 +1194,26 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                             />
                           </TableCell>
                           <TableCell className="text-[10px] text-muted-foreground font-mono">
-                            R$ {(qp.price / qp.quantity || 0).toLocaleString("pt-BR", { minimumFractionDigits: 4 })}
+                            R${" "}
+                            {(qp.price / qp.quantity || 0).toLocaleString("pt-BR", {
+                              minimumFractionDigits: 4,
+                            })}
                           </TableCell>
                           <TableCell>
                             <Input
                               type="number"
                               step="0.01"
-                              value={qp.sellPrice || parseFloat((qp.price * (1 + editMargin / 100)).toFixed(2))}
+                              value={
+                                qp.sellPrice ||
+                                parseFloat((qp.price * (1 + editMargin / 100)).toFixed(2))
+                              }
                               onChange={(e) => {
                                 const val = parseFloat(e.target.value) || 0;
                                 const updated = [...editQuantityPrices];
                                 updated[idx] = {
                                   ...updated[idx],
                                   sellPrice: val,
-                                  unitSellPrice: val / qp.quantity
+                                  unitSellPrice: val / qp.quantity,
                                 };
                                 setEditQuantityPrices(updated);
                               }}
@@ -1075,7 +1221,10 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                             />
                           </TableCell>
                           <TableCell className="text-[10px] text-emerald-500 font-mono">
-                            R$ {((qp.sellPrice || (qp.price * (1 + editMargin / 100))) / qp.quantity || 0).toLocaleString("pt-BR", { minimumFractionDigits: 4 })}
+                            R${" "}
+                            {(
+                              (qp.sellPrice || qp.price * (1 + editMargin / 100)) / qp.quantity || 0
+                            ).toLocaleString("pt-BR", { minimumFractionDigits: 4 })}
                           </TableCell>
                           <TableCell>
                             <Button
@@ -1103,16 +1252,20 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
               <div className="space-y-1.5">
                 <Label htmlFor="edit-main-img">URL da Imagem Principal (Capa)</Label>
                 <div className="flex gap-2">
-                  <Input 
-                    id="edit-main-img" 
-                    value={editMainImageUrl} 
-                    onChange={(e) => setEditMainImageUrl(e.target.value)} 
+                  <Input
+                    id="edit-main-img"
+                    value={editMainImageUrl}
+                    onChange={(e) => setEditMainImageUrl(e.target.value)}
                     placeholder="Cole o link da foto de capa"
-                    className="flex-1 font-mono text-xs" 
+                    className="flex-1 font-mono text-xs"
                   />
                   {editMainImageUrl && (
                     <div className="h-10 w-10 border rounded bg-muted overflow-hidden flex-shrink-0 flex items-center justify-center">
-                      <img src={editMainImageUrl} alt="Preview" className="object-cover h-full w-full" />
+                      <img
+                        src={editMainImageUrl}
+                        alt="Preview"
+                        className="object-cover h-full w-full"
+                      />
                     </div>
                   )}
                 </div>
@@ -1122,10 +1275,10 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
               <div className="space-y-2">
                 <Label className="font-semibold text-sm">Fotos do Carrossel de Galeria</Label>
                 <div className="flex gap-2">
-                  <Input 
-                    placeholder="URL de foto adicional..." 
-                    value={newGalleryUrl} 
-                    onChange={(e) => setNewGalleryUrl(e.target.value)} 
+                  <Input
+                    placeholder="URL de foto adicional..."
+                    value={newGalleryUrl}
+                    onChange={(e) => setNewGalleryUrl(e.target.value)}
                     className="flex-1 font-mono text-xs"
                   />
                   <Button
@@ -1147,8 +1300,15 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                 <div className="grid grid-cols-4 gap-2 pt-2 max-h-[220px] overflow-y-auto border p-2 rounded-lg bg-muted/20">
                   {editGalleryImages.length > 0 ? (
                     editGalleryImages.map((img, idx) => (
-                      <div key={idx} className="relative group border rounded-lg bg-card overflow-hidden h-24 flex items-center justify-center">
-                        <img src={img} alt={`Galeria ${idx}`} className="object-cover h-full w-full" />
+                      <div
+                        key={idx}
+                        className="relative group border rounded-lg bg-card overflow-hidden h-24 flex items-center justify-center"
+                      >
+                        <img
+                          src={img}
+                          alt={`Galeria ${idx}`}
+                          className="object-cover h-full w-full"
+                        />
                         <Button
                           size="icon"
                           variant="destructive"
@@ -1174,19 +1334,21 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
             <TabsContent value="especificacoes" className="space-y-4 pt-1">
               {/* Grade Especificações */}
               <div className="space-y-2">
-                <Label className="font-semibold text-sm">Especificações Técnicas de Impressão (Ficha Técnica)</Label>
+                <Label className="font-semibold text-sm">
+                  Especificações Técnicas de Impressão (Ficha Técnica)
+                </Label>
                 <div className="flex gap-2">
-                  <Input 
-                    placeholder="Chave (Ex: Acabamento)" 
-                    value={newSpecKey} 
-                    onChange={(e) => setNewSpecKey(e.target.value)} 
-                    className="w-1/3" 
+                  <Input
+                    placeholder="Chave (Ex: Acabamento)"
+                    value={newSpecKey}
+                    onChange={(e) => setNewSpecKey(e.target.value)}
+                    className="w-1/3"
                   />
-                  <Input 
-                    placeholder="Valor (Ex: Verniz UV Total)" 
-                    value={newSpecVal} 
-                    onChange={(e) => setNewSpecVal(e.target.value)} 
-                    className="flex-1" 
+                  <Input
+                    placeholder="Valor (Ex: Verniz UV Total)"
+                    value={newSpecVal}
+                    onChange={(e) => setNewSpecVal(e.target.value)}
+                    className="flex-1"
                   />
                   <Button
                     type="button"
@@ -1195,7 +1357,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                       if (newSpecKey.trim() && newSpecVal.trim()) {
                         setEditSpecifications({
                           ...editSpecifications,
-                          [newSpecKey.trim()]: newSpecVal.trim()
+                          [newSpecKey.trim()]: newSpecVal.trim(),
                         });
                         setNewSpecKey("");
                         setNewSpecVal("");
@@ -1226,7 +1388,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                               onChange={(e) => {
                                 setEditSpecifications({
                                   ...editSpecifications,
-                                  [key]: e.target.value
+                                  [key]: e.target.value,
                                 });
                               }}
                               className="h-7 text-xs p-1"
@@ -1255,29 +1417,34 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
 
               {/* Grade Variações */}
               <div className="space-y-2 border-t pt-4">
-                <Label className="font-semibold text-sm">Opções e Variações de Compras (Marketplace)</Label>
+                <Label className="font-semibold text-sm">
+                  Opções e Variações de Compras (Marketplace)
+                </Label>
                 <div className="flex gap-2">
-                  <Input 
-                    placeholder="Variação (Ex: Cores)" 
-                    value={newVarName} 
-                    onChange={(e) => setNewVarName(e.target.value)} 
-                    className="w-1/3" 
+                  <Input
+                    placeholder="Variação (Ex: Cores)"
+                    value={newVarName}
+                    onChange={(e) => setNewVarName(e.target.value)}
+                    className="w-1/3"
                   />
-                  <Input 
-                    placeholder="Valores (Ex: 4x0, 4x4 - separado por vírgula)" 
-                    value={newVarValues} 
-                    onChange={(e) => setNewVarValues(e.target.value)} 
-                    className="flex-1" 
+                  <Input
+                    placeholder="Valores (Ex: 4x0, 4x4 - separado por vírgula)"
+                    value={newVarValues}
+                    onChange={(e) => setNewVarValues(e.target.value)}
+                    className="flex-1"
                   />
                   <Button
                     type="button"
                     variant="outline"
                     onClick={() => {
                       if (newVarName.trim() && newVarValues.trim()) {
-                        const valuesArray = newVarValues.split(",").map(v => v.trim()).filter(v => v !== "");
+                        const valuesArray = newVarValues
+                          .split(",")
+                          .map((v) => v.trim())
+                          .filter((v) => v !== "");
                         setEditVariations([
                           ...editVariations,
-                          { name: newVarName.trim(), values: valuesArray }
+                          { name: newVarName.trim(), values: valuesArray },
                         ]);
                         setNewVarName("");
                         setNewVarValues("");
@@ -1304,7 +1471,11 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                           <TableCell className="font-semibold text-xs">{v.name}</TableCell>
                           <TableCell className="text-xs">
                             {v.values.map((val, i) => (
-                              <StatusBadge key={i} variant="muted" className="mr-1 mb-1 text-[10px]">
+                              <StatusBadge
+                                key={i}
+                                variant="muted"
+                                className="mr-1 mb-1 text-[10px]"
+                              >
                                 {val}
                               </StatusBadge>
                             ))}
@@ -1333,21 +1504,23 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
             <TabsContent value="acabamentos" className="space-y-4 pt-1">
               {/* Acabamentos extras */}
               <div className="space-y-2">
-                <Label className="font-semibold text-sm">Acabamentos Especiais Opcionais (Com Custo Adicional)</Label>
+                <Label className="font-semibold text-sm">
+                  Acabamentos Especiais Opcionais (Com Custo Adicional)
+                </Label>
                 <div className="flex gap-2">
-                  <Input 
-                    placeholder="Serviço (Ex: Furo Central)" 
-                    value={newExtraName} 
-                    onChange={(e) => setNewExtraName(e.target.value)} 
-                    className="flex-1" 
+                  <Input
+                    placeholder="Serviço (Ex: Furo Central)"
+                    value={newExtraName}
+                    onChange={(e) => setNewExtraName(e.target.value)}
+                    className="flex-1"
                   />
-                  <Input 
-                    placeholder="Custo (R$)" 
-                    type="number" 
-                    step="0.01" 
-                    value={newExtraPrice || ""} 
-                    onChange={(e) => setNewExtraPrice(parseFloat(e.target.value) || 0)} 
-                    className="w-1/4" 
+                  <Input
+                    placeholder="Custo (R$)"
+                    type="number"
+                    step="0.01"
+                    value={newExtraPrice || ""}
+                    onChange={(e) => setNewExtraPrice(parseFloat(e.target.value) || 0)}
+                    className="w-1/4"
                   />
                   <Button
                     type="button"
@@ -1356,7 +1529,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                       if (newExtraName.trim()) {
                         setEditExtraServices([
                           ...editExtraServices,
-                          { name: newExtraName.trim(), price: newExtraPrice }
+                          { name: newExtraName.trim(), price: newExtraPrice },
                         ]);
                         setNewExtraName("");
                         setNewExtraPrice(0);
@@ -1405,19 +1578,21 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
 
               {/* Gabaritos */}
               <div className="space-y-2 border-t pt-4">
-                <Label className="font-semibold text-sm">Arquivos de Gabarito Técnico (Downloads)</Label>
+                <Label className="font-semibold text-sm">
+                  Arquivos de Gabarito Técnico (Downloads)
+                </Label>
                 <div className="flex gap-2">
-                  <Input 
-                    placeholder="Nome (Ex: CorelDraw)" 
-                    value={newTemplateName} 
-                    onChange={(e) => setNewTemplateName(e.target.value)} 
-                    className="w-1/3" 
+                  <Input
+                    placeholder="Nome (Ex: CorelDraw)"
+                    value={newTemplateName}
+                    onChange={(e) => setNewTemplateName(e.target.value)}
+                    className="w-1/3"
                   />
-                  <Input 
-                    placeholder="URL de download do arquivo" 
-                    value={newTemplateUrl} 
-                    onChange={(e) => setNewTemplateUrl(e.target.value)} 
-                    className="flex-1 font-mono text-xs" 
+                  <Input
+                    placeholder="URL de download do arquivo"
+                    value={newTemplateUrl}
+                    onChange={(e) => setNewTemplateUrl(e.target.value)}
+                    className="flex-1 font-mono text-xs"
                   />
                   <Button
                     type="button"
@@ -1426,7 +1601,7 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                       if (newTemplateName.trim() && newTemplateUrl.trim()) {
                         setEditTemplateLinks([
                           ...editTemplateLinks,
-                          { name: newTemplateName.trim(), url: newTemplateUrl.trim() }
+                          { name: newTemplateName.trim(), url: newTemplateUrl.trim() },
                         ]);
                         setNewTemplateName("");
                         setNewTemplateUrl("");
@@ -1451,7 +1626,12 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
                       {editTemplateLinks.map((tl, idx) => (
                         <TableRow key={idx}>
                           <TableCell className="font-semibold text-xs">{tl.name}</TableCell>
-                          <TableCell className="text-xs truncate max-w-sm font-mono text-muted-foreground" title={tl.url}>{tl.url}</TableCell>
+                          <TableCell
+                            className="text-xs truncate max-w-sm font-mono text-muted-foreground"
+                            title={tl.url}
+                          >
+                            {tl.url}
+                          </TableCell>
                           <TableCell>
                             <Button
                               size="icon"
@@ -1474,11 +1654,24 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
           </Tabs>
 
           <DialogFooter className="mt-6 border-t pt-3 flex sm:justify-between items-center">
-            <span className="text-[10px] text-muted-foreground italic hidden sm:inline">ID CRM: {editingProduct?.id}</span>
+            <span className="text-[10px] text-muted-foreground italic hidden sm:inline">
+              ID CRM: {editingProduct?.id}
+            </span>
             <div className="flex gap-2 w-full sm:w-auto justify-end">
-              <Button variant="outline" size="sm" onClick={() => setOpenEditModal(false)}>Cancelar</Button>
-              <Button size="sm" disabled={updateProductMutation.isPending} onClick={() => updateProductMutation.mutate()}>
-                {updateProductMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4 mr-1.5" />} Salvar Alterações
+              <Button variant="outline" size="sm" onClick={() => setOpenEditModal(false)}>
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                disabled={updateProductMutation.isPending}
+                onClick={() => updateProductMutation.mutate()}
+              >
+                {updateProductMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4 mr-1.5" />
+                )}{" "}
+                Salvar Alterações
               </Button>
             </div>
           </DialogFooter>
@@ -1494,47 +1687,85 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
               Edição em Massa
             </DialogTitle>
             <DialogDescription>
-              Aplique alterações a <strong>{selectedIds.size}</strong> produto(s) selecionado(s). Marque apenas os campos que deseja sobrescrever — os demais permanecem intactos.
+              Aplique alterações a <strong>{selectedIds.size}</strong> produto(s) selecionado(s).
+              Marque apenas os campos que deseja sobrescrever — os demais permanecem intactos.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3 py-2">
             {/* Categoria */}
             <div className="flex items-center gap-3 rounded-md border p-3">
-              <Checkbox checked={bulkApplyCategory} onCheckedChange={(v) => setBulkApplyCategory(!!v)} />
+              <Checkbox
+                checked={bulkApplyCategory}
+                onCheckedChange={(v) => setBulkApplyCategory(!!v)}
+              />
               <Label className="w-28 shrink-0 text-sm">Categoria</Label>
-              <Input value={bulkCategory} onChange={(e) => setBulkCategory(e.target.value)} disabled={!bulkApplyCategory} className="h-8" />
+              <Input
+                value={bulkCategory}
+                onChange={(e) => setBulkCategory(e.target.value)}
+                disabled={!bulkApplyCategory}
+                className="h-8"
+              />
             </div>
 
             {/* Subcategoria */}
             <div className="flex items-center gap-3 rounded-md border p-3">
-              <Checkbox checked={bulkApplySubcategory} onCheckedChange={(v) => setBulkApplySubcategory(!!v)} />
+              <Checkbox
+                checked={bulkApplySubcategory}
+                onCheckedChange={(v) => setBulkApplySubcategory(!!v)}
+              />
               <Label className="w-28 shrink-0 text-sm">Subcategoria</Label>
-              <Input value={bulkSubcategory} onChange={(e) => setBulkSubcategory(e.target.value)} disabled={!bulkApplySubcategory} className="h-8" />
+              <Input
+                value={bulkSubcategory}
+                onChange={(e) => setBulkSubcategory(e.target.value)}
+                disabled={!bulkApplySubcategory}
+                className="h-8"
+              />
             </div>
 
             {/* Margem */}
             <div className="flex items-center gap-3 rounded-md border p-3">
-              <Checkbox checked={bulkApplyMargin} onCheckedChange={(v) => setBulkApplyMargin(!!v)} />
+              <Checkbox
+                checked={bulkApplyMargin}
+                onCheckedChange={(v) => setBulkApplyMargin(!!v)}
+              />
               <Label className="w-28 shrink-0 text-sm">Margem (%)</Label>
-              <Input type="number" value={bulkMargin} onChange={(e) => setBulkMargin(parseInt(e.target.value) || 0)} disabled={!bulkApplyMargin} className="h-8" />
+              <Input
+                type="number"
+                value={bulkMargin}
+                onChange={(e) => setBulkMargin(parseInt(e.target.value) || 0)}
+                disabled={!bulkApplyMargin}
+                className="h-8"
+              />
             </div>
             {bulkApplyMargin && (
               <p className="text-[11px] text-muted-foreground -mt-1 pl-3">
-                O preço de venda de cada produto será recalculado a partir do seu próprio custo base.
+                O preço de venda de cada produto será recalculado a partir do seu próprio custo
+                base.
               </p>
             )}
 
             {/* Prazo */}
             <div className="flex items-center gap-3 rounded-md border p-3">
-              <Checkbox checked={bulkApplyDeadline} onCheckedChange={(v) => setBulkApplyDeadline(!!v)} />
+              <Checkbox
+                checked={bulkApplyDeadline}
+                onCheckedChange={(v) => setBulkApplyDeadline(!!v)}
+              />
               <Label className="w-28 shrink-0 text-sm">Prazo produção</Label>
-              <Input value={bulkDeadline} onChange={(e) => setBulkDeadline(e.target.value)} disabled={!bulkApplyDeadline} className="h-8" />
+              <Input
+                value={bulkDeadline}
+                onChange={(e) => setBulkDeadline(e.target.value)}
+                disabled={!bulkApplyDeadline}
+                className="h-8"
+              />
             </div>
 
             {/* Status */}
             <div className="flex items-center gap-3 rounded-md border p-3">
-              <Checkbox checked={bulkApplyStatus} onCheckedChange={(v) => setBulkApplyStatus(!!v)} />
+              <Checkbox
+                checked={bulkApplyStatus}
+                onCheckedChange={(v) => setBulkApplyStatus(!!v)}
+              />
               <Label className="w-28 shrink-0 text-sm">Status</Label>
               <select
                 value={bulkStatus}
@@ -1550,16 +1781,28 @@ export function ProdutosImportados({ onNavigateToDrafts }: ProdutosImportadosPro
           </div>
 
           <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setOpenBulkEditModal(false)}>Cancelar</Button>
+            <Button variant="outline" size="sm" onClick={() => setOpenBulkEditModal(false)}>
+              Cancelar
+            </Button>
             <Button
               size="sm"
               disabled={
                 bulkEditMutation.isPending ||
-                !(bulkApplyCategory || bulkApplySubcategory || bulkApplyMargin || bulkApplyDeadline || bulkApplyStatus)
+                !(
+                  bulkApplyCategory ||
+                  bulkApplySubcategory ||
+                  bulkApplyMargin ||
+                  bulkApplyDeadline ||
+                  bulkApplyStatus
+                )
               }
               onClick={() => bulkEditMutation.mutate(selectedProducts)}
             >
-              {bulkEditMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : <Save className="h-4 w-4 mr-1.5" />}
+              {bulkEditMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-1.5" />
+              ) : (
+                <Save className="h-4 w-4 mr-1.5" />
+              )}
               Aplicar a {selectedIds.size} produto(s)
             </Button>
           </DialogFooter>

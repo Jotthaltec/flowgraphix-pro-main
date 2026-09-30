@@ -50,9 +50,7 @@ function findBreadcrumb(nodes: any[]): string[] {
   const bc = nodes.find((n) => typesOf(n).includes("breadcrumblist"));
   const items: any[] = bc?.itemListElement;
   if (!Array.isArray(items)) return [];
-  return items
-    .map((el) => cleanText(el?.name || el?.item?.name || ""))
-    .filter(Boolean);
+  return items.map((el) => cleanText(el?.name || el?.item?.name || "")).filter(Boolean);
 }
 
 /** Normaliza `image` (string | array | {url}) numa lista de URLs. */

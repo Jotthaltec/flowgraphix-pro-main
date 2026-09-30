@@ -73,9 +73,20 @@ function buildDeliverySnapshot(
     snapshot: {
       receiving_mode,
       recipient: company?.delivery_recipient || company?.name || null,
-      zip: (sameAsFiscal ? company?.zip_code : company?.delivery_zip) || company?.delivery_zip || company?.zip_code || null,
-      address: (sameAsFiscal ? company?.address : company?.delivery_address) || company?.delivery_address || company?.address || null,
-      number: (sameAsFiscal ? company?.address_number : company?.delivery_number) || company?.delivery_number || null,
+      zip:
+        (sameAsFiscal ? company?.zip_code : company?.delivery_zip) ||
+        company?.delivery_zip ||
+        company?.zip_code ||
+        null,
+      address:
+        (sameAsFiscal ? company?.address : company?.delivery_address) ||
+        company?.delivery_address ||
+        company?.address ||
+        null,
+      number:
+        (sameAsFiscal ? company?.address_number : company?.delivery_number) ||
+        company?.delivery_number ||
+        null,
       complement: (sameAsFiscal ? company?.complement : company?.delivery_complement) || null,
       neighborhood: (sameAsFiscal ? company?.neighborhood : company?.delivery_neighborhood) || null,
       city: company?.delivery_city || null,
@@ -121,7 +132,9 @@ export async function createPurchaseOrdersForOrder(params: {
   }
 
   // Dados dos produtos (source_url/supplier_sku) para a compra assistida.
-  const productIds = [...new Set(supplierItems.map((it) => it.product_service_id).filter(Boolean))] as string[];
+  const productIds = [
+    ...new Set(supplierItems.map((it) => it.product_service_id).filter(Boolean)),
+  ] as string[];
   const productsById: Record<string, any> = {};
   if (productIds.length) {
     const { data: prods } = await supabase
@@ -134,7 +147,11 @@ export async function createPurchaseOrdersForOrder(params: {
   }
 
   // Empresa (endereço/recebimento — Fase 1).
-  const { data: company } = await supabase.from("companies").select("*").eq("id", companyId).maybeSingle();
+  const { data: company } = await supabase
+    .from("companies")
+    .select("*")
+    .eq("id", companyId)
+    .maybeSingle();
 
   // Agrupa por fornecedor.
   const groups = new Map<string, typeof supplierItems>();
@@ -145,7 +162,9 @@ export async function createPurchaseOrdersForOrder(params: {
   }
 
   // Numeração sequencial PC-000000.
-  const { count } = await supabase.from("purchase_orders").select("*", { count: "exact", head: true });
+  const { count } = await supabase
+    .from("purchase_orders")
+    .select("*", { count: "exact", head: true });
   let seq = count || 0;
   const poIds: string[] = [];
 

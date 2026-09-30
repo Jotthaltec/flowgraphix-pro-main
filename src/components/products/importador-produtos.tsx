@@ -29,9 +29,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Progress } from "@/components/ui/progress";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { StatusBadge } from "@/components/status-badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   Accordion,
   AccordionContent,
@@ -40,9 +53,17 @@ import {
 } from "@/components/ui/accordion";
 
 import { supabase } from "@/integrations/supabase/client";
-import { analyzeSupplierLink, discoverCatalogLinks, scanProductVariants } from "@/integrations/supabase/importer-actions";
+import {
+  analyzeSupplierLink,
+  discoverCatalogLinks,
+  scanProductVariants,
+} from "@/integrations/supabase/importer-actions";
 import { validateImportUrl, parseBatchUrls } from "@/services/productImporterService";
-import { persistImportedProduct, findExistingProduct, type ExistingProductMatch } from "@/lib/importer-persistence";
+import {
+  persistImportedProduct,
+  findExistingProduct,
+  type ExistingProductMatch,
+} from "@/lib/importer-persistence";
 import { generateCommercialProducts } from "@/integrations/supabase/combination-client";
 import {
   createCatalogJob,
@@ -96,7 +117,12 @@ interface QueueItem {
   /** Produto gravado no Flow (public.products.id). */
   productId?: string | null;
   /** Resultado confirmado pelo banco da última publicação na loja. */
-  publication?: { slug: string | null; action?: string; counts?: PublishCounts; warnings: string[] };
+  publication?: {
+    slug: string | null;
+    action?: string;
+    counts?: PublishCounts;
+    warnings: string[];
+  };
 }
 
 interface ImporterOptions {
@@ -131,8 +157,7 @@ const DEFAULT_OPTIONS: ImporterOptions = {
 const LOJA_URL = import.meta.env.VITE_LOJA_URL ?? "http://localhost:3000";
 
 const SLEEP = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const fmtBRL = (n: number) =>
-  n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const fmtBRL = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
 let seq = 0;
 const nextId = () => `q${++seq}-${Date.now()}`;
@@ -175,7 +200,11 @@ export function ImportadorProdutos() {
     const v = validateImportUrl(item.url);
     if (!v.ok) {
       patch(item.id, { status: "bloqueado", error: v.reason });
-      if (item.dbId) await updateImportItem(item.dbId, { status: "bloqueado", errors: [v.reason || "URL inválida"] });
+      if (item.dbId)
+        await updateImportItem(item.dbId, {
+          status: "bloqueado",
+          errors: [v.reason || "URL inválida"],
+        });
       return;
     }
     const res = options.scanVariants
@@ -187,7 +216,9 @@ export function ImportadorProdutos() {
       return;
     }
     const product = res.product;
-    const status: ImportItemStatus = product.classification.review_required ? "revisao_necessaria" : "extraido";
+    const status: ImportItemStatus = product.classification.review_required
+      ? "revisao_necessaria"
+      : "extraido";
     // Reconhece se o produto já existe na base (evita duplicar; permite atualizar).
     let existing: ExistingProductMatch | null = null;
     if (profile?.company_id) {
@@ -206,7 +237,12 @@ export function ImportadorProdutos() {
       editCategory: product.classification.category,
       editSubcategory: product.classification.subcategory,
     });
-    if (item.dbId) await updateImportItem(item.dbId, { status, normalized_data: product, errors: product.errors });
+    if (item.dbId)
+      await updateImportItem(item.dbId, {
+        status,
+        normalized_data: product,
+        errors: product.errors,
+      });
   }
 
   /**
@@ -264,7 +300,12 @@ export function ImportadorProdutos() {
         }));
         toast.info("Fila salva — a importação pode ser retomada se você sair da página.");
       } else {
-        items = disc.links.map((url) => ({ id: nextId(), url, status: "pendente" as ImportItemStatus, selected: false }));
+        items = disc.links.map((url) => ({
+          id: nextId(),
+          url,
+          status: "pendente" as ImportItemStatus,
+          selected: false,
+        }));
       }
       setCurrentJobId(jobId);
       setQueue(items);
@@ -278,9 +319,16 @@ export function ImportadorProdutos() {
     if (mode === "batch") urls = parseBatchUrls(batchText);
     if (!urls.length) return toast.error("Informe ao menos um link válido.");
 
-    const created = mode === "batch" ? await createImportJob(profile.company_id, "batch", null, urls) : null;
+    const created =
+      mode === "batch" ? await createImportJob(profile.company_id, "batch", null, urls) : null;
     const items: QueueItem[] = created
-      ? created.items.map((it) => ({ id: nextId(), dbId: it.id, url: it.source_url, status: it.status, selected: false }))
+      ? created.items.map((it) => ({
+          id: nextId(),
+          dbId: it.id,
+          url: it.source_url,
+          status: it.status,
+          selected: false,
+        }))
       : urls.map((url) => ({ id: nextId(), url, status: "pendente", selected: false }));
     if (created) toast.info("Fila salva — o lote pode ser retomado se você sair da página.");
     setCurrentJobId(created?.job.id ?? null);
@@ -299,8 +347,12 @@ export function ImportadorProdutos() {
       .map((r) => r.product_id!);
     const slugs = new Map<string, string>();
     if (publishedIds.length) {
-      const { data } = await (supabase as any).from("site_products").select("crm_id,slug").in("crm_id", publishedIds);
-      for (const row of (data ?? []) as { crm_id: string; slug: string }[]) slugs.set(row.crm_id, row.slug);
+      const { data } = await (supabase as any)
+        .from("site_products")
+        .select("crm_id,slug")
+        .in("crm_id", publishedIds);
+      for (const row of (data ?? []) as { crm_id: string; slug: string }[])
+        slugs.set(row.crm_id, row.slug);
     }
     const items: QueueItem[] = rows.map((r) => ({
       id: nextId(),
@@ -308,7 +360,10 @@ export function ImportadorProdutos() {
       url: r.source_url,
       status: r.status,
       product: r.normalized_data || undefined,
-      selected: !!r.normalized_data && (r.normalized_data.errors?.length ?? 0) === 0 && !isSavedStatus(r.status),
+      selected:
+        !!r.normalized_data &&
+        (r.normalized_data.errors?.length ?? 0) === 0 &&
+        !isSavedStatus(r.status),
       editName: r.normalized_data?.original_name,
       editCategory: r.normalized_data?.classification.category,
       editSubcategory: r.normalized_data?.classification.subcategory,
@@ -361,14 +416,21 @@ export function ImportadorProdutos() {
       else tally.publishedWithWarnings++;
       patch(item.id, {
         status,
-        publication: { slug: result.slug, action: result.action, counts: result.counts, warnings: result.warnings },
+        publication: {
+          slug: result.slug,
+          action: result.action,
+          counts: result.counts,
+          warnings: result.warnings,
+        },
       });
-      if (item.dbId) await updateImportItem(item.dbId, { status, warnings: result.warnings, errors: [] });
+      if (item.dbId)
+        await updateImportItem(item.dbId, { status, warnings: result.warnings, errors: [] });
     } catch (e: any) {
       tally.failedPublish++;
       const message = e?.message || "Falha ao publicar na loja.";
       patch(item.id, { status: "erro_publicacao", error: message });
-      if (item.dbId) await updateImportItem(item.dbId, { status: "erro_publicacao", errors: [message] });
+      if (item.dbId)
+        await updateImportItem(item.dbId, { status: "erro_publicacao", errors: [message] });
     }
   }
 
@@ -422,7 +484,8 @@ export function ImportadorProdutos() {
     const savedStatus = statusAfterSave(result.action, dest);
     if (savedStatus === "rascunho") tally.drafts++;
     patch(item.id, { status: savedStatus, saved: result.action, productId: result.productId });
-    if (item.dbId) await updateImportItem(item.dbId, { status: savedStatus, product_id: result.productId });
+    if (item.dbId)
+      await updateImportItem(item.dbId, { status: savedStatus, product_id: result.productId });
 
     if (result.structuredWarnings?.length) fx.structuredWarn += result.structuredWarnings.length;
     if (result.imageCopy) {
@@ -436,7 +499,10 @@ export function ImportadorProdutos() {
       // do fornecedor) para cada produto importado/atualizado. Best-effort —
       // nunca derruba a importação nem a categorização já feita.
       try {
-        const gen = await generateCommercialProducts({ product_id: result.productId, company_id: companyId });
+        const gen = await generateCommercialProducts({
+          product_id: result.productId,
+          company_id: companyId,
+        });
         fx.combos += gen.commercial_products_created + gen.commercial_products_updated;
       } catch {
         /* segue sem as combinações; podem ser geradas depois pelo menu do produto */
@@ -481,14 +547,19 @@ export function ImportadorProdutos() {
       );
     }
     if (fx.structuredWarn > 0) {
-      toast.warning(`${fx.structuredWarn} aviso(s) ao gravar dados estruturados (variantes/atributos). Produto salvo mesmo assim.`);
+      toast.warning(
+        `${fx.structuredWarn} aviso(s) ao gravar dados estruturados (variantes/atributos). Produto salvo mesmo assim.`,
+      );
     }
   }
 
   async function finishRun() {
     setIsSaving(false);
     if (currentJobId) {
-      await updateImportJob(currentJobId, { status: "importado", finished_at: new Date().toISOString() });
+      await updateImportJob(currentJobId, {
+        status: "importado",
+        finished_at: new Date().toISOString(),
+      });
       await syncJobCounters(currentJobId);
       refreshOpenJobs();
     }
@@ -552,7 +623,9 @@ export function ImportadorProdutos() {
   // ---- Agregações para os painéis de avisos/erros --------------------------
   const stats = useMemo(() => {
     const analyzed = queue.filter((q) => q.product);
-    const warnings = analyzed.flatMap((q) => (q.product?.warnings || []).map((w) => ({ url: q.url, w })));
+    const warnings = analyzed.flatMap((q) =>
+      (q.product?.warnings || []).map((w) => ({ url: q.url, w })),
+    );
     const errors = queue
       .filter((q) => q.error)
       .map((q) => ({ url: q.url, e: q.error! }))
@@ -560,7 +633,14 @@ export function ImportadorProdutos() {
     const selectedCount = queue.filter((q) => q.selected && q.product).length;
     const reviewCount = queue.filter((q) => q.status === "revisao_necessaria").length;
     const failedCount = queue.filter((q) => isFailedStatus(q.status)).length;
-    return { analyzedCount: analyzed.length, warnings, errors, selectedCount, reviewCount, failedCount };
+    return {
+      analyzedCount: analyzed.length,
+      warnings,
+      errors,
+      selectedCount,
+      reviewCount,
+      failedCount,
+    };
   }, [queue]);
 
   return (
@@ -569,8 +649,9 @@ export function ImportadorProdutos() {
       <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
         <ShieldCheck className="h-4 w-4 text-primary shrink-0 mt-0.5" />
         <span>
-          A coleta acontece no servidor com proteção anti-SSRF e somente para domínios permitidos (FuturaIM). Nada é
-          salvo automaticamente — você revisa e aprova antes. Avaliações e dados pessoais não são importados.
+          A coleta acontece no servidor com proteção anti-SSRF e somente para domínios permitidos
+          (FuturaIM). Nada é salvo automaticamente — você revisa e aprova antes. Avaliações e dados
+          pessoais não são importados.
         </span>
       </div>
 
@@ -586,13 +667,21 @@ export function ImportadorProdutos() {
               return (
                 <div key={job.id} className="flex items-center gap-3 text-xs">
                   <span className="flex-1 truncate text-muted-foreground">
-                    {job.source_url || `Lote de ${job.total_found} link(s) · ${new Date(job.created_at).toLocaleString("pt-BR")}`}
+                    {job.source_url ||
+                      `Lote de ${job.total_found} link(s) · ${new Date(job.created_at).toLocaleString("pt-BR")}`}
                   </span>
                   <span className="text-muted-foreground">
                     {job.total_processed}/{job.total_found} processados
-                    {job.total_error > 0 && <span className="text-destructive"> · {job.total_error} com erro</span>}
+                    {job.total_error > 0 && (
+                      <span className="text-destructive"> · {job.total_error} com erro</span>
+                    )}
                   </span>
-                  <Button size="sm" variant="outline" disabled={isRunning} onClick={() => resumeJob(job)}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isRunning}
+                    onClick={() => resumeJob(job)}
+                  >
                     {pending > 0 ? `Retomar (${pending})` : "Abrir para repetir"}
                   </Button>
                 </div>
@@ -609,7 +698,9 @@ export function ImportadorProdutos() {
             <CardTitle className="text-lg flex items-center gap-2">
               <Link2 className="h-5 w-5 text-primary" /> Importar produtos
             </CardTitle>
-            <CardDescription>Cole um link, vários links ou uma página de catálogo da FuturaIM.</CardDescription>
+            <CardDescription>
+              Cole um link, vários links ou uma página de catálogo da FuturaIM.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
@@ -637,7 +728,9 @@ export function ImportadorProdutos() {
                 <Label className="text-xs">Vários links (um por linha)</Label>
                 <Textarea
                   rows={6}
-                  placeholder={"https://www.futuraim.com.br/produto/a?id=1\nhttps://www.futuraim.com.br/produto/b?id=2"}
+                  placeholder={
+                    "https://www.futuraim.com.br/produto/a?id=1\nhttps://www.futuraim.com.br/produto/b?id=2"
+                  }
                   value={batchText}
                   onChange={(e) => setBatchText(e.target.value)}
                   className="font-mono text-xs"
@@ -677,7 +770,9 @@ export function ImportadorProdutos() {
 
             {/* Opções */}
             <div className="space-y-2.5">
-              <Label className="text-xs font-semibold uppercase text-muted-foreground">Opções de importação</Label>
+              <Label className="text-xs font-semibold uppercase text-muted-foreground">
+                Opções de importação
+              </Label>
               {(
                 [
                   ["updateExisting", "Atualizar produtos já existentes"],
@@ -741,34 +836,56 @@ export function ImportadorProdutos() {
                   </span>
                 )}
                 <div className="ml-auto flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-muted-foreground">{stats.selectedCount} selecionados</span>
+                  <span className="text-xs text-muted-foreground">
+                    {stats.selectedCount} selecionados
+                  </span>
                   {stats.failedCount > 0 && (
-                    <Button size="sm" variant="outline" disabled={isSaving || isRunning} onClick={retryFailed}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={isSaving || isRunning}
+                      onClick={retryFailed}
+                    >
                       <RotateCcw className="h-4 w-4 mr-1" /> Repetir com erro ({stats.failedCount})
                     </Button>
                   )}
-                  <Select value={destination} onValueChange={(v) => setDestination(v as SaveDestination)}>
+                  <Select
+                    value={destination}
+                    onValueChange={(v) => setDestination(v as SaveDestination)}
+                  >
                     <SelectTrigger
                       className="h-9 w-[260px]"
                       aria-label="Destino dos produtos"
                       title={SAVE_DESTINATIONS.find((d) => d.value === destination)!.description}
                     >
                       {/* Só o rótulo: a descrição do item não cabe no campo fechado. */}
-                      <SelectValue>{SAVE_DESTINATIONS.find((d) => d.value === destination)!.label}</SelectValue>
+                      <SelectValue>
+                        {SAVE_DESTINATIONS.find((d) => d.value === destination)!.label}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {SAVE_DESTINATIONS.map((d) => (
                         <SelectItem key={d.value} value={d.value}>
                           <span className="flex flex-col">
                             <span>{d.label}</span>
-                            <span className="text-[11px] text-muted-foreground">{d.description}</span>
+                            <span className="text-[11px] text-muted-foreground">
+                              {d.description}
+                            </span>
                           </span>
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <Button size="sm" disabled={isSaving || stats.selectedCount === 0} onClick={saveSelected}>
-                    {isSaving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />}
+                  <Button
+                    size="sm"
+                    disabled={isSaving || stats.selectedCount === 0}
+                    onClick={saveSelected}
+                  >
+                    {isSaving ? (
+                      <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4 mr-1" />
+                    )}
                     {SAVE_DESTINATIONS.find((d) => d.value === destination)!.button}
                   </Button>
                 </div>
@@ -803,7 +920,15 @@ export function ImportadorProdutos() {
               </CardContent>
             </Card>
           ) : (
-            queue.map((item) => <PreviewCard key={item.id} item={item} margin={margin} patch={patch} setQueue={setQueue} />)
+            queue.map((item) => (
+              <PreviewCard
+                key={item.id}
+                item={item}
+                margin={margin}
+                patch={patch}
+                setQueue={setQueue}
+              />
+            ))
           )}
         </div>
       </div>
@@ -852,7 +977,11 @@ function PreviewCard({
             />
           )}
           {p?.images[0]?.url ? (
-            <img src={p.images[0].url} alt="" className="h-14 w-14 rounded-md object-cover border" />
+            <img
+              src={p.images[0].url}
+              alt=""
+              className="h-14 w-14 rounded-md object-cover border"
+            />
           ) : (
             <div className="h-14 w-14 rounded-md bg-muted flex items-center justify-center">
               <ImageIcon className="h-5 w-5 text-muted-foreground" />
@@ -861,7 +990,9 @@ function PreviewCard({
 
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <StatusBadge variant={statusVariant as any}>{IMPORT_STATUS_LABEL[item.status] ?? item.status}</StatusBadge>
+              <StatusBadge variant={statusVariant as any}>
+                {IMPORT_STATUS_LABEL[item.status] ?? item.status}
+              </StatusBadge>
               {item.publication?.slug && (
                 <a
                   href={storeProductUrl(LOJA_URL, item.publication.slug)}
@@ -926,14 +1057,19 @@ function PreviewCard({
                   </div>
                   <div>
                     <Label className="text-[10px]">Técnica</Label>
-                    <Input className="h-8 text-xs bg-muted" value={p.classification.production_sector} readOnly />
+                    <Input
+                      className="h-8 text-xs bg-muted"
+                      value={p.classification.production_sector}
+                      readOnly
+                    />
                   </div>
                 </div>
 
                 {/* Prazo: fornecedor (somente leitura) + nossos dias (editável) = total */}
                 {(() => {
                   const supplierDays = p.production_time?.production_days ?? 0;
-                  const ourDays = item.editOurProductionDays ?? p.production_time?.our_production_days ?? 0;
+                  const ourDays =
+                    item.editOurProductionDays ?? p.production_time?.our_production_days ?? 0;
                   return (
                     <div className="grid grid-cols-3 gap-2 mt-2 p-2 rounded-md bg-muted/30 border">
                       <div>
@@ -954,7 +1090,9 @@ function PreviewCard({
                           min={0}
                           className="h-8 text-xs"
                           value={ourDays}
-                          onChange={(e) => patch(item.id, { editOurProductionDays: parseInt(e.target.value) || 0 })}
+                          onChange={(e) =>
+                            patch(item.id, { editOurProductionDays: parseInt(e.target.value) || 0 })
+                          }
                         />
                       </div>
                       <div>
@@ -978,14 +1116,18 @@ function PreviewCard({
                 <Accordion type="single" collapsible className="mt-2">
                   <AccordionItem value="details" className="border rounded-md">
                     <AccordionTrigger className="px-3 py-2 text-xs">
-                      Detalhes ({tiers.length} tiragens · {p.variant_axes.length} variações · {p.extras.length} extras)
+                      Detalhes ({tiers.length} tiragens · {p.variant_axes.length} variações ·{" "}
+                      {p.extras.length} extras)
                     </AccordionTrigger>
                     <AccordionContent className="px-3 pb-3 space-y-3">
                       {/* Especificações */}
                       {p.specifications.length > 0 && (
                         <div className="flex flex-wrap gap-1">
                           {p.specifications.map((s) => (
-                            <span key={s.normalized_name} className="text-[10px] bg-muted rounded px-1.5 py-0.5">
+                            <span
+                              key={s.normalized_name}
+                              className="text-[10px] bg-muted rounded px-1.5 py-0.5"
+                            >
                               <b>{s.name}:</b> {s.value}
                             </span>
                           ))}
@@ -1001,15 +1143,21 @@ function PreviewCard({
                                 <TableHead className="text-xs">Qtd</TableHead>
                                 <TableHead className="text-xs">Custo total</TableHead>
                                 <TableHead className="text-xs">Custo unit.</TableHead>
-                                <TableHead className="text-xs text-emerald-600">Venda ({margin}%)</TableHead>
+                                <TableHead className="text-xs text-emerald-600">
+                                  Venda ({margin}%)
+                                </TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
                               {tiers.map((t, i) => (
                                 <TableRow key={i}>
-                                  <TableCell className="text-xs font-semibold">{t.quantity}</TableCell>
+                                  <TableCell className="text-xs font-semibold">
+                                    {t.quantity}
+                                  </TableCell>
                                   <TableCell className="text-xs">{fmtBRL(t.total_price)}</TableCell>
-                                  <TableCell className="text-xs text-muted-foreground">{fmtBRL(t.unit_price)}</TableCell>
+                                  <TableCell className="text-xs text-muted-foreground">
+                                    {fmtBRL(t.unit_price)}
+                                  </TableCell>
                                   <TableCell className="text-xs text-emerald-600 font-semibold">
                                     {fmtBRL(t.total_price * factor)}
                                   </TableCell>
@@ -1039,7 +1187,8 @@ function PreviewCard({
                       {/* Extras */}
                       {p.extras.length > 0 && (
                         <div className="text-[10px] text-muted-foreground">
-                          Extras: {p.extras.map((e) => `${e.name} (${fmtBRL(e.price)})`).join(" · ")}
+                          Extras:{" "}
+                          {p.extras.map((e) => `${e.name} (${fmtBRL(e.price)})`).join(" · ")}
                         </div>
                       )}
 

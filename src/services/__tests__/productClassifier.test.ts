@@ -3,7 +3,10 @@ import { classifyProduct } from "@/services/productClassifier";
 
 describe("productClassifier", () => {
   it("Cartão de Visita -> Impressos Promocionais / Cartão de Visita", () => {
-    const c = classifyProduct({ name: "Cartão de Visita em Couché Fosco", breadcrumb: ["Cartão de Visita"] });
+    const c = classifyProduct({
+      name: "Cartão de Visita em Couché Fosco",
+      breadcrumb: ["Cartão de Visita"],
+    });
     expect(c.category).toBe("Impressos Promocionais");
     expect(c.subcategory).toBe("Cartão de Visita");
     expect(c.confidence).toBeGreaterThanOrEqual(80);
@@ -36,7 +39,10 @@ describe("productClassifier", () => {
   });
 
   it("segmento NÃO vira categoria (seção 22): Cardápio para Pizzaria", () => {
-    const c = classifyProduct({ name: "Cardápio em Plástico", description: "Ideal para pizzaria e restaurante" });
+    const c = classifyProduct({
+      name: "Cardápio em Plástico",
+      description: "Ideal para pizzaria e restaurante",
+    });
     expect(c.subcategory).toBe("Cardápio");
     expect(c.category).toBe("Impressos Promocionais");
     expect(c.segments).toContain("Restaurante/Pizzaria");
@@ -51,7 +57,9 @@ describe("productClassifier", () => {
   });
 
   it("Sacola Plástica e Sacola de Papel são subcategorias distintas", () => {
-    expect(classifyProduct({ name: "Sacola Plástica Personalizada" }).subcategory).toBe("Sacola Plástica");
+    expect(classifyProduct({ name: "Sacola Plástica Personalizada" }).subcategory).toBe(
+      "Sacola Plástica",
+    );
     expect(classifyProduct({ name: "Sacola de Papel Kraft" }).subcategory).toBe("Sacola de Papel");
   });
 });

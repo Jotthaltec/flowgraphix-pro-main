@@ -7,9 +7,18 @@
  * (sem rede): descobrir os ids a visitar e consolidar os produtos coletados.
  */
 
-import type { ImportedProduct, ImportedVariant, ImportedVariantAxis } from "@/types/importedProduct";
+import type {
+  ImportedProduct,
+  ImportedVariant,
+  ImportedVariantAxis,
+} from "@/types/importedProduct";
 import { externalIdFromUrl } from "@/services/futuraImParser";
-import { normalizeKey, parseColorCode, parseDimensions, parseMaterial } from "@/services/productNormalizer";
+import {
+  normalizeKey,
+  parseColorCode,
+  parseDimensions,
+  parseMaterial,
+} from "@/services/productNormalizer";
 import { attributeSignature, resolveVariantAttributes } from "@/services/variantAttributes";
 
 /** Reescreve a URL de origem apontando para outro `?id=` (mesmo slug). */
@@ -141,7 +150,13 @@ export function attachVariantPrices(
       const id = o.external_id ? (aliases.get(o.external_id) ?? o.external_id) : undefined;
       const p = id ? byExtId.get(id) : undefined;
       return p
-        ? { ...o, unit_price: p.unit_price, total_price: p.total_price, ref_quantity: p.quantity, tiers: p.tiers }
+        ? {
+            ...o,
+            unit_price: p.unit_price,
+            total_price: p.total_price,
+            ref_quantity: p.quantity,
+            tiers: p.tiers,
+          }
         : o;
     }),
   }));
@@ -149,7 +164,10 @@ export function attachVariantPrices(
 }
 
 /** Reaplica atributos resolvidos nos campos estruturados da variante. */
-function withAttributes(variant: ImportedVariant, attributes: Record<string, string>): ImportedVariant {
+function withAttributes(
+  variant: ImportedVariant,
+  attributes: Record<string, string>,
+): ImportedVariant {
   const get = (name: string) =>
     Object.entries(attributes).find(([k]) => normalizeKey(k) === normalizeKey(name))?.[1];
   const formato = get("Formato");
@@ -196,7 +214,9 @@ export function normalizeScannedVariants(
 
   const validValue = (key: string, value: string) => {
     const axis = axes.find((a) => a.normalized_name === normalizeKey(key));
-    return axis?.options.find((o) => (o.normalized_value || normalizeKey(o.value)) === normalizeKey(value))?.value;
+    return axis?.options.find(
+      (o) => (o.normalized_value || normalizeKey(o.value)) === normalizeKey(value),
+    )?.value;
   };
   const combinationIds = new Set(
     axes.flatMap((a) => a.options.map((o) => o.external_id).filter((id): id is string => !!id)),
@@ -214,10 +234,13 @@ export function normalizeScannedVariants(
     Object.assign(attributes, resolved.attributes);
     const missing = resolved.unresolved.filter((name) => !attributes[name]);
     if (missing.length) {
-      warnings.push(`Combinação ${variant.external_id || variant.title}: eixo(s) não identificado(s): ${missing.join(", ")}.`);
+      warnings.push(
+        `Combinação ${variant.external_id || variant.title}: eixo(s) não identificado(s): ${missing.join(", ")}.`,
+      );
     }
     const normalized = withAttributes(variant, attributes);
-    const signature = attributeSignature(attributes) || `id:${variant.external_id || variant.title}`;
+    const signature =
+      attributeSignature(attributes) || `id:${variant.external_id || variant.title}`;
     groups.set(signature, [...(groups.get(signature) ?? []), normalized]);
   }
 
@@ -281,18 +304,19 @@ export function consolidateVariants(products: ImportedProduct[]): ImportedProduc
       } else {
         const existing = axesMap.get(k)!;
         for (const o of axis.options) {
-          if (!existing.options.some((eo) => eo.normalized_value === o.normalized_value)) existing.options.push(o);
+          if (!existing.options.some((eo) => eo.normalized_value === o.normalized_value))
+            existing.options.push(o);
         }
       }
     }
   }
 
   const variant_axes = [...axesMap.values()];
-  const { variants, warnings: mergeWarnings, aliases } = normalizeScannedVariants(
-    rawVariants,
-    variant_axes,
-    base.external_id,
-  );
+  const {
+    variants,
+    warnings: mergeWarnings,
+    aliases,
+  } = normalizeScannedVariants(rawVariants, variant_axes, base.external_id);
 
   const consolidated: ImportedProduct = {
     ...base,

@@ -7,9 +7,9 @@
  * e não via server functions (que exigiriam uma chave de servidor inexistente).
  */
 
-import { supabase } from '@/integrations/supabase/client';
-import { importCombinationsFromProduct } from '@/services/combinationImporter';
-import type { FamilyCombinationData, RawPromotion } from '@/services/combinationEngine';
+import { supabase } from "@/integrations/supabase/client";
+import { importCombinationsFromProduct } from "@/services/combinationImporter";
+import type { FamilyCombinationData, RawPromotion } from "@/services/combinationEngine";
 
 const db = supabase as any;
 
@@ -24,24 +24,27 @@ export async function generateCommercialProducts(params: {
 }) {
   // 1. Produto
   const { data: product, error: prodErr } = await db
-    .from('products')
-    .select('*')
-    .eq('id', params.product_id)
-    .eq('company_id', params.company_id)
+    .from("products")
+    .select("*")
+    .eq("id", params.product_id)
+    .eq("company_id", params.company_id)
     .single();
-  if (prodErr || !product) throw new Error(`Produto não encontrado: ${prodErr?.message ?? params.product_id}`);
+  if (prodErr || !product)
+    throw new Error(`Produto não encontrado: ${prodErr?.message ?? params.product_id}`);
 
   const supplierId = params.supplier_id || product.supplier_id;
   if (!supplierId) {
-    throw new Error('Produto sem fornecedor vinculado. Só é possível gerar combinações de produtos de fornecedor.');
+    throw new Error(
+      "Produto sem fornecedor vinculado. Só é possível gerar combinações de produtos de fornecedor.",
+    );
   }
 
   // 2. Variantes, tiragens e extras
   const { data: variants } = await db
-    .from('product_variants')
-    .select('*')
-    .eq('product_id', params.product_id)
-    .eq('company_id', params.company_id);
+    .from("product_variants")
+    .select("*")
+    .eq("product_id", params.product_id)
+    .eq("company_id", params.company_id);
 
   if (!variants || variants.length === 0) {
     // Armadilha comum: produtos vindos do Hub copiam `products.variations` (as
@@ -51,29 +54,29 @@ export async function generateCommercialProducts(params: {
     const hasOptions = Array.isArray(product.variations) && product.variations.length > 0;
     if (hasOptions) {
       throw new Error(
-        'Este produto tem opções cadastradas, mas nenhuma combinação real foi coletada do fornecedor ' +
+        "Este produto tem opções cadastradas, mas nenhuma combinação real foi coletada do fornecedor " +
           '(ele veio do Hub, que não coleta variantes). Importe-o em "Importar por link"' +
-          (product.source_url ? ` usando ${product.source_url}` : '') +
+          (product.source_url ? ` usando ${product.source_url}` : "") +
           ', com a "Varredura de variantes" ligada.',
       );
     }
     throw new Error(
-      'Produto sem variantes. Importe o produto pelo link do fornecedor antes de gerar as combinações.',
+      "Produto sem variantes. Importe o produto pelo link do fornecedor antes de gerar as combinações.",
     );
   }
 
   const variantIds = variants.map((v: any) => v.id);
   const { data: tiers } = await db
-    .from('product_price_tiers')
-    .select('*')
-    .eq('company_id', params.company_id)
-    .in('variant_id', variantIds);
+    .from("product_price_tiers")
+    .select("*")
+    .eq("company_id", params.company_id)
+    .in("variant_id", variantIds);
 
   const { data: extras } = await db
-    .from('product_extras')
-    .select('*')
-    .eq('product_id', params.product_id)
-    .eq('company_id', params.company_id);
+    .from("product_extras")
+    .select("*")
+    .eq("product_id", params.product_id)
+    .eq("company_id", params.company_id);
 
   // 3. Converter para produtos comerciais
   const result = await importCombinationsFromProduct(db, {
@@ -89,9 +92,9 @@ export async function generateCommercialProducts(params: {
   // 4. Vincular família ao produto canônico
   if (result.family_id && result.errors.length === 0) {
     await db
-      .from('supplier_product_families')
+      .from("supplier_product_families")
       .update({ catalog_product_id: params.product_id, last_synced_at: new Date().toISOString() })
-      .eq('id', result.family_id);
+      .eq("id", result.family_id);
   }
 
   return result;
@@ -105,32 +108,50 @@ export async function getFamilyCombinationDataClient(
   companyId: string,
 ): Promise<FamilyCombinationData & { promotions: RawPromotion[] }> {
   const { data: family, error } = await db
-    .from('supplier_product_families')
-    .select('*')
-    .eq('id', familyId)
-    .eq('company_id', companyId)
+    .from("supplier_product_families")
+    .select("*")
+    .eq("id", familyId)
+    .eq("company_id", companyId)
     .single();
   if (error || !family) throw new Error(`Família não encontrada: ${error?.message ?? familyId}`);
 
   const { data: groups } = await db
-    .from('supplier_option_groups')
-    .select('*')
-    .eq('family_id', familyId)
-    .eq('company_id', companyId)
-    .order('order_index');
+    .from("supplier_option_groups")
+    .select("*")
+    .eq("family_id", familyId)
+    .eq("company_id", companyId)
+    .order("order_index");
   const groupIds = (groups || []).map((g: any) => g.id);
 
   const [valuesRes, productsRes, promosRes] = await Promise.all([
     groupIds.length
-      ? db.from('supplier_option_values').select('*').eq('company_id', companyId).in('group_id', groupIds).eq('is_active', true).order('order_index')
+      ? db
+          .from("supplier_option_values")
+          .select("*")
+          .eq("company_id", companyId)
+          .in("group_id", groupIds)
+          .eq("is_active", true)
+          .order("order_index")
       : Promise.resolve({ data: [] }),
-    db.from('supplier_commercial_products').select('*').eq('family_id', familyId).eq('company_id', companyId),
-    db.from('supplier_promotions').select('*').eq('company_id', companyId).eq('family_id', familyId).eq('status', 'active'),
+    db
+      .from("supplier_commercial_products")
+      .select("*")
+      .eq("family_id", familyId)
+      .eq("company_id", companyId),
+    db
+      .from("supplier_promotions")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("family_id", familyId)
+      .eq("status", "active"),
   ]);
 
   const productIds = (productsRes.data || []).map((p: any) => p.id);
   const productOptionsRes = productIds.length
-    ? await db.from('supplier_commercial_product_options').select('*').in('commercial_product_id', productIds)
+    ? await db
+        .from("supplier_commercial_product_options")
+        .select("*")
+        .in("commercial_product_id", productIds)
     : { data: [] };
 
   return {
@@ -148,23 +169,28 @@ export async function getFamilyCombinationDataClient(
 // ---------------------------------------------------------------------------
 export async function getFamilyMatrixClient(familyId: string, companyId: string) {
   const { data: products, error } = await db
-    .from('supplier_commercial_products')
-    .select('*')
-    .eq('family_id', familyId)
-    .eq('company_id', companyId)
-    .order('quantity');
+    .from("supplier_commercial_products")
+    .select("*")
+    .eq("family_id", familyId)
+    .eq("company_id", companyId)
+    .order("quantity");
   if (error) throw new Error(`Erro ao carregar matriz: ${error.message}`);
 
   const list = products || [];
   return {
     products: list,
     total: list.length,
-    active: list.filter((p: any) => p.availability === 'available').length,
-    unavailable: list.filter((p: any) => p.availability !== 'available').length,
-    distinct_quantities: ([...new Set(list.map((p: any) => p.quantity))] as number[]).sort((a, b) => a - b),
+    active: list.filter((p: any) => p.availability === "available").length,
+    unavailable: list.filter((p: any) => p.availability !== "available").length,
+    distinct_quantities: ([...new Set(list.map((p: any) => p.quantity))] as number[]).sort(
+      (a, b) => a - b,
+    ),
     validation: {
       missing_external_id: list.filter((p: any) => !p.external_product_id).length,
-      missing_price: list.filter((p: any) => p.list_price == null && p.promotional_price == null && p.availability === 'available').length,
+      missing_price: list.filter(
+        (p: any) =>
+          p.list_price == null && p.promotional_price == null && p.availability === "available",
+      ).length,
     },
   };
 }

@@ -23,7 +23,7 @@
  * 5. Importa extras e serviços
  */
 
-import { buildCombinationHash } from './combinationEngine';
+import { buildCombinationHash } from "./combinationEngine";
 
 // ---------------------------------------------------------------------------
 // Tipos internos
@@ -57,17 +57,12 @@ interface ImportResult {
 
 /** Normaliza texto para matching (minúsculo, sem acentos, sem espaços extras). */
 function normalize(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/\s+/g, '_')
-    .trim();
+  return text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, "_").trim();
 }
 
 /** Gera código a partir de nome normalizado. */
 function codeFromName(name: string): string {
-  return normalize(name).toUpperCase().replace(/-/g, '_');
+  return normalize(name).toUpperCase().replace(/-/g, "_");
 }
 
 /**
@@ -79,7 +74,7 @@ function codeFromName(name: string): string {
  * inexistente virar "R$ 0,00" e sequestrar o preço oficial.
  */
 function num(value: any): number | null {
-  if (value === null || value === undefined || value === '') return null;
+  if (value === null || value === undefined || value === "") return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
 }
@@ -89,12 +84,20 @@ function num(value: any): number | null {
 // ---------------------------------------------------------------------------
 
 const AXIS_ORDER: Record<string, number> = {
-  modelo: 0, model: 0,
-  material: 1, papel: 1,
-  formato: 2, format: 2, tamanho: 2,
-  impressao: 3, impression: 3, cor: 3, color: 3,
+  modelo: 0,
+  model: 0,
+  material: 1,
+  papel: 1,
+  formato: 2,
+  format: 2,
+  tamanho: 2,
+  impressao: 3,
+  impression: 3,
+  cor: 3,
+  color: 3,
   enobrecimento: 4,
-  acabamento: 5, finishing: 5,
+  acabamento: 5,
+  finishing: 5,
 };
 
 function getAxisOrder(name: string): number {
@@ -108,12 +111,12 @@ function getAxisOrder(name: string): number {
 /** Campos fixos da variante mapeados para eixos (name, value). */
 function variantAxisFields(variant: any): Array<[string, string | null]> {
   return [
-    ['Modelo', variant.model],
-    ['Material', variant.material],
-    ['Formato', variant.format_original],
-    ['Impressão', variant.print_color],
-    ['Enobrecimento', variant.enoblement],
-    ['Acabamento', variant.finishing],
+    ["Modelo", variant.model],
+    ["Material", variant.material],
+    ["Formato", variant.format_original],
+    ["Impressão", variant.print_color],
+    ["Enobrecimento", variant.enoblement],
+    ["Acabamento", variant.finishing],
   ];
 }
 
@@ -121,11 +124,20 @@ function variantAxisFields(variant: any): Array<[string, string | null]> {
 function detectAxes(
   product: any,
   variants: any[],
-): Array<{ name: string; normalizedName: string; code: string; order: number; values: Array<{ name: string; normalizedName: string; externalId: string | null }> }> {
+): Array<{
+  name: string;
+  normalizedName: string;
+  code: string;
+  order: number;
+  values: Array<{ name: string; normalizedName: string; externalId: string | null }>;
+}> {
   const axes = new Map<
     string,
     {
-      name: string; normalizedName: string; code: string; order: number;
+      name: string;
+      normalizedName: string;
+      code: string;
+      order: number;
       values: Map<string, { name: string; normalizedName: string; externalId: string | null }>;
     }
   >();
@@ -134,7 +146,11 @@ function detectAxes(
     const axisNorm = normalize(name);
     if (!axes.has(axisNorm)) {
       axes.set(axisNorm, {
-        name, normalizedName: axisNorm, code: codeFromName(name), order: getAxisOrder(name), values: new Map(),
+        name,
+        normalizedName: axisNorm,
+        code: codeFromName(name),
+        order: getAxisOrder(name),
+        values: new Map(),
       });
     }
     return axes.get(axisNorm)!;
@@ -145,12 +161,17 @@ function detectAxes(
   for (const v of variations) {
     if (!v?.name) continue;
     const axis = ensureAxis(v.name);
-    const options: any[] = Array.isArray(v.values) ? v.values : Array.isArray(v.options) ? v.options : [];
+    const options: any[] = Array.isArray(v.values)
+      ? v.values
+      : Array.isArray(v.options)
+        ? v.options
+        : [];
     for (const opt of options) {
-      const optName = typeof opt === 'string' ? opt : opt?.value || opt?.name || String(opt);
+      const optName = typeof opt === "string" ? opt : opt?.value || opt?.name || String(opt);
       const optNorm = normalize(optName);
-      const externalId = typeof opt === 'object' ? opt?.external_id || null : null;
-      if (!axis.values.has(optNorm)) axis.values.set(optNorm, { name: optName, normalizedName: optNorm, externalId });
+      const externalId = typeof opt === "object" ? opt?.external_id || null : null;
+      if (!axis.values.has(optNorm))
+        axis.values.set(optNorm, { name: optName, normalizedName: optNorm, externalId });
     }
   }
 
@@ -160,13 +181,14 @@ function detectAxes(
       if (!value) continue;
       const axis = ensureAxis(fieldName);
       const valNorm = normalize(value);
-      if (!axis.values.has(valNorm)) axis.values.set(valNorm, { name: value, normalizedName: valNorm, externalId: null });
+      if (!axis.values.has(valNorm))
+        axis.values.set(valNorm, { name: value, normalizedName: valNorm, externalId: null });
     }
   }
 
   return [...axes.values()]
     .sort((a, b) => a.order - b.order)
-    .map(a => ({ ...a, values: [...a.values.values()] }));
+    .map((a) => ({ ...a, values: [...a.values.values()] }));
 }
 
 // ---------------------------------------------------------------------------
@@ -180,7 +202,12 @@ export async function importCombinationsFromProduct(
   const { product, variants, priceTiers, extras, supplierId, companyId, executedBy } = source;
   const warnings: string[] = [];
   const errors: string[] = [];
-  let created = 0, updated = 0, removed = 0, priceChanges = 0, extrasCreated = 0, servicesCreated = 0;
+  let created = 0,
+    updated = 0,
+    removed = 0,
+    priceChanges = 0,
+    extrasCreated = 0,
+    servicesCreated = 0;
 
   // Produtos de tamanho personalizado (medida livre) não têm preço de matriz:
   // o valor depende de largura × altura e o fornecedor aplica preço mínimo e
@@ -194,34 +221,54 @@ export async function importCombinationsFromProduct(
     catalog_product_id: product.id,
     external_id: product.supplier_sku || product.external_id || null,
     name: product.name,
-    slug: product.name ? normalize(product.name).replace(/_/g, '-') : null,
+    slug: product.name ? normalize(product.name).replace(/_/g, "-") : null,
     category: product.category || null,
     source_url: product.source_url || null,
     image_url: product.image_url || product.main_image_url || null,
     description: product.description || null,
-    lead_time_rule: 'max_extra',
-    pricing_strategy: isCustomSize ? 'LIVE_RESOLVER' : 'MATRIX',
+    lead_time_rule: "max_extra",
+    pricing_strategy: isCustomSize ? "LIVE_RESOLVER" : "MATRIX",
     is_active: true,
   };
 
   const { data: existingFamily } = await supabase
-    .from('supplier_product_families')
-    .select('id, version')
-    .eq('company_id', companyId).eq('supplier_id', supplierId).eq('catalog_product_id', product.id)
+    .from("supplier_product_families")
+    .select("id, version")
+    .eq("company_id", companyId)
+    .eq("supplier_id", supplierId)
+    .eq("catalog_product_id", product.id)
     .maybeSingle();
 
   let familyId: string;
   if (existingFamily) {
     familyId = existingFamily.id;
-    await supabase.from('supplier_product_families')
-      .update({ ...familyPayload, version: (existingFamily.version || 1) + 1, last_synced_at: new Date().toISOString() })
-      .eq('id', familyId);
+    await supabase
+      .from("supplier_product_families")
+      .update({
+        ...familyPayload,
+        version: (existingFamily.version || 1) + 1,
+        last_synced_at: new Date().toISOString(),
+      })
+      .eq("id", familyId);
   } else {
     const { data: newFamily, error } = await supabase
-      .from('supplier_product_families').insert([familyPayload]).select('id').single();
+      .from("supplier_product_families")
+      .insert([familyPayload])
+      .select("id")
+      .single();
     if (error || !newFamily) {
       errors.push(`Erro ao criar família: ${error?.message}`);
-      return { family_id: '', commercial_products_created: 0, commercial_products_updated: 0, commercial_products_removed: 0, price_changes: 0, extras_created: 0, services_created: 0, warnings, errors };
+      return {
+        family_id: "",
+        commercial_products_created: 0,
+        commercial_products_updated: 0,
+        commercial_products_removed: 0,
+        price_changes: 0,
+        extras_created: 0,
+        services_created: 0,
+        warnings,
+        errors,
+      };
     }
     familyId = newFamily.id;
   }
@@ -246,31 +293,75 @@ export async function importCombinationsFromProduct(
   for (let i = 0; i < axes.length; i++) {
     const axis = axes[i];
     const { data: existingGroup } = await supabase
-      .from('supplier_option_groups').select('id')
-      .eq('family_id', familyId).eq('normalized_name', axis.normalizedName).eq('company_id', companyId).maybeSingle();
+      .from("supplier_option_groups")
+      .select("id")
+      .eq("family_id", familyId)
+      .eq("normalized_name", axis.normalizedName)
+      .eq("company_id", companyId)
+      .maybeSingle();
 
     let groupId: string;
     if (existingGroup) {
       groupId = existingGroup.id;
-      await supabase.from('supplier_option_groups').update({ order_index: i, name: axis.name, code: axis.code }).eq('id', groupId);
+      await supabase
+        .from("supplier_option_groups")
+        .update({ order_index: i, name: axis.name, code: axis.code })
+        .eq("id", groupId);
     } else {
-      const { data: newGroup, error } = await supabase.from('supplier_option_groups')
-        .insert([{ company_id: companyId, family_id: familyId, name: axis.name, normalized_name: axis.normalizedName, code: axis.code, order_index: i }])
-        .select('id').single();
-      if (error || !newGroup) { warnings.push(`Erro ao criar grupo ${axis.name}: ${error?.message}`); continue; }
+      const { data: newGroup, error } = await supabase
+        .from("supplier_option_groups")
+        .insert([
+          {
+            company_id: companyId,
+            family_id: familyId,
+            name: axis.name,
+            normalized_name: axis.normalizedName,
+            code: axis.code,
+            order_index: i,
+          },
+        ])
+        .select("id")
+        .single();
+      if (error || !newGroup) {
+        warnings.push(`Erro ao criar grupo ${axis.name}: ${error?.message}`);
+        continue;
+      }
       groupId = newGroup.id;
     }
 
     for (let j = 0; j < axis.values.length; j++) {
       const val = axis.values[j];
       const mapKey = `${axis.normalizedName}|${val.normalizedName}`;
-      const { data: existingVal } = await supabase.from('supplier_option_values').select('id')
-        .eq('group_id', groupId).eq('normalized_name', val.normalizedName).eq('company_id', companyId).maybeSingle();
-      if (existingVal) { valueIdMap.set(mapKey, existingVal.id); continue; }
-      const { data: newVal, error } = await supabase.from('supplier_option_values')
-        .insert([{ company_id: companyId, group_id: groupId, name: val.name, normalized_name: val.normalizedName, code: codeFromName(val.name), external_id: val.externalId, order_index: j }])
-        .select('id').single();
-      if (error || !newVal) { warnings.push(`Erro ao criar valor ${val.name}: ${error?.message}`); continue; }
+      const { data: existingVal } = await supabase
+        .from("supplier_option_values")
+        .select("id")
+        .eq("group_id", groupId)
+        .eq("normalized_name", val.normalizedName)
+        .eq("company_id", companyId)
+        .maybeSingle();
+      if (existingVal) {
+        valueIdMap.set(mapKey, existingVal.id);
+        continue;
+      }
+      const { data: newVal, error } = await supabase
+        .from("supplier_option_values")
+        .insert([
+          {
+            company_id: companyId,
+            group_id: groupId,
+            name: val.name,
+            normalized_name: val.normalizedName,
+            code: codeFromName(val.name),
+            external_id: val.externalId,
+            order_index: j,
+          },
+        ])
+        .select("id")
+        .single();
+      if (error || !newVal) {
+        warnings.push(`Erro ao criar valor ${val.name}: ${error?.message}`);
+        continue;
+      }
       valueIdMap.set(mapKey, newVal.id);
     }
   }
@@ -306,7 +397,8 @@ export async function importCombinationsFromProduct(
       const quantity = Number(tier.quantity) || 0;
       if (quantity <= 0) continue;
 
-      const externalProductId = tier.external_id || (variant.external_id ? `${variant.external_id}-${quantity}` : null);
+      const externalProductId =
+        tier.external_id || (variant.external_id ? `${variant.external_id}-${quantity}` : null);
       // "por" = preço de venda atual (pode vir 0 quando o site renderiza por JS);
       // "de" = preço de referência. Só valores > 0 contam — nunca fabricamos preço.
       const valid = (x: number | null) => (x != null && x > 0 ? x : null);
@@ -317,8 +409,12 @@ export async function importCombinationsFromProduct(
       let promoPrice: number | null = null;
       if (por != null) {
         // Há preço de venda atual; se houver "de" maior, é promoção real.
-        if (de != null && de > por) { listPrice = de; promoPrice = por; }
-        else { listPrice = por; }
+        if (de != null && de > por) {
+          listPrice = de;
+          promoPrice = por;
+        } else {
+          listPrice = por;
+        }
       } else {
         // Sem "por" válido: usa o "de"/promo do site como preço (referência real).
         listPrice = de ?? explicitPromo ?? null;
@@ -326,7 +422,9 @@ export async function importCombinationsFromProduct(
       const hasPrice = listPrice != null && listPrice > 0;
       // Sem preço confirmado → indisponível (a UI mostra "Preço não confirmado").
       const availability =
-        tier.available !== false && variant.available !== false && hasPrice ? 'available' : 'unavailable';
+        tier.available !== false && variant.available !== false && hasPrice
+          ? "available"
+          : "unavailable";
       const combinationHash = buildCombinationHash(optionValueIds, quantity);
       const completeName = buildCompleteName(product, variant, quantity);
 
@@ -338,7 +436,7 @@ export async function importCombinationsFromProduct(
         external_sku: variant.sku || null,
         complete_name: completeName,
         quantity,
-        quantity_unit: 'un',
+        quantity_unit: "un",
         model: variant.model || null,
         type: product.type || null,
         size: variant.size || variant.format_original || null,
@@ -354,10 +452,15 @@ export async function importCombinationsFromProduct(
         availability,
         list_price: listPrice,
         promotional_price: promoPrice,
-        currency: tier.currency || 'BRL',
+        currency: tier.currency || "BRL",
         combination_hash: combinationHash,
         source_url: variant.url || product.source_url || null,
-        raw_source_data: { variant_id: variant.id, tier_id: tier.id, tier, variant_external_id: variant.external_id },
+        raw_source_data: {
+          variant_id: variant.id,
+          tier_id: tier.id,
+          tier,
+          variant_external_id: variant.external_id,
+        },
         last_synced_at: new Date().toISOString(),
       };
 
@@ -366,43 +469,89 @@ export async function importCombinationsFromProduct(
       // Buscar existente pela chave (supplier_id, external_product_id) ou pelo hash
       let existing: any = null;
       if (externalProductId) {
-        const r = await supabase.from('supplier_commercial_products').select('id, version, list_price, promotional_price, availability, production_days, external_product_id')
-          .eq('company_id', companyId).eq('supplier_id', supplierId).eq('external_product_id', externalProductId).maybeSingle();
+        const r = await supabase
+          .from("supplier_commercial_products")
+          .select(
+            "id, version, list_price, promotional_price, availability, production_days, external_product_id",
+          )
+          .eq("company_id", companyId)
+          .eq("supplier_id", supplierId)
+          .eq("external_product_id", externalProductId)
+          .maybeSingle();
         existing = r.data;
       }
       if (!existing) {
-        const r = await supabase.from('supplier_commercial_products').select('id, version, list_price, promotional_price, availability, production_days, external_product_id')
-          .eq('company_id', companyId).eq('family_id', familyId).eq('combination_hash', combinationHash).maybeSingle();
+        const r = await supabase
+          .from("supplier_commercial_products")
+          .select(
+            "id, version, list_price, promotional_price, availability, production_days, external_product_id",
+          )
+          .eq("company_id", companyId)
+          .eq("family_id", familyId)
+          .eq("combination_hash", combinationHash)
+          .maybeSingle();
         existing = r.data;
       }
 
       if (existing) {
         // Histórico se preço/estado mudou (§8) — não altera outros IDs
-        const priceChanged = num(existing.list_price) !== listPrice || num(existing.promotional_price) !== promoPrice;
+        const priceChanged =
+          num(existing.list_price) !== listPrice || num(existing.promotional_price) !== promoPrice;
         if (priceChanged || existing.availability !== availability) {
-          await supabase.from('supplier_product_price_history').insert([{
-            company_id: companyId, supplier_id: supplierId, commercial_product_id: existing.id,
-            external_product_id: externalProductId || existing.external_product_id,
-            old_price: existing.list_price, new_price: listPrice, promotional_price: promoPrice,
-            availability, production_days: num(variant.production_days),
-            change_percent: existing.list_price ? round2(((listPrice ?? 0) - existing.list_price) / existing.list_price * 100) : null,
-            source: 'import', executed_by: executedBy || null,
-          }]);
+          await supabase.from("supplier_product_price_history").insert([
+            {
+              company_id: companyId,
+              supplier_id: supplierId,
+              commercial_product_id: existing.id,
+              external_product_id: externalProductId || existing.external_product_id,
+              old_price: existing.list_price,
+              new_price: listPrice,
+              promotional_price: promoPrice,
+              availability,
+              production_days: num(variant.production_days),
+              change_percent: existing.list_price
+                ? round2((((listPrice ?? 0) - existing.list_price) / existing.list_price) * 100)
+                : null,
+              source: "import",
+              executed_by: executedBy || null,
+            },
+          ]);
           if (priceChanged) priceChanges++;
         }
-        await supabase.from('supplier_commercial_products')
-          .update({ ...payload, version: (existing.version || 1) + 1 }).eq('id', existing.id);
+        await supabase
+          .from("supplier_commercial_products")
+          .update({ ...payload, version: (existing.version || 1) + 1 })
+          .eq("id", existing.id);
         await syncProductOptions(supabase, existing.id, optionValueIds);
         updated++;
       } else {
-        const { data: newProduct, error } = await supabase.from('supplier_commercial_products').insert([payload]).select('id').single();
-        if (error || !newProduct) { warnings.push(`Erro ao criar produto comercial (${externalProductId}): ${error?.message}`); continue; }
+        const { data: newProduct, error } = await supabase
+          .from("supplier_commercial_products")
+          .insert([payload])
+          .select("id")
+          .single();
+        if (error || !newProduct) {
+          warnings.push(
+            `Erro ao criar produto comercial (${externalProductId}): ${error?.message}`,
+          );
+          continue;
+        }
         await syncProductOptions(supabase, newProduct.id, optionValueIds);
-        await supabase.from('supplier_product_price_history').insert([{
-          company_id: companyId, supplier_id: supplierId, commercial_product_id: newProduct.id,
-          external_product_id: externalProductId, old_price: null, new_price: listPrice, promotional_price: promoPrice,
-          availability, production_days: num(variant.production_days), source: 'import', executed_by: executedBy || null,
-        }]);
+        await supabase.from("supplier_product_price_history").insert([
+          {
+            company_id: companyId,
+            supplier_id: supplierId,
+            commercial_product_id: newProduct.id,
+            external_product_id: externalProductId,
+            old_price: null,
+            new_price: listPrice,
+            promotional_price: promoPrice,
+            availability,
+            production_days: num(variant.production_days),
+            source: "import",
+            executed_by: executedBy || null,
+          },
+        ]);
         created++;
       }
     }
@@ -410,16 +559,29 @@ export async function importCombinationsFromProduct(
 
   // 4. Produtos que sumiram nesta sincronização → 'removed' (§10, não apaga)
   if (seenExternalIds.size > 0) {
-    const { data: familyProducts } = await supabase.from('supplier_commercial_products')
-      .select('id, external_product_id, availability').eq('company_id', companyId).eq('family_id', familyId);
+    const { data: familyProducts } = await supabase
+      .from("supplier_commercial_products")
+      .select("id, external_product_id, availability")
+      .eq("company_id", companyId)
+      .eq("family_id", familyId);
     for (const fp of familyProducts || []) {
-      if (fp.availability === 'removed') continue;
+      if (fp.availability === "removed") continue;
       if (fp.external_product_id && !seenExternalIds.has(fp.external_product_id)) {
-        await supabase.from('supplier_commercial_products').update({ availability: 'removed', last_synced_at: new Date().toISOString() }).eq('id', fp.id);
-        await supabase.from('supplier_product_price_history').insert([{
-          company_id: companyId, supplier_id: supplierId, commercial_product_id: fp.id,
-          external_product_id: fp.external_product_id, availability: 'removed', source: 'sync', executed_by: executedBy || null,
-        }]);
+        await supabase
+          .from("supplier_commercial_products")
+          .update({ availability: "removed", last_synced_at: new Date().toISOString() })
+          .eq("id", fp.id);
+        await supabase.from("supplier_product_price_history").insert([
+          {
+            company_id: companyId,
+            supplier_id: supplierId,
+            commercial_product_id: fp.id,
+            external_product_id: fp.external_product_id,
+            availability: "removed",
+            source: "sync",
+            executed_by: executedBy || null,
+          },
+        ]);
         removed++;
       }
     }
@@ -428,23 +590,59 @@ export async function importCombinationsFromProduct(
   // 5. Extras (nível família; compatível com todos os produtos por padrão)
   for (const extra of extras) {
     const normalizedName = extra.normalized_name || normalize(extra.name);
-    const { data: existingExtra } = await supabase.from('supplier_extras').select('id')
-      .eq('family_id', familyId).eq('normalized_name', normalizedName).eq('company_id', companyId).maybeSingle();
+    const { data: existingExtra } = await supabase
+      .from("supplier_extras")
+      .select("id")
+      .eq("family_id", familyId)
+      .eq("normalized_name", normalizedName)
+      .eq("company_id", companyId)
+      .maybeSingle();
     let extraId: string;
     if (existingExtra) {
       extraId = existingExtra.id;
     } else {
-      const { data: newExtra, error } = await supabase.from('supplier_extras')
-        .insert([{ company_id: companyId, family_id: familyId, name: extra.name, normalized_name: normalizedName, code: codeFromName(extra.name), extra_type: detectExtraType(extra.name) }])
-        .select('id').single();
-      if (error || !newExtra) { warnings.push(`Erro ao criar extra ${extra.name}: ${error?.message}`); continue; }
-      extraId = newExtra.id; extrasCreated++;
+      const { data: newExtra, error } = await supabase
+        .from("supplier_extras")
+        .insert([
+          {
+            company_id: companyId,
+            family_id: familyId,
+            name: extra.name,
+            normalized_name: normalizedName,
+            code: codeFromName(extra.name),
+            extra_type: detectExtraType(extra.name),
+          },
+        ])
+        .select("id")
+        .single();
+      if (error || !newExtra) {
+        warnings.push(`Erro ao criar extra ${extra.name}: ${error?.message}`);
+        continue;
+      }
+      extraId = newExtra.id;
+      extrasCreated++;
     }
     if (extra.price != null && Number(extra.price) > 0) {
-      const { data: existingPrice } = await supabase.from('supplier_extra_prices').select('id')
-        .eq('extra_id', extraId).eq('quantity', 1).eq('company_id', companyId).is('compatibility_id', null).maybeSingle();
+      const { data: existingPrice } = await supabase
+        .from("supplier_extra_prices")
+        .select("id")
+        .eq("extra_id", extraId)
+        .eq("quantity", 1)
+        .eq("company_id", companyId)
+        .is("compatibility_id", null)
+        .maybeSingle();
       if (!existingPrice) {
-        await supabase.from('supplier_extra_prices').insert([{ company_id: companyId, extra_id: extraId, compatibility_id: null, quantity: 1, price: Number(extra.price), additional_days: extra.extra_days || 0, collected_at: new Date().toISOString() }]);
+        await supabase.from("supplier_extra_prices").insert([
+          {
+            company_id: companyId,
+            extra_id: extraId,
+            compatibility_id: null,
+            quantity: 1,
+            price: Number(extra.price),
+            additional_days: extra.extra_days || 0,
+            collected_at: new Date().toISOString(),
+          },
+        ]);
       }
     }
   }
@@ -452,25 +650,58 @@ export async function importCombinationsFromProduct(
   // 6. Serviços (dos extra_services do produto)
   const extraServices: any[] = Array.isArray(product.extra_services) ? product.extra_services : [];
   for (const svc of extraServices) {
-    const svcName = svc.name || svc.label || '';
+    const svcName = svc.name || svc.label || "";
     if (!svcName) continue;
-    const { data: existingSvc } = await supabase.from('supplier_services').select('id')
-      .eq('supplier_id', supplierId).eq('name', svcName).eq('company_id', companyId).maybeSingle();
+    const { data: existingSvc } = await supabase
+      .from("supplier_services")
+      .select("id")
+      .eq("supplier_id", supplierId)
+      .eq("name", svcName)
+      .eq("company_id", companyId)
+      .maybeSingle();
     let svcId: string;
     if (existingSvc) {
       svcId = existingSvc.id;
     } else {
-      const { data: newSvc, error } = await supabase.from('supplier_services')
-        .insert([{ company_id: companyId, supplier_id: supplierId, name: svcName, code: codeFromName(svcName), description: svc.description || null }])
-        .select('id').single();
-      if (error || !newSvc) { warnings.push(`Erro ao criar serviço ${svcName}: ${error?.message}`); continue; }
-      svcId = newSvc.id; servicesCreated++;
+      const { data: newSvc, error } = await supabase
+        .from("supplier_services")
+        .insert([
+          {
+            company_id: companyId,
+            supplier_id: supplierId,
+            name: svcName,
+            code: codeFromName(svcName),
+            description: svc.description || null,
+          },
+        ])
+        .select("id")
+        .single();
+      if (error || !newSvc) {
+        warnings.push(`Erro ao criar serviço ${svcName}: ${error?.message}`);
+        continue;
+      }
+      svcId = newSvc.id;
+      servicesCreated++;
     }
     if (svc.price != null && Number(svc.price) > 0) {
-      const { data: existingPrice } = await supabase.from('supplier_service_prices').select('id')
-        .eq('service_id', svcId).eq('family_id', familyId).eq('company_id', companyId).maybeSingle();
+      const { data: existingPrice } = await supabase
+        .from("supplier_service_prices")
+        .select("id")
+        .eq("service_id", svcId)
+        .eq("family_id", familyId)
+        .eq("company_id", companyId)
+        .maybeSingle();
       if (!existingPrice) {
-        await supabase.from('supplier_service_prices').insert([{ company_id: companyId, service_id: svcId, family_id: familyId, commercial_product_id: null, price: Number(svc.price), collected_at: new Date().toISOString() }]);
+        await supabase.from("supplier_service_prices").insert([
+          {
+            company_id: companyId,
+            service_id: svcId,
+            family_id: familyId,
+            commercial_product_id: null,
+            price: Number(svc.price),
+            collected_at: new Date().toISOString(),
+          },
+        ]);
       }
     }
   }
@@ -493,21 +724,36 @@ export async function importCombinationsFromProduct(
 // ---------------------------------------------------------------------------
 
 /** Sincroniza a junção produto comercial ↔ opções (substitui o conjunto). */
-async function syncProductOptions(supabase: any, commercialProductId: string, optionValueIds: string[]) {
-  await supabase.from('supplier_commercial_product_options').delete().eq('commercial_product_id', commercialProductId);
+async function syncProductOptions(
+  supabase: any,
+  commercialProductId: string,
+  optionValueIds: string[],
+) {
+  await supabase
+    .from("supplier_commercial_product_options")
+    .delete()
+    .eq("commercial_product_id", commercialProductId);
   if (optionValueIds.length === 0) return;
-  const payload = optionValueIds.map(id => ({ commercial_product_id: commercialProductId, option_value_id: id }));
-  await supabase.from('supplier_commercial_product_options').insert(payload);
+  const payload = optionValueIds.map((id) => ({
+    commercial_product_id: commercialProductId,
+    option_value_id: id,
+  }));
+  await supabase.from("supplier_commercial_product_options").insert(payload);
 }
 
 /** Monta o nome completo do produto comercial. */
 function buildCompleteName(product: any, variant: any, quantity: number): string {
   const parts = [product.name];
-  const attrs = [variant.material, variant.format_original, variant.print_color, variant.enoblement, variant.finishing]
-    .filter(Boolean);
-  if (attrs.length) parts.push(attrs.join(', '));
+  const attrs = [
+    variant.material,
+    variant.format_original,
+    variant.print_color,
+    variant.enoblement,
+    variant.finishing,
+  ].filter(Boolean);
+  if (attrs.length) parts.push(attrs.join(", "));
   parts.push(`${quantity} un`);
-  return parts.filter(Boolean).join(' — ');
+  return parts.filter(Boolean).join(" — ");
 }
 
 /**
@@ -519,18 +765,24 @@ function buildCompleteName(product: any, variant: any, quantity: number): string
  */
 function detectCustomSize(product: any, variants: any[]): boolean {
   const CUSTOM = /(tamanho|medida)[_\s-]*personaliz|cm2|cm²|m2|m²/i;
-  if (CUSTOM.test(String(product?.name || ''))) return true;
+  if (CUSTOM.test(String(product?.name || ""))) return true;
 
   const variations: any[] = Array.isArray(product?.variations) ? product.variations : [];
   for (const v of variations) {
-    const options: any[] = Array.isArray(v?.values) ? v.values : Array.isArray(v?.options) ? v.options : [];
+    const options: any[] = Array.isArray(v?.values)
+      ? v.values
+      : Array.isArray(v?.options)
+        ? v.options
+        : [];
     for (const opt of options) {
-      const label = typeof opt === 'string' ? opt : opt?.value || opt?.name || '';
+      const label = typeof opt === "string" ? opt : opt?.value || opt?.name || "";
       if (CUSTOM.test(String(label))) return true;
     }
   }
 
-  return variants.some((v) => CUSTOM.test(String(v?.format_original || '')) || CUSTOM.test(String(v?.size || '')));
+  return variants.some(
+    (v) => CUSTOM.test(String(v?.format_original || "")) || CUSTOM.test(String(v?.size || "")),
+  );
 }
 
 /** Extrai gramatura de um texto de material (ex.: "Couché 300g" → "300g"). */
@@ -542,13 +794,14 @@ function extractGrammage(material: string | null | undefined): string | null {
 
 function detectExtraType(name: string): string {
   const n = normalize(name);
-  if (n.includes('corte') || n.includes('faca')) return 'cutting';
-  if (n.includes('laminac')) return 'lamination';
-  if (n.includes('verniz') || n.includes('uv')) return 'coating';
-  if (n.includes('dobra') || n.includes('vinco')) return 'folding';
-  if (n.includes('encadernac') || n.includes('grampo') || n.includes('espiral')) return 'binding';
-  if (n.includes('acabamento') || n.includes('refile') || n.includes('canto') || n.includes('furo')) return 'finishing';
-  return 'other';
+  if (n.includes("corte") || n.includes("faca")) return "cutting";
+  if (n.includes("laminac")) return "lamination";
+  if (n.includes("verniz") || n.includes("uv")) return "coating";
+  if (n.includes("dobra") || n.includes("vinco")) return "folding";
+  if (n.includes("encadernac") || n.includes("grampo") || n.includes("espiral")) return "binding";
+  if (n.includes("acabamento") || n.includes("refile") || n.includes("canto") || n.includes("furo"))
+    return "finishing";
+  return "other";
 }
 
 function round2(value: number): number {

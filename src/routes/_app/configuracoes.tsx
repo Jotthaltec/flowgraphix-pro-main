@@ -8,14 +8,27 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { StatusBadge } from "@/components/status-badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Loader2, Send, Truck, Store, Share2, Lock } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export const Route = createFileRoute("/_app/configuracoes")({ component: ConfigPage });
 
@@ -92,7 +105,7 @@ function ConfigPage() {
 
   // Termos de contrato (anotação local)
   const [contractTerms, setContractTerms] = useState(
-    () => localStorage.getItem(CONTRACT_TERMS_KEY) || ""
+    () => localStorage.getItem(CONTRACT_TERMS_KEY) || "",
   );
 
   // WhatsApp Templates State (localStorage, sem mudanças de schema)
@@ -100,9 +113,12 @@ function ConfigPage() {
     const saved = localStorage.getItem("whatsapp_templates");
     if (saved) return JSON.parse(saved);
     return {
-      orcamento: "Olá *{cliente}*, seu orçamento nº *{numero}* no valor de *{valor}* já está disponível para aprovação.",
-      pedido_pronto: "Boas notícias, *{cliente}*! Seu pedido *{numero}* ({produto}) já está pronto para retirada/envio.",
-      cobranca: "Olá *{cliente}*, identificamos que a parcela do pedido *{numero}* está pendente. Por favor, regularize para iniciarmos a produção."
+      orcamento:
+        "Olá *{cliente}*, seu orçamento nº *{numero}* no valor de *{valor}* já está disponível para aprovação.",
+      pedido_pronto:
+        "Boas notícias, *{cliente}*! Seu pedido *{numero}* ({produto}) já está pronto para retirada/envio.",
+      cobranca:
+        "Olá *{cliente}*, identificamos que a parcela do pedido *{numero}* está pendente. Por favor, regularize para iniciarmos a produção.",
     };
   });
 
@@ -118,7 +134,7 @@ function ConfigPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!profile?.company_id
+    enabled: !!profile?.company_id,
   });
 
   useEffect(() => {
@@ -156,7 +172,7 @@ function ConfigPage() {
         delivery_phone: str("delivery_phone"),
       });
     } else if (profile?.company_name) {
-      setFormData(prev => ({ ...prev, name: profile.company_name as string }));
+      setFormData((prev) => ({ ...prev, name: profile.company_name as string }));
     }
   }, [company, profile]);
 
@@ -168,7 +184,7 @@ function ConfigPage() {
           const { data, error } = await supabase.rpc("data_mode", { entidade: key });
           if (error) throw error;
           return [key, (data as string) || "site"] as const;
-        })
+        }),
       );
       return Object.fromEntries(entries) as Record<string, string>;
     },
@@ -185,7 +201,7 @@ function ConfigPage() {
       if (error) throw error;
       return data;
     },
-    enabled: !!profile?.company_id
+    enabled: !!profile?.company_id,
   });
 
   const updateCompanyMutation = useMutation({
@@ -195,7 +211,7 @@ function ConfigPage() {
       if (error) throw error;
     },
     onSuccess: () => toast.success("Dados da gráfica atualizados!"),
-    onError: (err: any) => toast.error("Erro ao atualizar: " + err.message)
+    onError: (err: any) => toast.error("Erro ao atualizar: " + err.message),
   });
 
   const saveContractTerms = () => {
@@ -213,15 +229,24 @@ function ConfigPage() {
   };
 
   const testWhatsApp = (text: string) => {
-    const textEncoded = encodeURIComponent(text.replace("{cliente}", "João").replace("{numero}", "1234").replace("{valor}", "R$ 150,00").replace("{produto}", "Cartões"));
-    window.open(`https://wa.me/?text=${textEncoded}`, '_blank');
+    const textEncoded = encodeURIComponent(
+      text
+        .replace("{cliente}", "João")
+        .replace("{numero}", "1234")
+        .replace("{valor}", "R$ 150,00")
+        .replace("{produto}", "Cartões"),
+    );
+    window.open(`https://wa.me/?text=${textEncoded}`, "_blank");
   };
 
-  const set = (patch: Partial<CompanyForm>) => setFormData(prev => ({ ...prev, ...patch }));
+  const set = (patch: Partial<CompanyForm>) => setFormData((prev) => ({ ...prev, ...patch }));
 
   return (
     <>
-      <PageHeader title="Configurações" description="Personalize sua gráfica, equipe e templates de comunicação" />
+      <PageHeader
+        title="Configurações"
+        description="Personalize sua gráfica, equipe e templates de comunicação"
+      />
       <Tabs defaultValue="grafica">
         <TabsList className="flex flex-wrap h-auto mb-4">
           <TabsTrigger value="grafica">Dados da gráfica</TabsTrigger>
@@ -232,44 +257,77 @@ function ConfigPage() {
 
         <TabsContent value="grafica" className="space-y-4">
           {companyLoading ? (
-            <Card><CardContent className="flex justify-center p-8"><Loader2 className="animate-spin text-muted-foreground" /></CardContent></Card>
+            <Card>
+              <CardContent className="flex justify-center p-8">
+                <Loader2 className="animate-spin text-muted-foreground" />
+              </CardContent>
+            </Card>
           ) : (
             <>
               {/* ─── Dados cadastrais ─────────────────────────────── */}
               <Card>
                 <CardHeader>
                   <CardTitle>Dados cadastrais</CardTitle>
-                  <CardDescription>Usados para cadastro automático nos fornecedores e emissão de documentos.</CardDescription>
+                  <CardDescription>
+                    Usados para cadastro automático nos fornecedores e emissão de documentos.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label>Nome fantasia / Nome da gráfica</Label>
-                      <Input value={formData.name} onChange={(e) => set({ name: e.target.value })} />
+                      <Input
+                        value={formData.name}
+                        onChange={(e) => set({ name: e.target.value })}
+                      />
                     </div>
                     <div>
                       <Label>Razão social</Label>
-                      <Input value={formData.legal_name} onChange={(e) => set({ legal_name: e.target.value })} placeholder="Razão social registrada" />
+                      <Input
+                        value={formData.legal_name}
+                        onChange={(e) => set({ legal_name: e.target.value })}
+                        placeholder="Razão social registrada"
+                      />
                     </div>
                     <div>
                       <Label>CNPJ</Label>
-                      <Input value={formData.cnpj} onChange={(e) => set({ cnpj: e.target.value })} placeholder="00.000.000/0000-00" />
+                      <Input
+                        value={formData.cnpj}
+                        onChange={(e) => set({ cnpj: e.target.value })}
+                        placeholder="00.000.000/0000-00"
+                      />
                     </div>
                     <div>
                       <Label>Inscrição Estadual (IE)</Label>
-                      <Input value={formData.state_registration} onChange={(e) => set({ state_registration: e.target.value })} placeholder="Isento ou número da IE" />
+                      <Input
+                        value={formData.state_registration}
+                        onChange={(e) => set({ state_registration: e.target.value })}
+                        placeholder="Isento ou número da IE"
+                      />
                     </div>
                     <div>
                       <Label>Telefone</Label>
-                      <Input value={formData.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="(00) 0000-0000" />
+                      <Input
+                        value={formData.phone}
+                        onChange={(e) => set({ phone: e.target.value })}
+                        placeholder="(00) 0000-0000"
+                      />
                     </div>
                     <div>
                       <Label>WhatsApp</Label>
-                      <Input value={formData.whatsapp} onChange={(e) => set({ whatsapp: e.target.value })} placeholder="(00) 90000-0000" />
+                      <Input
+                        value={formData.whatsapp}
+                        onChange={(e) => set({ whatsapp: e.target.value })}
+                        placeholder="(00) 90000-0000"
+                      />
                     </div>
                     <div className="md:col-span-2">
                       <Label>E-mail de contato</Label>
-                      <Input value={formData.email} onChange={(e) => set({ email: e.target.value })} placeholder="contato@grafica.com.br" />
+                      <Input
+                        value={formData.email}
+                        onChange={(e) => set({ email: e.target.value })}
+                        placeholder="contato@grafica.com.br"
+                      />
                     </div>
                   </div>
                 </CardContent>
@@ -285,23 +343,43 @@ function ConfigPage() {
                   <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                     <div className="md:col-span-2">
                       <Label>CEP</Label>
-                      <Input value={formData.zip_code} onChange={(e) => set({ zip_code: e.target.value })} placeholder="00000-000" />
+                      <Input
+                        value={formData.zip_code}
+                        onChange={(e) => set({ zip_code: e.target.value })}
+                        placeholder="00000-000"
+                      />
                     </div>
                     <div className="md:col-span-4">
                       <Label>Logradouro</Label>
-                      <Input value={formData.address} onChange={(e) => set({ address: e.target.value })} placeholder="Rua / Avenida" />
+                      <Input
+                        value={formData.address}
+                        onChange={(e) => set({ address: e.target.value })}
+                        placeholder="Rua / Avenida"
+                      />
                     </div>
                     <div className="md:col-span-2">
                       <Label>Número</Label>
-                      <Input value={formData.address_number} onChange={(e) => set({ address_number: e.target.value })} placeholder="Nº" />
+                      <Input
+                        value={formData.address_number}
+                        onChange={(e) => set({ address_number: e.target.value })}
+                        placeholder="Nº"
+                      />
                     </div>
                     <div className="md:col-span-2">
                       <Label>Complemento</Label>
-                      <Input value={formData.complement} onChange={(e) => set({ complement: e.target.value })} placeholder="Sala, bloco..." />
+                      <Input
+                        value={formData.complement}
+                        onChange={(e) => set({ complement: e.target.value })}
+                        placeholder="Sala, bloco..."
+                      />
                     </div>
                     <div className="md:col-span-2">
                       <Label>Bairro</Label>
-                      <Input value={formData.neighborhood} onChange={(e) => set({ neighborhood: e.target.value })} placeholder="Bairro" />
+                      <Input
+                        value={formData.neighborhood}
+                        onChange={(e) => set({ neighborhood: e.target.value })}
+                        placeholder="Bairro"
+                      />
                     </div>
                   </div>
                 </CardContent>
@@ -311,7 +389,9 @@ function ConfigPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Recebimento dos fornecedores</CardTitle>
-                  <CardDescription>Define o padrão de como a gráfica recebe as compras feitas nos fornecedores.</CardDescription>
+                  <CardDescription>
+                    Define o padrão de como a gráfica recebe as compras feitas nos fornecedores.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
@@ -324,8 +404,16 @@ function ConfigPage() {
                         <SelectValue placeholder="Selecione..." />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="delivery"><span className="flex items-center gap-2"><Truck className="h-4 w-4" /> Entregar na gráfica</span></SelectItem>
-                        <SelectItem value="pickup"><span className="flex items-center gap-2"><Store className="h-4 w-4" /> Retirar no balcão do fornecedor</span></SelectItem>
+                        <SelectItem value="delivery">
+                          <span className="flex items-center gap-2">
+                            <Truck className="h-4 w-4" /> Entregar na gráfica
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="pickup">
+                          <span className="flex items-center gap-2">
+                            <Store className="h-4 w-4" /> Retirar no balcão do fornecedor
+                          </span>
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -333,7 +421,11 @@ function ConfigPage() {
                   {formData.default_receiving_mode === "pickup" && (
                     <div>
                       <Label>Ponto de retirada preferido</Label>
-                      <Input value={formData.preferred_pickup_point} onChange={(e) => set({ preferred_pickup_point: e.target.value })} placeholder="Unidade / balcão preferido" />
+                      <Input
+                        value={formData.preferred_pickup_point}
+                        onChange={(e) => set({ preferred_pickup_point: e.target.value })}
+                        placeholder="Unidade / balcão preferido"
+                      />
                     </div>
                   )}
 
@@ -342,7 +434,9 @@ function ConfigPage() {
                       <div className="flex items-center justify-between">
                         <div>
                           <Label>Endereço de entrega igual ao fiscal</Label>
-                          <p className="text-sm text-muted-foreground">Desative para informar um endereço de entrega diferente.</p>
+                          <p className="text-sm text-muted-foreground">
+                            Desative para informar um endereço de entrega diferente.
+                          </p>
                         </div>
                         <Switch
                           checked={formData.delivery_same_as_fiscal}
@@ -354,39 +448,76 @@ function ConfigPage() {
                         <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                           <div className="md:col-span-3">
                             <Label>Destinatário</Label>
-                            <Input value={formData.delivery_recipient} onChange={(e) => set({ delivery_recipient: e.target.value })} placeholder="Quem recebe" />
+                            <Input
+                              value={formData.delivery_recipient}
+                              onChange={(e) => set({ delivery_recipient: e.target.value })}
+                              placeholder="Quem recebe"
+                            />
                           </div>
                           <div className="md:col-span-3">
                             <Label>Telefone de entrega</Label>
-                            <Input value={formData.delivery_phone} onChange={(e) => set({ delivery_phone: e.target.value })} placeholder="(00) 90000-0000" />
+                            <Input
+                              value={formData.delivery_phone}
+                              onChange={(e) => set({ delivery_phone: e.target.value })}
+                              placeholder="(00) 90000-0000"
+                            />
                           </div>
                           <div className="md:col-span-2">
                             <Label>CEP</Label>
-                            <Input value={formData.delivery_zip} onChange={(e) => set({ delivery_zip: e.target.value })} placeholder="00000-000" />
+                            <Input
+                              value={formData.delivery_zip}
+                              onChange={(e) => set({ delivery_zip: e.target.value })}
+                              placeholder="00000-000"
+                            />
                           </div>
                           <div className="md:col-span-4">
                             <Label>Logradouro</Label>
-                            <Input value={formData.delivery_address} onChange={(e) => set({ delivery_address: e.target.value })} placeholder="Rua / Avenida" />
+                            <Input
+                              value={formData.delivery_address}
+                              onChange={(e) => set({ delivery_address: e.target.value })}
+                              placeholder="Rua / Avenida"
+                            />
                           </div>
                           <div className="md:col-span-2">
                             <Label>Número</Label>
-                            <Input value={formData.delivery_number} onChange={(e) => set({ delivery_number: e.target.value })} placeholder="Nº" />
+                            <Input
+                              value={formData.delivery_number}
+                              onChange={(e) => set({ delivery_number: e.target.value })}
+                              placeholder="Nº"
+                            />
                           </div>
                           <div className="md:col-span-2">
                             <Label>Complemento</Label>
-                            <Input value={formData.delivery_complement} onChange={(e) => set({ delivery_complement: e.target.value })} placeholder="Sala, bloco..." />
+                            <Input
+                              value={formData.delivery_complement}
+                              onChange={(e) => set({ delivery_complement: e.target.value })}
+                              placeholder="Sala, bloco..."
+                            />
                           </div>
                           <div className="md:col-span-2">
                             <Label>Bairro</Label>
-                            <Input value={formData.delivery_neighborhood} onChange={(e) => set({ delivery_neighborhood: e.target.value })} placeholder="Bairro" />
+                            <Input
+                              value={formData.delivery_neighborhood}
+                              onChange={(e) => set({ delivery_neighborhood: e.target.value })}
+                              placeholder="Bairro"
+                            />
                           </div>
                           <div className="md:col-span-4">
                             <Label>Cidade</Label>
-                            <Input value={formData.delivery_city} onChange={(e) => set({ delivery_city: e.target.value })} placeholder="Cidade" />
+                            <Input
+                              value={formData.delivery_city}
+                              onChange={(e) => set({ delivery_city: e.target.value })}
+                              placeholder="Cidade"
+                            />
                           </div>
                           <div className="md:col-span-2">
                             <Label>UF</Label>
-                            <Input value={formData.delivery_state} onChange={(e) => set({ delivery_state: e.target.value })} placeholder="UF" maxLength={2} />
+                            <Input
+                              value={formData.delivery_state}
+                              onChange={(e) => set({ delivery_state: e.target.value })}
+                              placeholder="UF"
+                              maxLength={2}
+                            />
                           </div>
                         </div>
                       )}
@@ -398,7 +529,9 @@ function ConfigPage() {
                       disabled={updateCompanyMutation.isPending || !formData.name}
                       onClick={() => updateCompanyMutation.mutate(formData)}
                     >
-                      {updateCompanyMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      {updateCompanyMutation.isPending && (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      )}
                       Salvar alterações
                     </Button>
                   </div>
@@ -409,7 +542,9 @@ function ConfigPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Termos padrão de contrato</CardTitle>
-                  <CardDescription>Anotação local (salva neste navegador). Não é compartilhada com a equipe.</CardDescription>
+                  <CardDescription>
+                    Anotação local (salva neste navegador). Não é compartilhada com a equipe.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <Textarea
@@ -419,7 +554,9 @@ function ConfigPage() {
                     onChange={(e) => setContractTerms(e.target.value)}
                   />
                   <div className="flex justify-end">
-                    <Button variant="outline" onClick={saveContractTerms}>Salvar termos</Button>
+                    <Button variant="outline" onClick={saveContractTerms}>
+                      Salvar termos
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
@@ -434,21 +571,42 @@ function ConfigPage() {
                 <CardTitle>Equipe</CardTitle>
                 <CardDescription>Usuários com acesso a esta empresa</CardDescription>
               </div>
-              <Button size="sm" onClick={() => toast.info("Convite de usuários requer painel do Supabase Auth.")}>Convidar usuário</Button>
+              <Button
+                size="sm"
+                onClick={() => toast.info("Convite de usuários requer painel do Supabase Auth.")}
+              >
+                Convidar usuário
+              </Button>
             </CardHeader>
             <CardContent className="p-0">
               <Table>
-                <TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Função</TableHead><TableHead>Membro desde</TableHead></TableRow></TableHeader>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Função</TableHead>
+                    <TableHead>Membro desde</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
                   {teamLoading ? (
-                    <TableRow><TableCell colSpan={3} className="text-center py-4"><Loader2 className="animate-spin mx-auto text-muted-foreground" /></TableCell></TableRow>
-                  ) : team?.map((u) => (
-                    <TableRow key={u.id}>
-                      <TableCell className="font-medium">{u.full_name || 'Sem nome'}</TableCell>
-                      <TableCell><StatusBadge variant="info">Membro</StatusBadge></TableCell>
-                      <TableCell className="text-muted-foreground text-sm">{new Date(u.created_at).toLocaleDateString('pt-BR')}</TableCell>
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center py-4">
+                        <Loader2 className="animate-spin mx-auto text-muted-foreground" />
+                      </TableCell>
                     </TableRow>
-                  ))}
+                  ) : (
+                    team?.map((u) => (
+                      <TableRow key={u.id}>
+                        <TableCell className="font-medium">{u.full_name || "Sem nome"}</TableCell>
+                        <TableCell>
+                          <StatusBadge variant="info">Membro</StatusBadge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {new Date(u.created_at).toLocaleDateString("pt-BR")}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
@@ -459,7 +617,10 @@ function ConfigPage() {
           <Card>
             <CardHeader>
               <CardTitle>Templates de WhatsApp</CardTitle>
-              <CardDescription>Configure as mensagens automáticas. Variáveis disponíveis: {'{cliente}, {numero}, {valor}, {produto}'}</CardDescription>
+              <CardDescription>
+                Configure as mensagens automáticas. Variáveis disponíveis:{" "}
+                {"{cliente}, {numero}, {valor}, {produto}"}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-2">
@@ -470,7 +631,13 @@ function ConfigPage() {
                     onChange={(e) => handleTemplateChange("orcamento", e.target.value)}
                     rows={2}
                   />
-                  <Button variant="outline" size="icon" onClick={() => testWhatsApp(templates.orcamento)}><Send className="h-4 w-4 text-success" /></Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => testWhatsApp(templates.orcamento)}
+                  >
+                    <Send className="h-4 w-4 text-success" />
+                  </Button>
                 </div>
               </div>
               <div className="space-y-2">
@@ -481,7 +648,13 @@ function ConfigPage() {
                     onChange={(e) => handleTemplateChange("pedido_pronto", e.target.value)}
                     rows={2}
                   />
-                  <Button variant="outline" size="icon" onClick={() => testWhatsApp(templates.pedido_pronto)}><Send className="h-4 w-4 text-success" /></Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => testWhatsApp(templates.pedido_pronto)}
+                  >
+                    <Send className="h-4 w-4 text-success" />
+                  </Button>
                 </div>
               </div>
               <div className="space-y-2">
@@ -492,7 +665,13 @@ function ConfigPage() {
                     onChange={(e) => handleTemplateChange("cobranca", e.target.value)}
                     rows={2}
                   />
-                  <Button variant="outline" size="icon" onClick={() => testWhatsApp(templates.cobranca)}><Send className="h-4 w-4 text-success" /></Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    onClick={() => testWhatsApp(templates.cobranca)}
+                  >
+                    <Send className="h-4 w-4 text-success" />
+                  </Button>
                 </div>
               </div>
               <div className="flex justify-end pt-4 border-t">
@@ -509,8 +688,9 @@ function ConfigPage() {
                 <Share2 className="h-5 w-5" /> Fonte de dados
               </CardTitle>
               <CardDescription>
-                De onde vêm produtos, clientes, orçamentos e pedidos: só da loja, só daqui (Flow Printi) ou dos dois
-                lados. A edição fica sempre no painel da loja — aqui é só leitura.
+                De onde vêm produtos, clientes, orçamentos e pedidos: só da loja, só daqui (Flow
+                Printi) ou dos dois lados. A edição fica sempre no painel da loja — aqui é só
+                leitura.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -536,7 +716,8 @@ function ConfigPage() {
                 </div>
               )}
               <p className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
-                <Lock className="h-3 w-3" /> Para alterar, acesse Painel da loja → Integrações → Fonte de dados.
+                <Lock className="h-3 w-3" /> Para alterar, acesse Painel da loja → Integrações →
+                Fonte de dados.
               </p>
             </CardContent>
           </Card>

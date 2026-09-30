@@ -141,7 +141,9 @@ export async function decifrar(guardado: string): Promise<string> {
 }
 
 /** Decifra quando há valor; devolve `undefined` para coluna nula. */
-export async function decifrarOpcional(guardado: string | null | undefined): Promise<string | undefined> {
+export async function decifrarOpcional(
+  guardado: string | null | undefined,
+): Promise<string | undefined> {
   if (!guardado) return undefined;
   return decifrar(guardado);
 }

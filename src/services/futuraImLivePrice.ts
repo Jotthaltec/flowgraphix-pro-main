@@ -62,7 +62,10 @@ function decodeEntities(s: string): string {
 }
 
 function cleanText(s: string): string {
-  return decodeEntities(s).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return decodeEntities(s)
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +92,8 @@ export function extractProductFormFields(html: string): Record<string, string> {
   for (const tag of inputs) {
     const name = tag.match(/\bname=["']?([A-Za-z_][A-Za-z0-9_]*)["']?/i)?.[1];
     if (!name) continue;
-    const value = tag.match(/\bvalue=["']([^"']*)["']/i)?.[1] ?? tag.match(/\bvalue=([^\s">]+)/i)?.[1] ?? "";
+    const value =
+      tag.match(/\bvalue=["']([^"']*)["']/i)?.[1] ?? tag.match(/\bvalue=([^\s">]+)/i)?.[1] ?? "";
     // O primeiro valor vence: o form do produto vem antes dos formulários do rodapé.
     if (!(name in fields)) fields[name] = decodeEntities(value);
   }

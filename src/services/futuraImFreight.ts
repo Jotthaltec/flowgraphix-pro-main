@@ -107,9 +107,9 @@ export function parseFuturaImFreight(html: string): FreightOption[] {
   const rows = html.split(/<div\s+class=["'][^"']*\brow\b/i).slice(1);
 
   for (const row of rows) {
-    const cols = [...row.matchAll(/<div\s+class=["'][^"']*\bcol-\d+\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi)].map(
-      (m) => stripTags(m[1]),
-    );
+    const cols = [
+      ...row.matchAll(/<div\s+class=["'][^"']*\bcol-\d+\b[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi),
+    ].map((m) => stripTags(m[1]));
     if (cols.length < 3) continue;
 
     const [carrier, daysText, priceText] = cols;

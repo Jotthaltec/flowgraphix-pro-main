@@ -16,7 +16,8 @@ function normalizeStatus(rawStatus?: string | null, fallback = "pending") {
 }
 
 export function mapSalesChannelToCredentialRow(row: any) {
-  const config = (row?.config && typeof row.config === "object" && !Array.isArray(row.config)) ? row.config : {};
+  const config =
+    row?.config && typeof row.config === "object" && !Array.isArray(row.config) ? row.config : {};
 
   return {
     id: row?.id ?? "",
@@ -25,7 +26,10 @@ export function mapSalesChannelToCredentialRow(row: any) {
     credential_key: String(config?.api_key ?? config?.client_id ?? config?.key ?? ""),
     credential_secret: String(config?.secret ?? config?.client_secret ?? config?.token ?? ""),
     extra_config: Object.fromEntries(
-      Object.entries(config ?? {}).filter(([key]) => !["api_key", "client_id", "key", "secret", "client_secret", "token"].includes(key))
+      Object.entries(config ?? {}).filter(
+        ([key]) =>
+          !["api_key", "client_id", "key", "secret", "client_secret", "token"].includes(key),
+      ),
     ),
     status: normalizeStatus(row?.status, "disconnected"),
     last_verified_at: row?.last_sync_at ?? null,

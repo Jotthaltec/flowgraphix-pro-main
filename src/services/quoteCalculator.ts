@@ -16,7 +16,7 @@ import type {
   FreightQuote,
   SelectedExtra,
   SelectedService,
-} from '@/types/combinationTypes';
+} from "@/types/combinationTypes";
 
 // ---------------------------------------------------------------------------
 // Tipos do calculador
@@ -200,10 +200,7 @@ export function recalculateSalePriceFromMargin(
 /**
  * Calcula a margem resultante dado custo e preço de venda.
  */
-export function calculateMarginPercent(
-  totalCost: number,
-  salePrice: number,
-): number {
+export function calculateMarginPercent(totalCost: number, salePrice: number): number {
   if (salePrice <= 0) return 0;
   return Math.round(((salePrice - totalCost) / salePrice) * 1000) / 10;
 }

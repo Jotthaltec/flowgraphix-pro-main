@@ -14,7 +14,10 @@ async function login(page) {
   await page.goto(`${CRM}/login`, { waitUntil: "networkidle" });
   await page.fill('input[type="email"]', "dono@homolog.local");
   await page.fill('input[type="password"]', "Homolog#2026");
-  await Promise.all([page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 60000 }), page.click('button:has-text("Entrar")')]);
+  await Promise.all([
+    page.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 60000 }),
+    page.click('button:has-text("Entrar")'),
+  ]);
   await page.waitForLoadState("networkidle");
 }
 
@@ -26,7 +29,10 @@ async function login(page) {
     storageState: fs.existsSync(STATE) ? STATE : undefined,
   });
   const page = await context.newPage();
-  page.on("console", (m) => m.type() === "error" && console.log("[console]", m.text().slice(0, 240)));
+  page.on(
+    "console",
+    (m) => m.type() === "error" && console.log("[console]", m.text().slice(0, 240)),
+  );
   page.on("pageerror", (e) => console.log("[pageerror]", e.message.slice(0, 240)));
 
   await page.goto(`${CRM}/dashboard`, { waitUntil: "networkidle" });

@@ -77,7 +77,11 @@ function ProdutosSitePage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["site_products"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("site_products").select("*").eq("active", true).order("name");
+      const { data, error } = await supabase
+        .from("site_products")
+        .select("*")
+        .eq("active", true)
+        .order("name");
       if (error) throw error;
       return (data ?? []) as SiteProduct[];
     },
@@ -220,7 +224,8 @@ function ProdutosSitePage() {
                       </div>
                       {p.crm_id ? (
                         <div className="mt-1 text-xs text-muted-foreground">
-                          {p.imagens} mídia(s) · {p.grupos_opcao} grupo(s) · {p.opcoes} opção(ões) · {p.variantes} variante(s) · {p.tiragens} tiragem(ns)
+                          {p.imagens} mídia(s) · {p.grupos_opcao} grupo(s) · {p.opcoes} opção(ões) ·{" "}
+                          {p.variantes} variante(s) · {p.tiragens} tiragem(ns)
                         </div>
                       ) : null}
                     </TableCell>

@@ -1,7 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
-import { Loader2, AlertTriangle } from 'lucide-react';
-import { SupplierCombinationSelector } from './supplier-combination-selector';
-import { getFamilyCombinationDataClient } from '@/integrations/supabase/combination-client';
+import { useQuery } from "@tanstack/react-query";
+import { Loader2, AlertTriangle } from "lucide-react";
+import { SupplierCombinationSelector } from "./supplier-combination-selector";
+import { getFamilyCombinationDataClient } from "@/integrations/supabase/combination-client";
 
 interface SupplierCombinationWrapperProps {
   familyId: string;
@@ -21,7 +21,7 @@ export function SupplierCombinationWrapper({
   // Carrega os dados da família (cascata + produtos comerciais + promoções)
   // client-side, com o client autenticado (RLS via user_owns_company).
   const { data, isLoading, error } = useQuery({
-    queryKey: ['familyCombinationData', familyId, companyId],
+    queryKey: ["familyCombinationData", familyId, companyId],
     queryFn: async () => {
       return await getFamilyCombinationDataClient(familyId, companyId);
     },
@@ -42,7 +42,7 @@ export function SupplierCombinationWrapper({
         <AlertTriangle className="h-4 w-4 mt-0.5" />
         <div>
           <p className="font-semibold">Erro ao carregar combinações</p>
-          <p>{error ? error.message : 'Dados não encontrados.'}</p>
+          <p>{error ? error.message : "Dados não encontrados."}</p>
         </div>
       </div>
     );

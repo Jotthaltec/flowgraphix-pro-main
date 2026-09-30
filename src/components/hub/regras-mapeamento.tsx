@@ -6,11 +6,25 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { StatusBadge } from "@/components/status-badge";
-import { 
-  Cpu, Search, Trash2, Loader2, Play, ToggleLeft, 
-  HelpCircle, Settings, CheckSquare
+import {
+  Cpu,
+  Search,
+  Trash2,
+  Loader2,
+  Play,
+  ToggleLeft,
+  HelpCircle,
+  Settings,
+  CheckSquare,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -29,7 +43,7 @@ export function RegrasMapeamento() {
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
-    }
+    },
   });
 
   // Mutação para alternar status ativo/inativo
@@ -39,7 +53,7 @@ export function RegrasMapeamento() {
         .from("supplier_mapping_rules")
         .update({
           active: !rule.active,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         })
         .eq("id", rule.id);
       if (error) throw error;
@@ -50,16 +64,13 @@ export function RegrasMapeamento() {
     },
     onError: (err: any) => {
       toast.error(`Erro ao atualizar regra: ${err.message}`);
-    }
+    },
   });
 
   // Mutação para deletar regra
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("supplier_mapping_rules")
-        .delete()
-        .eq("id", id);
+      const { error } = await supabase.from("supplier_mapping_rules").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -68,13 +79,14 @@ export function RegrasMapeamento() {
     },
     onError: (err: any) => {
       toast.error(`Erro ao deletar: ${err.message}`);
-    }
+    },
   });
 
   // Filtra regras
-  const filteredRules = rules.filter(r => 
-    r.supplier_domain.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.field_key.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredRules = rules.filter(
+    (r) =>
+      r.supplier_domain.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.field_key.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
@@ -85,16 +97,16 @@ export function RegrasMapeamento() {
           Regras de Mapeamento Cadastradas
         </CardTitle>
         <CardDescription>
-          Gerencie seletores CSS, expressões regulares e regras de extração salvas pelo robô para automatizar novos produtos.
+          Gerencie seletores CSS, expressões regulares e regras de extração salvas pelo robô para
+          automatizar novos produtos.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        
         {/* BUSCA */}
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Buscar por domínio (ex: printi.com.br) ou campo alvo (ex: product_name)..." 
+          <Input
+            placeholder="Buscar por domínio (ex: printi.com.br) ou campo alvo (ex: product_name)..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-9"
@@ -123,7 +135,14 @@ export function RegrasMapeamento() {
               </TableHeader>
               <TableBody>
                 {filteredRules.map((rule) => {
-                  let badgeVariant: "default" | "success" | "warning" | "destructive" | "info" | "accent" | "muted" = "default";
+                  let badgeVariant:
+                    | "default"
+                    | "success"
+                    | "warning"
+                    | "destructive"
+                    | "info"
+                    | "accent"
+                    | "muted" = "default";
                   if (rule.extraction_method === "json_ld") badgeVariant = "accent";
                   if (rule.extraction_method === "meta_tag") badgeVariant = "info";
                   if (rule.extraction_method === "regex") badgeVariant = "warning";
@@ -131,35 +150,45 @@ export function RegrasMapeamento() {
 
                   return (
                     <TableRow key={rule.id}>
-                      <TableCell className="font-semibold text-xs font-mono">{rule.supplier_domain}</TableCell>
+                      <TableCell className="font-semibold text-xs font-mono">
+                        {rule.supplier_domain}
+                      </TableCell>
                       <TableCell>
                         <StatusBadge variant="default">{rule.field_key}</StatusBadge>
                       </TableCell>
                       <TableCell>
                         <StatusBadge variant={badgeVariant}>{rule.extraction_method}</StatusBadge>
                       </TableCell>
-                      <TableCell className="font-mono text-xs max-w-xs truncate" title={rule.selector || rule.regex_pattern || ""}>
+                      <TableCell
+                        className="font-mono text-xs max-w-xs truncate"
+                        title={rule.selector || rule.regex_pattern || ""}
+                      >
                         {rule.selector || rule.regex_pattern || "-"}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {rule.attribute_name || rule.label_anchor || "-"}
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground italic truncate max-w-xxs" title={rule.sample_value || ""}>
+                      <TableCell
+                        className="text-xs text-muted-foreground italic truncate max-w-xxs"
+                        title={rule.sample_value || ""}
+                      >
                         {rule.sample_value || "-"}
                       </TableCell>
                       <TableCell>
-                        <Switch 
-                          checked={rule.active} 
+                        <Switch
+                          checked={rule.active}
                           onCheckedChange={() => toggleMutation.mutate(rule)}
                           disabled={toggleMutation.isPending}
                         />
                       </TableCell>
                       <TableCell>
-                        <Button 
-                          size="icon" 
-                          variant="ghost" 
+                        <Button
+                          size="icon"
+                          variant="ghost"
                           onClick={() => {
-                            if (window.confirm("Deseja realmente deletar esta regra de extração?")) {
+                            if (
+                              window.confirm("Deseja realmente deletar esta regra de extração?")
+                            ) {
                               deleteMutation.mutate(rule.id);
                             }
                           }}
@@ -180,7 +209,8 @@ export function RegrasMapeamento() {
             <Cpu className="h-10 w-10 text-muted-foreground/30 mb-3 animate-pulse" />
             <h4 className="font-semibold text-sm">Nenhuma Regra Mapeada</h4>
             <p className="text-xs max-w-sm mt-1">
-              As regras de mapeamento são geradas quando você treina o robô na aba "Importar por Link" usando a Sheet de Treinamento.
+              As regras de mapeamento são geradas quando você treina o robô na aba "Importar por
+              Link" usando a Sheet de Treinamento.
             </p>
           </div>
         )}

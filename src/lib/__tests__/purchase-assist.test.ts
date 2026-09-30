@@ -7,8 +7,20 @@ import {
 } from "@/lib/purchase-assist";
 
 const items: ChecklistItem[] = [
-  { product_name: "Cartão de Visita Couché", source_url: "https://futuraim.com.br/produto/cartao?id=4627", supplier_sku: "4627", quantity: 1000, unit_cost: 0.089 },
-  { product_name: "Banner Personalizado", source_url: "https://futuraim.com.br/produto/banner?id=22502", supplier_sku: "22502", quantity: 2, unit_cost: 45 },
+  {
+    product_name: "Cartão de Visita Couché",
+    source_url: "https://futuraim.com.br/produto/cartao?id=4627",
+    supplier_sku: "4627",
+    quantity: 1000,
+    unit_cost: 0.089,
+  },
+  {
+    product_name: "Banner Personalizado",
+    source_url: "https://futuraim.com.br/produto/banner?id=22502",
+    supplier_sku: "22502",
+    quantity: 2,
+    unit_cost: 45,
+  },
 ];
 
 describe("checklistTotal", () => {
@@ -22,8 +34,9 @@ describe("checklistTotal", () => {
 
 describe("formatDeliveryText", () => {
   it("formata retirada com o ponto de retirada", () => {
-    expect(formatDeliveryText({ receiving_mode: "pickup", pickup_point: "Balcão Centro" }))
-      .toBe("Retirada: Balcão Centro");
+    expect(formatDeliveryText({ receiving_mode: "pickup", pickup_point: "Balcão Centro" })).toBe(
+      "Retirada: Balcão Centro",
+    );
   });
 
   it("monta o endereço de entrega em linhas", () => {
@@ -55,7 +68,11 @@ describe("buildPurchaseChecklist", () => {
     poNumber: "PC-000001",
     supplierName: "FuturaIM",
     supplierUrl: "https://futuraim.com.br",
-    account: { login_username: "grafica@x.com", registration_cnpj: "00.000.000/0001-00", has_password: true },
+    account: {
+      login_username: "grafica@x.com",
+      registration_cnpj: "00.000.000/0001-00",
+      has_password: true,
+    },
     delivery: { receiving_mode: "pickup", pickup_point: "Balcão Centro" },
     items,
   });

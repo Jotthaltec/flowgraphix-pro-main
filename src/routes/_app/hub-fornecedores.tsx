@@ -53,7 +53,10 @@ function HubFornecedoresPage() {
               <ShoppingCart className="h-4 w-4 text-rose-500" />
               <span>Rascunhos de Marketplace</span>
             </TabsTrigger>
-            <TabsTrigger value="configuracoes" className="flex items-center gap-2 text-xs md:text-sm">
+            <TabsTrigger
+              value="configuracoes"
+              className="flex items-center gap-2 text-xs md:text-sm"
+            >
               <Settings className="h-4 w-4 text-slate-500" />
               <span>Configurações</span>
             </TabsTrigger>

@@ -50,7 +50,10 @@ export interface ChecklistInput {
 
 /** Total estimado dos itens (quantidade × custo unitário). */
 export function checklistTotal(items: ChecklistItem[]): number {
-  return items.reduce((sum, it) => sum + (Number(it.unit_cost) || 0) * (Number(it.quantity) || 0), 0);
+  return items.reduce(
+    (sum, it) => sum + (Number(it.unit_cost) || 0) * (Number(it.quantity) || 0),
+    0,
+  );
 }
 
 /** Endereço/retirada em texto de uma ou mais linhas (para copiar/colar). */
@@ -82,7 +85,10 @@ export function buildPurchaseChecklist(input: ChecklistInput): string {
   if (supplierUrl) out.push(`Site: ${supplierUrl}`);
 
   // Conta
-  if (account && (account.login_username || account.registration_cnpj || account.registration_email)) {
+  if (
+    account &&
+    (account.login_username || account.registration_cnpj || account.registration_email)
+  ) {
     out.push("", "— CONTA —");
     if (account.login_username) out.push(`Login: ${account.login_username}`);
     if (account.has_password) out.push("Senha: (salva no perfil — use o gerenciador de senhas)");
@@ -97,9 +103,7 @@ export function buildPurchaseChecklist(input: ChecklistInput): string {
   out.push("", `— ITENS (${items.length}) —`);
   items.forEach((it, i) => {
     const sku = it.supplier_sku ? ` · SKU ${it.supplier_sku}` : "";
-    out.push(
-      `${i + 1}. ${it.product_name} — ${it.quantity} un × ${brl(it.unit_cost)}${sku}`,
-    );
+    out.push(`${i + 1}. ${it.product_name} — ${it.quantity} un × ${brl(it.unit_cost)}${sku}`);
     if (it.source_url) out.push(`   ${it.source_url}`);
   });
 

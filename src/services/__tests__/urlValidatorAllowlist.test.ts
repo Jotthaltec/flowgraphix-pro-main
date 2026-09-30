@@ -24,18 +24,28 @@ describe("urlValidator — allowlist data-driven (motor universal)", () => {
   });
 
   it("rejeita domínio fora da allowlist customizada", () => {
-    const res = validateSupplierUrl("https://outro.com/p", { allowedDomains: ["grafica-x.com.br"] });
+    const res = validateSupplierUrl("https://outro.com/p", {
+      allowedDomains: ["grafica-x.com.br"],
+    });
     expect(res.ok).toBe(false);
     expect(res.reason).toMatch(/não permitido/i);
   });
 
   it("anti-SSRF SEMPRE aplicado, mesmo com allowlist liberando o host", () => {
     // http bloqueado
-    expect(validateSupplierUrl("http://grafica-x.com.br/p", { allowedDomains: ["grafica-x.com.br"] }).ok).toBe(false);
+    expect(
+      validateSupplierUrl("http://grafica-x.com.br/p", { allowedDomains: ["grafica-x.com.br"] }).ok,
+    ).toBe(false);
     // IP interno bloqueado ainda que "liberado"
-    expect(validateSupplierUrl("https://127.0.0.1/p", { allowedDomains: ["127.0.0.1"] }).ok).toBe(false);
-    expect(validateSupplierUrl("https://192.168.0.10/p", { allowedDomains: ["192.168.0.10"] }).ok).toBe(false);
-    expect(validateSupplierUrl("https://localhost/p", { allowedDomains: ["localhost"] }).ok).toBe(false);
+    expect(validateSupplierUrl("https://127.0.0.1/p", { allowedDomains: ["127.0.0.1"] }).ok).toBe(
+      false,
+    );
+    expect(
+      validateSupplierUrl("https://192.168.0.10/p", { allowedDomains: ["192.168.0.10"] }).ok,
+    ).toBe(false);
+    expect(validateSupplierUrl("https://localhost/p", { allowedDomains: ["localhost"] }).ok).toBe(
+      false,
+    );
   });
 
   it("normalizeAllowlist: vazio → padrão; remove www/duplicatas", () => {

@@ -1,12 +1,34 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Search, Loader2, ShoppingCart, ExternalLink, Package, Truck, Store, CreditCard } from "lucide-react";
+import {
+  Search,
+  Loader2,
+  ShoppingCart,
+  ExternalLink,
+  Package,
+  Truck,
+  Store,
+  CreditCard,
+} from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/status-badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -20,7 +42,11 @@ export const Route = createFileRoute("/_app/pedidos-compra")({ component: Pedido
 const fmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 /** Fluxo de status do pedido de compra, em ordem. */
-const STATUS: { value: string; label: string; variant: "default" | "info" | "accent" | "success" | "destructive" }[] = [
+const STATUS: {
+  value: string;
+  label: string;
+  variant: "default" | "info" | "accent" | "success" | "destructive";
+}[] = [
   { value: "rascunho", label: "Rascunho", variant: "default" },
   { value: "pronto_para_compra", label: "Pronto p/ compra", variant: "info" },
   { value: "comprado", label: "Comprado", variant: "accent" },
@@ -75,13 +101,15 @@ function PedidosCompraPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("purchase_orders")
-        .select(`
+        .select(
+          `
           id, po_number, status, supplier_id, receiving_mode, total_cost, created_at, delivery_snapshot,
           supplier_order_number, actual_cost, purchased_at, expected_delivery, tracking_code, purchase_notes,
           suppliers:supplier_id (name, website_url),
           orders:order_id (order_number),
           purchase_order_items (*)
-        `)
+        `,
+        )
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data as unknown as PurchaseOrder[];
@@ -130,10 +158,16 @@ function PedidosCompraPage() {
             />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full md:w-52"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectTrigger className="w-full md:w-52">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos status</SelectItem>
-              {STATUS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+              {STATUS.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  {s.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -156,52 +190,92 @@ function PedidosCompraPage() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={9} className="text-center py-6"><Loader2 className="mx-auto animate-spin" /></TableCell></TableRow>
+              <TableRow>
+                <TableCell colSpan={9} className="text-center py-6">
+                  <Loader2 className="mx-auto animate-spin" />
+                </TableCell>
+              </TableRow>
             ) : !filtered?.length ? (
               <TableRow>
                 <TableCell colSpan={9} className="text-center py-10 text-muted-foreground">
                   <ShoppingCart className="mx-auto h-8 w-8 mb-2 opacity-40" />
-                  Nenhum pedido de compra ainda. Eles são gerados ao converter um orçamento com itens de fornecedor em pedido.
+                  Nenhum pedido de compra ainda. Eles são gerados ao converter um orçamento com
+                  itens de fornecedor em pedido.
                 </TableCell>
               </TableRow>
-            ) : filtered.map((po) => {
-              const meta = statusMeta(po.status);
-              return (
-                <TableRow key={po.id}>
-                  <TableCell className="font-mono font-semibold text-primary">{po.po_number}</TableCell>
-                  <TableCell className="font-medium">{po.suppliers?.name || "—"}</TableCell>
-                  <TableCell className="hidden md:table-cell font-mono text-sm text-muted-foreground">{po.orders?.order_number || "—"}</TableCell>
-                  <TableCell className="hidden md:table-cell text-sm">
-                    <span className="inline-flex items-center gap-1 text-muted-foreground">
-                      {po.receiving_mode === "pickup" ? <><Store className="h-3.5 w-3.5" /> Retirada</> : <><Truck className="h-3.5 w-3.5" /> Entrega</>}
-                    </span>
-                  </TableCell>
-                  <TableCell>{po.purchase_order_items?.length || 0}</TableCell>
-                  <TableCell className="font-semibold">{fmt.format(po.total_cost || 0)}</TableCell>
-                  <TableCell>
-                    <Select value={po.status} onValueChange={(status) => statusMutation.mutate({ id: po.id, status })}>
-                      <SelectTrigger className="h-8 w-auto border-0 bg-transparent p-0 gap-1 [&>svg]:opacity-50">
-                        <StatusBadge variant={meta.variant}>{meta.label}</StatusBadge>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {STATUS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell className="hidden md:table-cell text-sm text-muted-foreground">{new Date(po.created_at).toLocaleDateString("pt-BR")}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-0.5">
-                      <Button size="icon" variant="ghost" onClick={() => setBuying(po)} title="Comprar no fornecedor">
-                        <CreditCard className="h-4 w-4" />
-                      </Button>
-                      <Button size="icon" variant="ghost" onClick={() => setDetail(po)} title="Ver itens e destino">
-                        <Package className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+            ) : (
+              filtered.map((po) => {
+                const meta = statusMeta(po.status);
+                return (
+                  <TableRow key={po.id}>
+                    <TableCell className="font-mono font-semibold text-primary">
+                      {po.po_number}
+                    </TableCell>
+                    <TableCell className="font-medium">{po.suppliers?.name || "—"}</TableCell>
+                    <TableCell className="hidden md:table-cell font-mono text-sm text-muted-foreground">
+                      {po.orders?.order_number || "—"}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-sm">
+                      <span className="inline-flex items-center gap-1 text-muted-foreground">
+                        {po.receiving_mode === "pickup" ? (
+                          <>
+                            <Store className="h-3.5 w-3.5" /> Retirada
+                          </>
+                        ) : (
+                          <>
+                            <Truck className="h-3.5 w-3.5" /> Entrega
+                          </>
+                        )}
+                      </span>
+                    </TableCell>
+                    <TableCell>{po.purchase_order_items?.length || 0}</TableCell>
+                    <TableCell className="font-semibold">
+                      {fmt.format(po.total_cost || 0)}
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        value={po.status}
+                        onValueChange={(status) => statusMutation.mutate({ id: po.id, status })}
+                      >
+                        <SelectTrigger className="h-8 w-auto border-0 bg-transparent p-0 gap-1 [&>svg]:opacity-50">
+                          <StatusBadge variant={meta.variant}>{meta.label}</StatusBadge>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STATUS.map((s) => (
+                            <SelectItem key={s.value} value={s.value}>
+                              {s.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                      {new Date(po.created_at).toLocaleDateString("pt-BR")}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-0.5">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => setBuying(po)}
+                          title="Comprar no fornecedor"
+                        >
+                          <CreditCard className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => setDetail(po)}
+                          title="Ver itens e destino"
+                        >
+                          <Package className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
           </TableBody>
         </Table>
       </Card>
@@ -211,7 +285,9 @@ function PedidosCompraPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <span className="font-mono">{detail?.po_number}</span>
-              <span className="text-muted-foreground font-normal text-sm">· {detail?.suppliers?.name}</span>
+              <span className="text-muted-foreground font-normal text-sm">
+                · {detail?.suppliers?.name}
+              </span>
             </DialogTitle>
           </DialogHeader>
 
@@ -220,22 +296,32 @@ function PedidosCompraPage() {
               {/* Destino da compra (snapshot) */}
               <div className="rounded-lg border bg-muted/30 p-3 text-sm">
                 <p className="font-medium mb-1 flex items-center gap-1.5">
-                  {detail.receiving_mode === "pickup" ? <Store className="h-4 w-4" /> : <Truck className="h-4 w-4" />}
+                  {detail.receiving_mode === "pickup" ? (
+                    <Store className="h-4 w-4" />
+                  ) : (
+                    <Truck className="h-4 w-4" />
+                  )}
                   {detail.receiving_mode === "pickup" ? "Retirada no fornecedor" : "Entrega"}
                 </p>
-                <DeliverySnapshot snapshot={detail.delivery_snapshot} mode={detail.receiving_mode} />
+                <DeliverySnapshot
+                  snapshot={detail.delivery_snapshot}
+                  mode={detail.receiving_mode}
+                />
               </div>
 
               {/* Itens */}
               <div>
-                <p className="text-sm font-medium mb-2">Itens ({detail.purchase_order_items?.length || 0})</p>
+                <p className="text-sm font-medium mb-2">
+                  Itens ({detail.purchase_order_items?.length || 0})
+                </p>
                 <div className="space-y-2">
                   {detail.purchase_order_items?.map((it) => (
                     <div key={it.id} className="flex items-center gap-3 rounded-lg border p-2.5">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{it.product_name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {it.quantity} × {fmt.format(it.unit_cost)} = <span className="font-medium">{fmt.format(it.total_cost)}</span>
+                          {it.quantity} × {fmt.format(it.unit_cost)} ={" "}
+                          <span className="font-medium">{fmt.format(it.total_cost)}</span>
                           {it.supplier_sku ? ` · SKU ${it.supplier_sku}` : ""}
                         </p>
                       </div>
@@ -252,7 +338,9 @@ function PedidosCompraPage() {
               </div>
 
               <div className="flex items-center justify-between border-t pt-3">
-                <span className="text-sm text-muted-foreground">Custo total do pedido de compra</span>
+                <span className="text-sm text-muted-foreground">
+                  Custo total do pedido de compra
+                </span>
                 <span className="text-lg font-semibold">{fmt.format(detail.total_cost || 0)}</span>
               </div>
             </div>
@@ -270,10 +358,20 @@ function PedidosCompraPage() {
   );
 }
 
-function DeliverySnapshot({ snapshot, mode }: { snapshot: Record<string, any> | null; mode: string | null }) {
+function DeliverySnapshot({
+  snapshot,
+  mode,
+}: {
+  snapshot: Record<string, any> | null;
+  mode: string | null;
+}) {
   if (!snapshot) return <p className="text-muted-foreground">Sem detalhes de destino.</p>;
   if (mode === "pickup") {
-    return <p className="text-muted-foreground">{snapshot.pickup_point || "Ponto de retirada não definido."}</p>;
+    return (
+      <p className="text-muted-foreground">
+        {snapshot.pickup_point || "Ponto de retirada não definido."}
+      </p>
+    );
   }
   const line2 = [snapshot.neighborhood, snapshot.city, snapshot.state].filter(Boolean).join(" · ");
   return (

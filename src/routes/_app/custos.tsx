@@ -37,27 +37,33 @@ function CustosPage() {
   const unit = total / Math.max(qty, 1);
   const lucro = venda - unit;
   const margem = venda > 0 ? (lucro / venda) * 100 : 0;
-  const sugerido = unit / (1 - 0.50); // Sugerido baseado em margem alvo de 50%
+  const sugerido = unit / (1 - 0.5); // Sugerido baseado em margem alvo de 50%
 
   const saveProductMutation = useMutation({
     mutationFn: async () => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
-      
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", (await supabase.auth.getUser()).data.user?.id || "")
+        .single();
+
       if (!profileData?.company_id) throw new Error("Empresa não identificada.");
 
-      const { error } = await supabase.from("products").insert([{
-        company_id: profileData.company_id,
-        name: productName || "Produto Simulado",
-        category: "Simulação",
-        unit_measure: "Unidade",
-        base_cost: unit,
-        cost_price: unit,
-        suggested_price: sugerido,
-        sale_price: sugerido,
-        margin_percent: 50, // Default 50%
-        target_margin: 50,
-        status: "Ativo"
-      }]);
+      const { error } = await supabase.from("products").insert([
+        {
+          company_id: profileData.company_id,
+          name: productName || "Produto Simulado",
+          category: "Simulação",
+          unit_measure: "Unidade",
+          base_cost: unit,
+          cost_price: unit,
+          suggested_price: sugerido,
+          sale_price: sugerido,
+          margin_percent: 50, // Default 50%
+          target_margin: 50,
+          status: "Ativo",
+        },
+      ]);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -65,93 +71,130 @@ function CustosPage() {
       toast.success("Simulação salva como Produto no catálogo!");
       setProductName("");
     },
-    onError: (err) => toast.error("Erro ao salvar produto: " + err.message)
+    onError: (err) => toast.error("Erro ao salvar produto: " + err.message),
   });
 
   const saveQuoteMutation = useMutation({
     mutationFn: async () => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", (await supabase.auth.getUser()).data.user?.id || "")
+        .single();
       if (!profileData?.company_id) throw new Error("Empresa não identificada.");
 
       const { count } = await supabase.from("quotes").select("*", { count: "exact", head: true });
-      const qNum = `ORC-${String((count || 0) + 1).padStart(6, '0')}`;
+      const qNum = `ORC-${String((count || 0) + 1).padStart(6, "0")}`;
       const desc = productName || "Simulação de custo";
       const totalSale = venda * qty;
 
-      const { data: quote, error } = await supabase.from("quotes").insert([{
-        company_id: profileData.company_id,
-        client_id: null,
-        quote_number: qNum,
-        service_desc: desc,
-        quantity: qty,
-        cost_value: total,
-        sale_price: totalSale,
-        margin_percentage: parseFloat(margem.toFixed(2)),
-        discount: 0,
-        final_value: totalSale,
-        notes: "Gerado pela calculadora de Custos & Lucro.",
-        status: "rascunho",
-      }]).select("id").single();
+      const { data: quote, error } = await supabase
+        .from("quotes")
+        .insert([
+          {
+            company_id: profileData.company_id,
+            client_id: null,
+            quote_number: qNum,
+            service_desc: desc,
+            quantity: qty,
+            cost_value: total,
+            sale_price: totalSale,
+            margin_percentage: parseFloat(margem.toFixed(2)),
+            discount: 0,
+            final_value: totalSale,
+            notes: "Gerado pela calculadora de Custos & Lucro.",
+            status: "rascunho",
+          },
+        ])
+        .select("id")
+        .single();
       if (error) throw error;
 
       // Snapshot do item (custo/venda unitários) para o orçamento.
-      await supabase.from("quote_items").insert([{
-        quote_id: quote.id,
-        item_name: desc,
-        quantity: qty,
-        unit_price: venda,
-        total_price: totalSale,
-        cost_price: unit,
-        margin_percent: parseFloat(margem.toFixed(2)),
-        source_origin: "custos",
-      }]);
+      await supabase.from("quote_items").insert([
+        {
+          quote_id: quote.id,
+          item_name: desc,
+          quantity: qty,
+          unit_price: venda,
+          total_price: totalSale,
+          cost_price: unit,
+          margin_percent: parseFloat(margem.toFixed(2)),
+          source_origin: "custos",
+        },
+      ]);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quotes"] });
       toast.success("Orçamento rascunho criado! Defina o cliente na aba Orçamentos.");
       navigate({ to: "/orcamentos", search: { selectProductId: undefined } });
     },
-    onError: (err) => toast.error("Erro ao criar orçamento: " + err.message)
+    onError: (err) => toast.error("Erro ao criar orçamento: " + err.message),
   });
 
   return (
     <>
-      <PageHeader title="Custos & Lucro" description="Calculadora completa de custo, preço e margem" />
+      <PageHeader
+        title="Custos & Lucro"
+        description="Calculadora completa de custo, preço e margem"
+      />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2"><Calculator className="h-5 w-5 text-primary" />Calculadora de custo</CardTitle>
+            <CardTitle className="flex items-center gap-2">
+              <Calculator className="h-5 w-5 text-primary" />
+              Calculadora de custo
+            </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
               <div>
                 <Label>Produto</Label>
-                <Input 
-                  placeholder="Ex: Camiseta DTF" 
+                <Input
+                  placeholder="Ex: Camiseta DTF"
                   value={productName}
                   onChange={(e) => setProductName(e.target.value)}
                 />
               </div>
               <div>
                 <Label>Quantidade</Label>
-                <Input type="number" min="1" value={qty} onChange={(e) => setQty(Number(e.target.value) || 1)} />
+                <Input
+                  type="number"
+                  min="1"
+                  value={qty}
+                  onChange={(e) => setQty(Number(e.target.value) || 1)}
+                />
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {fields.map((f) => (
                 <div key={f.k}>
                   <Label className="text-xs">{f.l} (R$)</Label>
-                  <Input type="number" min="0" step="0.01" placeholder="0.00" onChange={(e) => setVals({ ...vals, [f.k]: Number(e.target.value) })} />
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    onChange={(e) => setVals({ ...vals, [f.k]: Number(e.target.value) })}
+                  />
                 </div>
               ))}
               <div className="md:col-span-2">
-                <Label className="text-xs font-semibold">Valor de venda desejado (unitário) (R$)</Label>
-                <Input type="number" min="0" step="0.01" value={venda} onChange={(e) => setVenda(Number(e.target.value))} />
+                <Label className="text-xs font-semibold">
+                  Valor de venda desejado (unitário) (R$)
+                </Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={venda}
+                  onChange={(e) => setVenda(Number(e.target.value))}
+                />
               </div>
             </div>
             <div className="flex gap-2 mt-4">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="flex-1"
                 disabled={saveProductMutation.isPending}
                 onClick={() => saveProductMutation.mutate()}
@@ -177,19 +220,43 @@ function CustosPage() {
             <p className="text-3xl font-bold text-white mt-1">{margem.toFixed(1)}%</p>
             <p className="text-xs text-white/80 mt-1">Margem real sobre a venda</p>
             <div className="mt-4 pt-4 border-t border-white/20 grid grid-cols-2 gap-3 text-white">
-              <div><p className="text-[10px] uppercase opacity-80">Lucro/un</p><p className="text-lg font-semibold">R$ {lucro.toFixed(2)}</p></div>
-              <div><p className="text-[10px] uppercase opacity-80">Custo/un</p><p className="text-lg font-semibold">R$ {unit.toFixed(2)}</p></div>
+              <div>
+                <p className="text-[10px] uppercase opacity-80">Lucro/un</p>
+                <p className="text-lg font-semibold">R$ {lucro.toFixed(2)}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase opacity-80">Custo/un</p>
+                <p className="text-lg font-semibold">R$ {unit.toFixed(2)}</p>
+              </div>
             </div>
           </Card>
           <Card className="p-5">
             <h4 className="font-semibold text-sm mb-3">Resumo do cálculo</h4>
             <ul className="space-y-2 text-sm">
-              <li className="flex justify-between"><span className="text-muted-foreground">Custo da produção ({qty} un)</span><strong>R$ {total.toFixed(2)}</strong></li>
-              <li className="flex justify-between"><span className="text-muted-foreground">Custo por unidade</span><strong>R$ {unit.toFixed(2)}</strong></li>
-              <li className="flex justify-between"><span className="text-muted-foreground">Preço mínimo de segurança (1.5x)</span><strong>R$ {(unit * 1.5).toFixed(2)}</strong></li>
-              <li className="flex justify-between"><span className="text-muted-foreground">Preço sugerido (Margem 50%)</span><strong className="text-primary">R$ {sugerido.toFixed(2)}</strong></li>
-              <li className="flex justify-between mt-3 pt-3 border-t"><span className="text-muted-foreground">Faturamento bruto projetado</span><strong className="text-foreground">R$ {(venda * qty).toFixed(2)}</strong></li>
-              <li className="flex justify-between"><span className="text-muted-foreground">Lucro líquido projetado</span><strong className="text-success">R$ {(lucro * qty).toFixed(2)}</strong></li>
+              <li className="flex justify-between">
+                <span className="text-muted-foreground">Custo da produção ({qty} un)</span>
+                <strong>R$ {total.toFixed(2)}</strong>
+              </li>
+              <li className="flex justify-between">
+                <span className="text-muted-foreground">Custo por unidade</span>
+                <strong>R$ {unit.toFixed(2)}</strong>
+              </li>
+              <li className="flex justify-between">
+                <span className="text-muted-foreground">Preço mínimo de segurança (1.5x)</span>
+                <strong>R$ {(unit * 1.5).toFixed(2)}</strong>
+              </li>
+              <li className="flex justify-between">
+                <span className="text-muted-foreground">Preço sugerido (Margem 50%)</span>
+                <strong className="text-primary">R$ {sugerido.toFixed(2)}</strong>
+              </li>
+              <li className="flex justify-between mt-3 pt-3 border-t">
+                <span className="text-muted-foreground">Faturamento bruto projetado</span>
+                <strong className="text-foreground">R$ {(venda * qty).toFixed(2)}</strong>
+              </li>
+              <li className="flex justify-between">
+                <span className="text-muted-foreground">Lucro líquido projetado</span>
+                <strong className="text-success">R$ {(lucro * qty).toFixed(2)}</strong>
+              </li>
             </ul>
           </Card>
         </div>

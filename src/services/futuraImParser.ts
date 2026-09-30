@@ -111,8 +111,8 @@ export function externalIdFromUrl(url: string): string | undefined {
 function extractBreadcrumb(html: string): string[] {
   const block = html.match(/<ol[^>]*class=["']?breadcrumb[^>]*>([\s\S]*?)<\/ol>/i);
   if (!block) return [];
-  const names = [...block[1].matchAll(/itemprop=["']?name["']?>\s*([^<]+?)\s*<\/span>/gi)].map((m) =>
-    stripTags(m[1]),
+  const names = [...block[1].matchAll(/itemprop=["']?name["']?>\s*([^<]+?)\s*<\/span>/gi)].map(
+    (m) => stripTags(m[1]),
   );
   // Remove "Início"/"Home"
   return names.filter((n) => n && !/^in[ií]cio$|^home$/i.test(n));
@@ -122,7 +122,11 @@ function extractBreadcrumb(html: string): string[] {
 // Preços por tiragem (seção 11)
 // ---------------------------------------------------------------------------
 
-export function extractPriceTiers(html: string, collectedAt: string, currentId?: string): ImportedPriceTier[] {
+export function extractPriceTiers(
+  html: string,
+  collectedAt: string,
+  currentId?: string,
+): ImportedPriceTier[] {
   const tiers: ImportedPriceTier[] = [];
   const seen = new Set<number>();
 
@@ -231,7 +235,8 @@ export function extractVariantAxes(html: string): ImportedVariantAxis[] {
   //    O id pode estar em href/onclick/value, em QUALQUER ordem dentro do tag
   //    (a FuturaIM costuma colocar o href ANTES do title). Botões ativos não têm
   //    link, mas há um <a> oculto com o mesmo título e o id real.
-  const tagRe = /<(?:a|button)\b([^>]*\btitle=["']Ver produto (?:no|na|com|em)\s+([A-Za-zÀ-ú]+)\s+([^"']+)["'][^>]*)>/gi;
+  const tagRe =
+    /<(?:a|button)\b([^>]*\btitle=["']Ver produto (?:no|na|com|em)\s+([A-Za-zÀ-ú]+)\s+([^"']+)["'][^>]*)>/gi;
   let tm: RegExpExecArray | null;
   while ((tm = tagRe.exec(html))) {
     const attrs = tm[1];
@@ -308,7 +313,9 @@ export function parseFuturaImProduct(html: string, sourceUrl: string): ImportedP
   const dlItem = dataLayer?.ecommerce?.items?.[0] || dataLayer?.items?.[0] || null;
 
   if (!productLd && !dlItem) {
-    errors.push("Página sem JSON-LD de Produto nem dataLayer — pode exigir navegador (JavaScript).");
+    errors.push(
+      "Página sem JSON-LD de Produto nem dataLayer — pode exigir navegador (JavaScript).",
+    );
   }
 
   // Identificação
@@ -322,24 +329,33 @@ export function parseFuturaImProduct(html: string, sourceUrl: string): ImportedP
   if (!original_name) warnings.push("Nome do produto não encontrado.");
 
   // base_product (família): 2º item do breadcrumb costuma ser a família real.
-  const base_product = breadcrumb.length >= 1 ? breadcrumb[breadcrumb.length === 1 ? 0 : 0] : undefined;
+  const base_product =
+    breadcrumb.length >= 1 ? breadcrumb[breadcrumb.length === 1 ? 0 : 0] : undefined;
 
-  const external_id = externalIdFromUrl(sourceUrl) || (productLd?.sku != null ? String(productLd.sku) : undefined);
+  const external_id =
+    externalIdFromUrl(sourceUrl) || (productLd?.sku != null ? String(productLd.sku) : undefined);
 
   // Descrição (seção 18) — não misturamos avaliações/relacionados. A FuturaIM
   // anexa "<id> - <descritor da combinação>" ao fim: expõe o id do fornecedor
   // e descreve só a combinação desta página. Esse trecho é removido.
-  const supplierIds = [external_id, productLd?.sku != null ? String(productLd.sku) : undefined].filter(
-    (id): id is string => !!id,
-  );
+  const supplierIds = [
+    external_id,
+    productLd?.sku != null ? String(productLd.sku) : undefined,
+  ].filter((id): id is string => !!id);
   const withoutSupplierTail = (text: string) =>
     supplierIds
       .reduce(
-        (acc, id) => acc.replace(new RegExp(`\\s*(?<!\\d)${id.replace(/[^\w]/g, "\\$&")}\\s+-\\s[\\s\\S]*$`), ""),
+        (acc, id) =>
+          acc.replace(
+            new RegExp(`\\s*(?<!\\d)${id.replace(/[^\w]/g, "\\$&")}\\s+-\\s[\\s\\S]*$`),
+            "",
+          ),
         text,
       )
       .trim() || undefined;
-  const description = productLd?.description ? withoutSupplierTail(stripTags(productLd.description)) : undefined;
+  const description = productLd?.description
+    ? withoutSupplierTail(stripTags(productLd.description))
+    : undefined;
   const metaDesc = html.match(/name=["']?description["']?\s+content=["']([^"']+)["']/i)?.[1];
   const short_description = metaDesc ? withoutSupplierTail(decodeEntities(metaDesc)) : undefined;
 
@@ -357,7 +373,9 @@ export function parseFuturaImProduct(html: string, sourceUrl: string): ImportedP
   const available = !unavailable;
   if (unavailable) warnings.push("Produto sinalizado como indisponível pelo fornecedor.");
   if (/OutOfStock|SoldOut|Discontinued/i.test(availability) && dlPrice > 0) {
-    warnings.push("Tabela de preços renderizada via JavaScript: importada a tiragem do estado da página (use a varredura/atualização para as demais).");
+    warnings.push(
+      "Tabela de preços renderizada via JavaScript: importada a tiragem do estado da página (use a varredura/atualização para as demais).",
+    );
   }
 
   // Avaliações (apenas agregados — sem copiar textos/dados pessoais)
@@ -369,7 +387,9 @@ export function parseFuturaImProduct(html: string, sourceUrl: string): ImportedP
       .filter((n: number) => Number.isFinite(n));
     if (ratings.length) {
       rating_count = ratings.length;
-      rating_average = parseFloat((ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length).toFixed(2));
+      rating_average = parseFloat(
+        (ratings.reduce((a: number, b: number) => a + b, 0) / ratings.length).toFixed(2),
+      );
     }
   }
 
@@ -410,7 +430,9 @@ export function parseFuturaImProduct(html: string, sourceUrl: string): ImportedP
   const resolved = resolveVariantAttributes(descriptor, variant_axes);
   const specsRaw: Record<string, string> = { ...resolved.attributes };
   if (resolved.unresolved.length) {
-    warnings.push(`Eixo(s) sem valor identificado nesta combinação: ${resolved.unresolved.join(", ")}.`);
+    warnings.push(
+      `Eixo(s) sem valor identificado nesta combinação: ${resolved.unresolved.join(", ")}.`,
+    );
   }
   const axisValue = (name: string) =>
     Object.entries(specsRaw).find(([k]) => normalizeKey(k) === normalizeKey(name))?.[1];
@@ -458,7 +480,9 @@ export function parseFuturaImProduct(html: string, sourceUrl: string): ImportedP
     prazoText = cleanText(decodeEntities(labelM[1]));
   }
   if (!prazoText) {
-    const dm = decodeEntities(html).match(/(\d+\s*dias?\s*(?:[úu]teis|[úu]til|corridos?)(?:\s*\+\s*frete)?)/i);
+    const dm = decodeEntities(html).match(
+      /(\d+\s*dias?\s*(?:[úu]teis|[úu]til|corridos?)(?:\s*\+\s*frete)?)/i,
+    );
     if (dm) prazoText = dm[1];
   }
   if (prazoText) {

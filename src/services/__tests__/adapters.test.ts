@@ -48,23 +48,40 @@ describe("registry de adaptadores", () => {
   });
 
   it("FuturaImAdapter casa só o domínio da FuturaIM", () => {
-    expect(FuturaImAdapter.matchScore({ url: "https://futuraim.com.br/p", domain: "futuraim.com.br" }).score).toBe(1);
-    expect(FuturaImAdapter.matchScore({ url: "https://outro.com/p", domain: "outro.com" }).score).toBe(0);
+    expect(
+      FuturaImAdapter.matchScore({ url: "https://futuraim.com.br/p", domain: "futuraim.com.br" })
+        .score,
+    ).toBe(1);
+    expect(
+      FuturaImAdapter.matchScore({ url: "https://outro.com/p", domain: "outro.com" }).score,
+    ).toBe(0);
   });
 
   it("domínio específico vence o genérico no ranking", () => {
-    const ranked = rankAdapters({ url: "https://futuraim.com.br/p", domain: "futuraim.com.br", html: JSONLD_PAGE });
+    const ranked = rankAdapters({
+      url: "https://futuraim.com.br/p",
+      domain: "futuraim.com.br",
+      html: JSONLD_PAGE,
+    });
     expect(ranked[0].adapter.key).toBe("futuraim");
   });
 
   it("cai no genérico JSON-LD quando o domínio é desconhecido", () => {
-    const match = resolveAdapter({ url: "https://loja.com/p", domain: "loja.com", html: JSONLD_PAGE });
+    const match = resolveAdapter({
+      url: "https://loja.com/p",
+      domain: "loja.com",
+      html: JSONLD_PAGE,
+    });
     expect(match?.adapter.key).toBe("generic_jsonld");
     expect(match!.score).toBeGreaterThan(0.5);
   });
 
   it("não resolve nada quando nenhum adaptador casa", () => {
-    const match = resolveAdapter({ url: "https://loja.com/p", domain: "loja.com", html: "<html>sem dados</html>" });
+    const match = resolveAdapter({
+      url: "https://loja.com/p",
+      domain: "loja.com",
+      html: "<html>sem dados</html>",
+    });
     expect(match).toBeNull();
   });
 
@@ -82,7 +99,8 @@ describe("registry de adaptadores", () => {
       key: "teste_x",
       label: "Teste",
       domains: ["fornecedor-x.com"],
-      matchScore: (ctx) => (ctx.domain === "fornecedor-x.com" ? { score: 1, reason: "x" } : { score: 0, reason: "-" }),
+      matchScore: (ctx) =>
+        ctx.domain === "fornecedor-x.com" ? { score: 1, reason: "x" } : { score: 0, reason: "-" },
       parseProduct: () => ({}) as never,
     };
     registerAdapter(custom);
@@ -94,7 +112,10 @@ describe("registry de adaptadores", () => {
 
 describe("GenericJsonLdAdapter — parse real (sem mock)", () => {
   it("extrai nome, preço, imagens, sku, marca, rating e breadcrumb", () => {
-    const { product, adapterKey, confidence } = parseWithAdapter(JSONLD_PAGE, "https://loja.com/produto/adesivo");
+    const { product, adapterKey, confidence } = parseWithAdapter(
+      JSONLD_PAGE,
+      "https://loja.com/produto/adesivo",
+    );
     expect(adapterKey).toBe("generic_jsonld");
     expect(confidence).toBeGreaterThan(0.5);
     expect(product).not.toBeNull();

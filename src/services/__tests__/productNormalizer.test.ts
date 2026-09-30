@@ -30,7 +30,11 @@ describe("productNormalizer", () => {
 
   it("parseDimensions converte para mm e preserva original", () => {
     expect(parseDimensions("88x48mm")).toMatchObject({ width_mm: 88, height_mm: 48, unit: "mm" });
-    expect(parseDimensions("21x29,7cm")).toMatchObject({ width_mm: 210, height_mm: 297, unit: "cm" });
+    expect(parseDimensions("21x29,7cm")).toMatchObject({
+      width_mm: 210,
+      height_mm: 297,
+      unit: "cm",
+    });
     expect(parseDimensions("1x2m")).toMatchObject({ width_mm: 1000, height_mm: 2000, unit: "m" });
   });
 
@@ -42,7 +46,12 @@ describe("productNormalizer", () => {
 
   it("parseColorCode interpreta 4x4 e 5x0 (branco)", () => {
     const c44 = parseColorCode("4x4");
-    expect(c44).toMatchObject({ front_colors: 4, back_colors: 4, front_printed: true, back_printed: true });
+    expect(c44).toMatchObject({
+      front_colors: 4,
+      back_colors: 4,
+      front_printed: true,
+      back_printed: true,
+    });
     const c50 = parseColorCode("5x0 - Colorido com branco");
     expect(c50.has_white_ink).toBe(true);
     expect(c50.back_printed).toBe(false);
@@ -58,7 +67,11 @@ describe("productNormalizer", () => {
 
   it("parseProductionTime decompõe '2 dias úteis + frete'", () => {
     const t = parseProductionTime("2 dias úteis + frete");
-    expect(t).toMatchObject({ production_days: 2, production_day_type: "business_days", freight_not_included: true });
+    expect(t).toMatchObject({
+      production_days: 2,
+      production_day_type: "business_days",
+      freight_not_included: true,
+    });
   });
 
   it("parseQuantity lê milhares com ponto", () => {

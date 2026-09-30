@@ -14,17 +14,32 @@
  * Modo "Espelhar fornecedor" (toggle).
  */
 
-import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
-  Package, ChevronRight, Check, AlertTriangle, XCircle,
-  Truck, Settings2, Calculator, Eye, RotateCcw, Clock,
-} from 'lucide-react';
-import { Card } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { StatusBadge } from '@/components/status-badge';
+  Package,
+  ChevronRight,
+  Check,
+  AlertTriangle,
+  XCircle,
+  Truck,
+  Settings2,
+  Calculator,
+  Eye,
+  RotateCcw,
+  Clock,
+} from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { StatusBadge } from "@/components/status-badge";
 
 import {
   getCompatibleValues,
@@ -34,21 +49,21 @@ import {
   calculateQuoteItem,
   type FamilyCombinationData,
   type RawPromotion,
-} from '@/services/combinationEngine';
-import { getSupplierFreight, resolveLivePrice } from '@/integrations/supabase/importer-actions';
-import { isValidCep, type FreightOption } from '@/services/futuraImFreight';
-import type { LivePriceResult } from '@/services/futuraImLivePrice';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
+} from "@/services/combinationEngine";
+import { getSupplierFreight, resolveLivePrice } from "@/integrations/supabase/importer-actions";
+import { isValidCep, type FreightOption } from "@/services/futuraImFreight";
+import type { LivePriceResult } from "@/services/futuraImLivePrice";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 import type {
   QuoteItemCalculation,
   PriceStatus,
   SelectedExtra,
   SelectedService,
-} from '@/types/combinationTypes';
+} from "@/types/combinationTypes";
 
-const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const fmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 // ---------------------------------------------------------------------------
 // Props
@@ -67,7 +82,12 @@ export interface SupplierCombinationSelectorProps {
   /** Callback quando o cálculo muda (cada seleção recalcula). */
   onCalculationChange: (calc: QuoteItemCalculation | null) => void;
   /** Callback quando a seleção em cascata muda. */
-  onSelectionChange?: (selection: Record<string, { group_name: string; value_name: string; value_id: string; external_id: string | null }>) => void;
+  onSelectionChange?: (
+    selection: Record<
+      string,
+      { group_name: string; value_name: string; value_id: string; external_id: string | null }
+    >,
+  ) => void;
   /** Margem de lucro desejada (%). */
   profitMarginPercent?: number;
   /** Imposto (%). */
@@ -108,22 +128,22 @@ export function SupplierCombinationSelector({
   // Modo espelhar fornecedor
   const [mirrorMode, setMirrorMode] = useState(false);
   // Frete real do fornecedor (§11) — sempre separado do preço-base do produto.
-  const [cep, setCep] = useState('');
+  const [cep, setCep] = useState("");
   const [freightOptions, setFreightOptions] = useState<FreightOption[] | null>(null);
   const [freightIdx, setFreightIdx] = useState<number | null>(null);
   const [freightLoading, setFreightLoading] = useState(false);
   const [freightError, setFreightError] = useState<string | null>(null);
   const [freightQuotedAt, setFreightQuotedAt] = useState<string | null>(null);
   // LIVE_RESOLVER — tamanho personalizado (§8): o preço é SEMPRE consultado.
-  const [customW, setCustomW] = useState('');
-  const [customH, setCustomH] = useState('');
+  const [customW, setCustomW] = useState("");
+  const [customH, setCustomH] = useState("");
   const [livePrice, setLivePrice] = useState<LivePriceResult | null>(null);
   const [liveLoading, setLiveLoading] = useState(false);
   const [liveError, setLiveError] = useState<string | null>(null);
   const [liveQuotedAt, setLiveQuotedAt] = useState<string | null>(null);
 
   const { family } = familyData;
-  const isLiveResolver = family.pricing_strategy === 'LIVE_RESOLVER';
+  const isLiveResolver = family.pricing_strategy === "LIVE_RESOLVER";
 
   // Filtrar opções compatíveis em cascata
   const cascadeResults = useMemo(
@@ -133,7 +153,7 @@ export function SupplierCombinationSelector({
 
   // Todas as opções obrigatórias escolhidas?
   const allOptionsSelected = useMemo(
-    () => cascadeResults.every(r => r.selected_value_id != null || !r.group.is_required),
+    () => cascadeResults.every((r) => r.selected_value_id != null || !r.group.is_required),
     [cascadeResults],
   );
 
@@ -174,7 +194,9 @@ export function SupplierCombinationSelector({
   // Frete efetivo: a cotação escolhida do fornecedor tem prioridade sobre o
   // valor vindo do parent. Nunca é embutido no preço-base do produto (§11).
   const effectiveFreight =
-    freightIdx != null && freightOptions?.[freightIdx] ? freightOptions[freightIdx].cost : freightCost;
+    freightIdx != null && freightOptions?.[freightIdx]
+      ? freightOptions[freightIdx].cost
+      : freightCost;
 
   // Trocar produto/quantidade invalida a cotação (frete depende do SKU + qtd).
   useEffect(() => {
@@ -200,14 +222,14 @@ export function SupplierCombinationSelector({
       }
       if (!res.options.length) {
         setFreightOptions([]);
-        setFreightError('Fornecedor não cotou frete para este CEP.');
+        setFreightError("Fornecedor não cotou frete para este CEP.");
         return;
       }
       setFreightOptions(res.options);
       setFreightIdx(0);
       setFreightQuotedAt(res.quoted_at);
     } catch (e: any) {
-      setFreightError(e?.message || 'Erro ao cotar o frete.');
+      setFreightError(e?.message || "Erro ao cotar o frete.");
     } finally {
       setFreightLoading(false);
     }
@@ -238,13 +260,13 @@ export function SupplierCombinationSelector({
       }
       if (!res.result.has_price) {
         setLivePrice(null);
-        setLiveError('Dimensão fora dos limites aceitos pelo fornecedor. Preço não confirmado.');
+        setLiveError("Dimensão fora dos limites aceitos pelo fornecedor. Preço não confirmado.");
         return;
       }
       setLivePrice(res.result);
       setLiveQuotedAt(res.quoted_at);
     } catch (e: any) {
-      setLiveError(e?.message || 'Erro ao consultar o preço.');
+      setLiveError(e?.message || "Erro ao consultar o preço.");
     } finally {
       setLiveLoading(false);
     }
@@ -271,8 +293,8 @@ export function SupplierCombinationSelector({
     if (!productResult.found || !effectiveProduct) return null;
 
     const selectedExtras: SelectedExtra[] = availableExtras
-      .filter(e => selectedExtraIds.has(e.extra.id))
-      .map(e => ({
+      .filter((e) => selectedExtraIds.has(e.extra.id))
+      .map((e) => ({
         extra_id: e.extra.id,
         name: e.extra.name,
         price: e.price,
@@ -308,10 +330,22 @@ export function SupplierCombinationSelector({
       family.lead_time_rule,
     );
   }, [
-    productResult, effectiveProduct, isLiveResolver, selectedExtraIds, selectedServiceIds,
-    mirrorMode, effectiveFreight, profitMarginPercent, taxPercent,
-    safetyMarginPercent, internalOperationsCost, internalServicesCost,
-    availableExtras, familyData, selectedQuantity, family.lead_time_rule,
+    productResult,
+    effectiveProduct,
+    isLiveResolver,
+    selectedExtraIds,
+    selectedServiceIds,
+    mirrorMode,
+    effectiveFreight,
+    profitMarginPercent,
+    taxPercent,
+    safetyMarginPercent,
+    internalOperationsCost,
+    internalServicesCost,
+    availableExtras,
+    familyData,
+    selectedQuantity,
+    family.lead_time_rule,
   ]);
 
   // Callbacks em refs — evita loop de render quando o parent passa funções
@@ -319,8 +353,12 @@ export function SupplierCombinationSelector({
   // quando o VALOR (cálculo/seleção) muda, não quando a função muda.
   const onCalcRef = useRef(onCalculationChange);
   const onSelRef = useRef(onSelectionChange);
-  useEffect(() => { onCalcRef.current = onCalculationChange; });
-  useEffect(() => { onSelRef.current = onSelectionChange; });
+  useEffect(() => {
+    onCalcRef.current = onCalculationChange;
+  });
+  useEffect(() => {
+    onSelRef.current = onSelectionChange;
+  });
 
   // Notificar parent quando o cálculo muda
   useEffect(() => {
@@ -332,8 +370,8 @@ export function SupplierCombinationSelector({
     if (!onSelRef.current) return;
     const snap: Record<string, any> = {};
     for (const [groupId, valueId] of selection.entries()) {
-      const group = familyData.groups.find(g => g.id === groupId);
-      const value = familyData.values.find(v => v.id === valueId);
+      const group = familyData.groups.find((g) => g.id === groupId);
+      const value = familyData.values.find((v) => v.id === valueId);
       if (group && value) {
         snap[group.code] = {
           group_name: group.name,
@@ -347,38 +385,44 @@ export function SupplierCombinationSelector({
   }, [selection, familyData]);
 
   // Handlers
-  const handleOptionSelect = useCallback((groupId: string, valueId: string) => {
-    setSelection(prev => {
-      const next = new Map(prev);
-      next.set(groupId, valueId);
-      // Limpar grupos posteriores (a árvore muda) para nunca montar combinação inválida
-      const sortedGroups = [...familyData.groups].sort((a, b) => a.order_index - b.order_index);
-      const idx = sortedGroups.findIndex(g => g.id === groupId);
-      for (let i = idx + 1; i < sortedGroups.length; i++) next.delete(sortedGroups[i].id);
-      return next;
-    });
-    // Reset extras e quantidade ao mudar a combinação
-    setSelectedExtraIds(new Set());
-    setSelectedQuantity(0);
-  }, [familyData.groups]);
+  const handleOptionSelect = useCallback(
+    (groupId: string, valueId: string) => {
+      setSelection((prev) => {
+        const next = new Map(prev);
+        next.set(groupId, valueId);
+        // Limpar grupos posteriores (a árvore muda) para nunca montar combinação inválida
+        const sortedGroups = [...familyData.groups].sort((a, b) => a.order_index - b.order_index);
+        const idx = sortedGroups.findIndex((g) => g.id === groupId);
+        for (let i = idx + 1; i < sortedGroups.length; i++) next.delete(sortedGroups[i].id);
+        return next;
+      });
+      // Reset extras e quantidade ao mudar a combinação
+      setSelectedExtraIds(new Set());
+      setSelectedQuantity(0);
+    },
+    [familyData.groups],
+  );
 
-  const handleClearSelection = useCallback((groupId: string) => {
-    setSelection(prev => {
-      const next = new Map(prev);
-      // Limpar este grupo e todos os posteriores
-      const sortedGroups = [...familyData.groups].sort((a, b) => a.order_index - b.order_index);
-      const idx = sortedGroups.findIndex(g => g.id === groupId);
-      for (let i = idx; i < sortedGroups.length; i++) {
-        next.delete(sortedGroups[i].id);
-      }
-      return next;
-    });
-    setSelectedExtraIds(new Set());
-    setSelectedQuantity(0);
-  }, [familyData.groups]);
+  const handleClearSelection = useCallback(
+    (groupId: string) => {
+      setSelection((prev) => {
+        const next = new Map(prev);
+        // Limpar este grupo e todos os posteriores
+        const sortedGroups = [...familyData.groups].sort((a, b) => a.order_index - b.order_index);
+        const idx = sortedGroups.findIndex((g) => g.id === groupId);
+        for (let i = idx; i < sortedGroups.length; i++) {
+          next.delete(sortedGroups[i].id);
+        }
+        return next;
+      });
+      setSelectedExtraIds(new Set());
+      setSelectedQuantity(0);
+    },
+    [familyData.groups],
+  );
 
   const toggleExtra = useCallback((extraId: string) => {
-    setSelectedExtraIds(prev => {
+    setSelectedExtraIds((prev) => {
       const next = new Set(prev);
       if (next.has(extraId)) next.delete(extraId);
       else next.add(extraId);
@@ -387,7 +431,7 @@ export function SupplierCombinationSelector({
   }, []);
 
   const toggleService = useCallback((serviceId: string) => {
-    setSelectedServiceIds(prev => {
+    setSelectedServiceIds((prev) => {
       const next = new Set(prev);
       if (next.has(serviceId)) next.delete(serviceId);
       else next.add(serviceId);
@@ -398,9 +442,9 @@ export function SupplierCombinationSelector({
   // Auto-selecionar grupos de valor único (ex.: DTF tem 1 opção por eixo → resolve
   // sozinho). Seleciona um grupo por vez; o efeito re-roda após cada seleção.
   useEffect(() => {
-    const next = cascadeResults.find(r => !r.selected_value_id && r.values.length === 1);
+    const next = cascadeResults.find((r) => !r.selected_value_id && r.values.length === 1);
     if (next) {
-      setSelection(prev => {
+      setSelection((prev) => {
         if (prev.get(next.group.id)) return prev;
         const m = new Map(prev);
         m.set(next.group.id, next.values[0].id);
@@ -410,15 +454,18 @@ export function SupplierCombinationSelector({
   }, [cascadeResults]);
 
   // Status do preço
-  const priceStatus: PriceStatus = calculation
-    ? calculation.price_status
-    : 'unconfirmed';
+  const priceStatus: PriceStatus = calculation ? calculation.price_status : "unconfirmed";
 
   const statusConfig = {
-    confirmed: { icon: Check, color: 'text-emerald-600', bg: 'bg-emerald-50', label: 'Confirmado' },
-    unconfirmed: { icon: XCircle, color: 'text-red-600', bg: 'bg-red-50', label: 'Não confirmado' },
-    outdated: { icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50', label: 'Desatualizado' },
-    revalidated: { icon: RotateCcw, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Revalidado' },
+    confirmed: { icon: Check, color: "text-emerald-600", bg: "bg-emerald-50", label: "Confirmado" },
+    unconfirmed: { icon: XCircle, color: "text-red-600", bg: "bg-red-50", label: "Não confirmado" },
+    outdated: {
+      icon: AlertTriangle,
+      color: "text-amber-600",
+      bg: "bg-amber-50",
+      label: "Desatualizado",
+    },
+    revalidated: { icon: RotateCcw, color: "text-blue-600", bg: "bg-blue-50", label: "Revalidado" },
   };
   const status = statusConfig[priceStatus];
   const StatusIcon = status.icon;
@@ -436,7 +483,9 @@ export function SupplierCombinationSelector({
             <span className="text-[10px] text-muted-foreground">Cód: {family.external_id}</span>
           )}
         </div>
-        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium ${status.bg} ${status.color}`}>
+        <div
+          className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium ${status.bg} ${status.color}`}
+        >
           <StatusIcon className="h-3.5 w-3.5" />
           {status.label}
         </div>
@@ -472,20 +521,24 @@ export function SupplierCombinationSelector({
               {result.values.length > 0 ? (
                 <div className="flex items-center gap-2">
                   <Select
-                    value={result.selected_value_id || ''}
+                    value={result.selected_value_id || ""}
                     onValueChange={(val) => handleOptionSelect(result.group.id, val)}
                     disabled={!isNextToSelect && !isComplete}
                   >
-                    <SelectTrigger className={`h-9 ${isNextToSelect ? 'ring-1 ring-primary' : ''}`}>
-                      <SelectValue placeholder={`Selecione ${result.group.name.toLowerCase()}...`} />
+                    <SelectTrigger className={`h-9 ${isNextToSelect ? "ring-1 ring-primary" : ""}`}>
+                      <SelectValue
+                        placeholder={`Selecione ${result.group.name.toLowerCase()}...`}
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      {result.values.map(v => (
+                      {result.values.map((v) => (
                         <SelectItem key={v.id} value={v.id}>
                           <div className="flex items-center gap-2">
                             <span>{v.name}</span>
                             {v.external_id && (
-                              <span className="text-[9px] text-muted-foreground">({v.external_id})</span>
+                              <span className="text-[9px] text-muted-foreground">
+                                ({v.external_id})
+                              </span>
                             )}
                           </div>
                         </SelectItem>
@@ -520,16 +573,16 @@ export function SupplierCombinationSelector({
             Quantidade
           </Label>
           <div className="flex flex-wrap gap-1.5">
-            {availableQuantities.map(q => (
+            {availableQuantities.map((q) => (
               <button
                 key={q.quantity}
                 onClick={() => setSelectedQuantity(q.quantity)}
                 className={`text-[11px] px-2.5 py-1.5 rounded-md border transition-colors ${
                   selectedQuantity === q.quantity
-                    ? 'bg-sky-600 text-white border-sky-600 font-semibold'
+                    ? "bg-sky-600 text-white border-sky-600 font-semibold"
                     : q.available
-                      ? 'bg-background hover:border-sky-400'
-                      : 'bg-muted text-muted-foreground line-through'
+                      ? "bg-background hover:border-sky-400"
+                      : "bg-muted text-muted-foreground line-through"
                 }`}
                 disabled={!q.available}
               >
@@ -553,13 +606,13 @@ export function SupplierCombinationSelector({
         <div className="space-y-2">
           <Label className="text-xs font-medium">Acabamentos Extras</Label>
           <div className="space-y-1">
-            {availableExtras.map(ae => (
+            {availableExtras.map((ae) => (
               <label
                 key={ae.extra.id}
                 className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors ${
                   selectedExtraIds.has(ae.extra.id)
-                    ? 'border-primary bg-primary/5'
-                    : 'hover:bg-secondary/50'
+                    ? "border-primary bg-primary/5"
+                    : "hover:bg-secondary/50"
                 }`}
               >
                 <input
@@ -589,16 +642,14 @@ export function SupplierCombinationSelector({
           <Label className="text-xs font-medium">Serviços Complementares</Label>
           <div className="space-y-1">
             {familyData.services.map((svc: any) => {
-              const sp = (familyData.servicePrices || []).find(
-                (p: any) => p.service_id === svc.id,
-              );
+              const sp = (familyData.servicePrices || []).find((p: any) => p.service_id === svc.id);
               return (
                 <label
                   key={svc.id}
                   className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors ${
                     selectedServiceIds.has(svc.id)
-                      ? 'border-primary bg-primary/5'
-                      : 'hover:bg-secondary/50'
+                      ? "border-primary bg-primary/5"
+                      : "hover:bg-secondary/50"
                   }`}
                 >
                   <input
@@ -630,7 +681,7 @@ export function SupplierCombinationSelector({
           <div className="flex items-center gap-2">
             <Input
               value={customW}
-              onChange={e => setCustomW(e.target.value)}
+              onChange={(e) => setCustomW(e.target.value)}
               placeholder="Largura (mm)"
               inputMode="numeric"
               className="h-9 text-xs"
@@ -638,7 +689,7 @@ export function SupplierCombinationSelector({
             <span className="text-xs text-muted-foreground">×</span>
             <Input
               value={customH}
-              onChange={e => setCustomH(e.target.value)}
+              onChange={(e) => setCustomH(e.target.value)}
               placeholder="Altura (mm)"
               inputMode="numeric"
               className="h-9 text-xs"
@@ -650,7 +701,7 @@ export function SupplierCombinationSelector({
               onClick={handleResolveLivePrice}
               disabled={!(Number(customW) > 0) || !(Number(customH) > 0) || liveLoading}
             >
-              {liveLoading ? 'Consultando...' : 'Consultar'}
+              {liveLoading ? "Consultando..." : "Consultar"}
             </Button>
           </div>
 
@@ -671,8 +722,8 @@ export function SupplierCombinationSelector({
               )}
               {liveQuotedAt && (
                 <p className="text-[10px] text-muted-foreground">
-                  ID {livePrice.external_product_id ?? '—'} · consultado em{' '}
-                  {new Date(liveQuotedAt).toLocaleString('pt-BR')}
+                  ID {livePrice.external_product_id ?? "—"} · consultado em{" "}
+                  {new Date(liveQuotedAt).toLocaleString("pt-BR")}
                 </p>
               )}
             </div>
@@ -680,8 +731,8 @@ export function SupplierCombinationSelector({
 
           {!livePrice && !liveError && (
             <p className="text-[10px] text-muted-foreground">
-              O preço depende de largura × altura (há preço mínimo e limites). Nada é calculado —
-              o valor é sempre confirmado pelo fornecedor.
+              O preço depende de largura × altura (há preço mínimo e limites). Nada é calculado — o
+              valor é sempre confirmado pelo fornecedor.
             </p>
           )}
         </div>
@@ -697,7 +748,7 @@ export function SupplierCombinationSelector({
           <div className="flex items-center gap-2">
             <Input
               value={cep}
-              onChange={e => setCep(e.target.value)}
+              onChange={(e) => setCep(e.target.value)}
               placeholder="CEP de entrega"
               inputMode="numeric"
               className="h-9 text-xs"
@@ -709,7 +760,7 @@ export function SupplierCombinationSelector({
               onClick={handleQuoteFreight}
               disabled={!isValidCep(cep) || freightLoading}
             >
-              {freightLoading ? 'Cotando...' : 'Cotar'}
+              {freightLoading ? "Cotando..." : "Cotar"}
             </Button>
           </div>
 
@@ -725,7 +776,7 @@ export function SupplierCombinationSelector({
                 <label
                   key={`${opt.carrier}-${idx}`}
                   className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer transition-colors ${
-                    freightIdx === idx ? 'border-primary bg-primary/5' : 'hover:bg-secondary/50'
+                    freightIdx === idx ? "border-primary bg-primary/5" : "hover:bg-secondary/50"
                   }`}
                 >
                   <input
@@ -742,14 +793,17 @@ export function SupplierCombinationSelector({
                       {opt.days}d
                     </span>
                   )}
-                  <span className={`text-xs font-semibold ${opt.free ? 'text-emerald-600' : 'text-sky-600'}`}>
-                    {opt.free ? 'Grátis' : fmt.format(opt.cost)}
+                  <span
+                    className={`text-xs font-semibold ${opt.free ? "text-emerald-600" : "text-sky-600"}`}
+                  >
+                    {opt.free ? "Grátis" : fmt.format(opt.cost)}
                   </span>
                 </label>
               ))}
               {freightQuotedAt && (
                 <p className="text-[10px] text-muted-foreground">
-                  Cotado em {new Date(freightQuotedAt).toLocaleString('pt-BR')} · não incluído no preço-base
+                  Cotado em {new Date(freightQuotedAt).toLocaleString("pt-BR")} · não incluído no
+                  preço-base
                 </p>
               )}
             </div>
@@ -778,48 +832,66 @@ export function SupplierCombinationSelector({
 
           {/* Custo do fornecedor */}
           <div className="space-y-1">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase">Custo Fornecedor</p>
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase">
+              Custo Fornecedor
+            </p>
             <div className="grid grid-cols-2 gap-1 text-xs">
               <span>Produto ({calculation.quantity}un)</span>
-              <span className="text-right font-semibold">{fmt.format(calculation.supplier_product_cost)}</span>
+              <span className="text-right font-semibold">
+                {fmt.format(calculation.supplier_product_cost)}
+              </span>
               {calculation.supplier_extras_cost > 0 && (
                 <>
                   <span>Extras</span>
-                  <span className="text-right font-semibold">{fmt.format(calculation.supplier_extras_cost)}</span>
+                  <span className="text-right font-semibold">
+                    {fmt.format(calculation.supplier_extras_cost)}
+                  </span>
                 </>
               )}
               {calculation.supplier_services_cost > 0 && (
                 <>
                   <span>Serviços</span>
-                  <span className="text-right font-semibold">{fmt.format(calculation.supplier_services_cost)}</span>
+                  <span className="text-right font-semibold">
+                    {fmt.format(calculation.supplier_services_cost)}
+                  </span>
                 </>
               )}
               {calculation.supplier_freight_cost > 0 && (
                 <>
                   <span>Frete</span>
-                  <span className="text-right font-semibold">{fmt.format(calculation.supplier_freight_cost)}</span>
+                  <span className="text-right font-semibold">
+                    {fmt.format(calculation.supplier_freight_cost)}
+                  </span>
                 </>
               )}
               <span className="font-bold border-t pt-1">Total Fornecedor</span>
-              <span className="text-right font-bold border-t pt-1">{fmt.format(calculation.total_supplier_cost)}</span>
+              <span className="text-right font-bold border-t pt-1">
+                {fmt.format(calculation.total_supplier_cost)}
+              </span>
             </div>
           </div>
 
           {/* Custos internos e margens (somente quando não espelhando) */}
           {!mirrorMode && (
             <div className="space-y-1">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase">Composição do Preço de Venda</p>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase">
+                Composição do Preço de Venda
+              </p>
               <div className="grid grid-cols-2 gap-1 text-xs">
                 {calculation.internal_operations_cost > 0 && (
                   <>
                     <span>Operacional interno</span>
-                    <span className="text-right">{fmt.format(calculation.internal_operations_cost)}</span>
+                    <span className="text-right">
+                      {fmt.format(calculation.internal_operations_cost)}
+                    </span>
                   </>
                 )}
                 {calculation.internal_services_cost > 0 && (
                   <>
                     <span>Serviços internos</span>
-                    <span className="text-right">{fmt.format(calculation.internal_services_cost)}</span>
+                    <span className="text-right">
+                      {fmt.format(calculation.internal_services_cost)}
+                    </span>
                   </>
                 )}
                 {calculation.tax_amount > 0 && (
@@ -831,11 +903,15 @@ export function SupplierCombinationSelector({
                 {calculation.safety_margin_amount > 0 && (
                   <>
                     <span>Margem segurança</span>
-                    <span className="text-right">{fmt.format(calculation.safety_margin_amount)}</span>
+                    <span className="text-right">
+                      {fmt.format(calculation.safety_margin_amount)}
+                    </span>
                   </>
                 )}
                 <span>Lucro</span>
-                <span className="text-right font-semibold text-emerald-600">{fmt.format(calculation.profit_amount)}</span>
+                <span className="text-right font-semibold text-emerald-600">
+                  {fmt.format(calculation.profit_amount)}
+                </span>
               </div>
             </div>
           )}
@@ -844,7 +920,7 @@ export function SupplierCombinationSelector({
           <div className="pt-2 border-t space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold uppercase">
-                {mirrorMode ? 'Custo FuturaIM' : 'Preço de Venda'}
+                {mirrorMode ? "Custo FuturaIM" : "Preço de Venda"}
               </span>
               <span className="text-lg font-black text-primary">
                 {fmt.format(calculation.final_sale_price)}
@@ -854,10 +930,15 @@ export function SupplierCombinationSelector({
               <span className="text-muted-foreground">
                 Unitário: {fmt.format(calculation.unit_price_display)}
               </span>
-              <span className={`font-bold ${
-                calculation.margin_percent >= 30 ? 'text-emerald-600' :
-                calculation.margin_percent >= 15 ? 'text-amber-600' : 'text-red-500'
-              }`}>
+              <span
+                className={`font-bold ${
+                  calculation.margin_percent >= 30
+                    ? "text-emerald-600"
+                    : calculation.margin_percent >= 15
+                      ? "text-amber-600"
+                      : "text-red-500"
+                }`}
+              >
                 Margem: {calculation.margin_percent.toFixed(1)}%
               </span>
             </div>
@@ -868,7 +949,9 @@ export function SupplierCombinationSelector({
                 Prazo: {calculation.total_lead_time_days} dias úteis
                 {calculation.extras_lead_time_days > 0 && (
                   <span className="text-[10px]">
-                    {' '}(base {calculation.base_lead_time_days} + extras {calculation.extras_lead_time_days})
+                    {" "}
+                    (base {calculation.base_lead_time_days} + extras{" "}
+                    {calculation.extras_lead_time_days})
                   </span>
                 )}
               </span>
@@ -876,7 +959,8 @@ export function SupplierCombinationSelector({
             {/* Código externo */}
             {calculation.external_product_id && (
               <div className="text-[10px] text-muted-foreground">
-                ID produto fornecedor: {calculation.external_product_id} · Hash: {calculation.combination_hash.substring(0, 20)}...
+                ID produto fornecedor: {calculation.external_product_id} · Hash:{" "}
+                {calculation.combination_hash.substring(0, 20)}...
               </div>
             )}
           </div>
@@ -884,7 +968,9 @@ export function SupplierCombinationSelector({
           {/* Modo espelhar: linha extra com preço de venda da gráfica */}
           {mirrorMode && (
             <div className="pt-2 border-t border-dashed space-y-1">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase">Sua gráfica (com margem)</p>
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase">
+                Sua gráfica (com margem)
+              </p>
               <div className="grid grid-cols-3 gap-2 text-center text-xs">
                 <div>
                   <p className="text-[9px] text-muted-foreground">Custo</p>
@@ -909,21 +995,24 @@ export function SupplierCombinationSelector({
       )}
 
       {/* Mensagem quando o produto comercial não é encontrado (§7) */}
-      {allOptionsSelected && selectedQuantity > 0 && !productResult.found && productResult.error_message && (
-        <div className="p-3 rounded-md bg-red-50 border border-red-200 flex items-start gap-2">
-          <XCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-red-700">Produto não confirmado</p>
-            <p className="text-xs text-red-600 mt-0.5">{productResult.error_message}</p>
+      {allOptionsSelected &&
+        selectedQuantity > 0 &&
+        !productResult.found &&
+        productResult.error_message && (
+          <div className="p-3 rounded-md bg-red-50 border border-red-200 flex items-start gap-2">
+            <XCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-red-700">Produto não confirmado</p>
+              <p className="text-xs text-red-600 mt-0.5">{productResult.error_message}</p>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* Última sincronização */}
       {family.last_synced_at && (
         <div className="text-[10px] text-muted-foreground flex items-center gap-1">
           <RotateCcw className="h-2.5 w-2.5" />
-          Última sincronização: {new Date(family.last_synced_at).toLocaleString('pt-BR')}
+          Última sincronização: {new Date(family.last_synced_at).toLocaleString("pt-BR")}
         </div>
       )}
     </div>

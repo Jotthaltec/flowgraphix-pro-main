@@ -45,41 +45,76 @@ function SignupPage() {
     navigate({ to: "/dashboard" });
   }
 
-  return <AuthShell>
-    <div className="text-center mb-8">
-      <h1 className="text-2xl font-bold tracking-tight">Crie sua conta</h1>
-      <p className="text-sm text-muted-foreground mt-1">Comece a organizar sua gráfica em minutos</p>
-    </div>
-    <form onSubmit={handleSubmit} className="space-y-3">
-      <div className="space-y-1.5">
-        <Label htmlFor="name">Seu nome</Label>
-        <Input id="name" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+  return (
+    <AuthShell>
+      <div className="text-center mb-8">
+        <h1 className="text-2xl font-bold tracking-tight">Crie sua conta</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Comece a organizar sua gráfica em minutos
+        </p>
       </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="company">Nome da gráfica</Label>
-        <Input id="company" required value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="email">E-mail</Label>
-        <Input id="email" type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
+      <form onSubmit={handleSubmit} className="space-y-3">
         <div className="space-y-1.5">
-          <Label htmlFor="password">Senha</Label>
-          <Input id="password" type="password" required value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+          <Label htmlFor="name">Seu nome</Label>
+          <Input
+            id="name"
+            required
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+          />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="confirm">Confirmar</Label>
-          <Input id="confirm" type="password" required value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} />
+          <Label htmlFor="company">Nome da gráfica</Label>
+          <Input
+            id="company"
+            required
+            value={form.company}
+            onChange={(e) => setForm({ ...form, company: e.target.value })}
+          />
         </div>
-      </div>
-      <Button type="submit" className="w-full mt-2" disabled={loading}>
-        {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-        Criar conta
-      </Button>
-    </form>
-    <p className="text-center text-sm text-muted-foreground mt-6">
-      Já tem conta? <Link to="/login" className="text-primary font-medium hover:underline">Entrar</Link>
-    </p>
-  </AuthShell>;
+        <div className="space-y-1.5">
+          <Label htmlFor="email">E-mail</Label>
+          <Input
+            id="email"
+            type="email"
+            required
+            value={form.email}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="password">Senha</Label>
+            <Input
+              id="password"
+              type="password"
+              required
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="confirm">Confirmar</Label>
+            <Input
+              id="confirm"
+              type="password"
+              required
+              value={form.confirm}
+              onChange={(e) => setForm({ ...form, confirm: e.target.value })}
+            />
+          </div>
+        </div>
+        <Button type="submit" className="w-full mt-2" disabled={loading}>
+          {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          Criar conta
+        </Button>
+      </form>
+      <p className="text-center text-sm text-muted-foreground mt-6">
+        Já tem conta?{" "}
+        <Link to="/login" className="text-primary font-medium hover:underline">
+          Entrar
+        </Link>
+      </p>
+    </AuthShell>
+  );
 }

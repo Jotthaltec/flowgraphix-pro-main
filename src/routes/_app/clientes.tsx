@@ -5,8 +5,21 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/status-badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -20,7 +33,12 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export const Route = createFileRoute("/_app/clientes")({ component: ClientesPage });
 
@@ -48,7 +66,7 @@ function ClientesPage() {
     name: "",
     company_name: "",
     whatsapp: "",
-    email: ""
+    email: "",
   });
 
   const { data: clients, isLoading } = useQuery({
@@ -71,27 +89,32 @@ function ClientesPage() {
         }
         return {
           ...c,
-          status: computedStatus
+          status: computedStatus,
         };
       }) as Client[];
     },
     enabled: !!profile,
   });
 
-  const filteredClients = clients?.filter(c => {
-    const matchesSearch = c.name.toLowerCase().includes(search.toLowerCase()) || 
-                          (c.company_name?.toLowerCase().includes(search.toLowerCase())) ||
-                          (c.email?.toLowerCase().includes(search.toLowerCase()));
-    
+  const filteredClients = clients?.filter((c) => {
+    const matchesSearch =
+      c.name.toLowerCase().includes(search.toLowerCase()) ||
+      c.company_name?.toLowerCase().includes(search.toLowerCase()) ||
+      c.email?.toLowerCase().includes(search.toLowerCase());
+
     const matchesStatus = statusFilter === "all" ? true : c.status === statusFilter;
-    
+
     return matchesSearch && matchesStatus;
   });
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
-      
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", (await supabase.auth.getUser()).data.user?.id || "")
+        .single();
+
       if (!profileData?.company_id) throw new Error("Empresa não identificada.");
       const companyId = profileData.company_id;
 
@@ -99,7 +122,9 @@ function ClientesPage() {
         const { error } = await supabase.from("clients").update(data).eq("id", editingClient.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from("clients").insert([{ ...data, company_id: companyId }]);
+        const { error } = await supabase
+          .from("clients")
+          .insert([{ ...data, company_id: companyId }]);
         if (error) throw error;
       }
     },
@@ -111,7 +136,7 @@ function ClientesPage() {
     },
     onError: (err) => {
       toast.error("Erro ao salvar cliente: " + err.message);
-    }
+    },
   });
 
   const deleteMutation = useMutation({
@@ -125,7 +150,7 @@ function ClientesPage() {
     },
     onError: (err) => {
       toast.error("Erro ao remover cliente: " + err.message);
-    }
+    },
   });
 
   function resetForm() {
@@ -139,42 +164,52 @@ function ClientesPage() {
       name: client.name,
       company_name: client.company_name || "",
       whatsapp: client.whatsapp || "",
-      email: client.email || ""
+      email: client.email || "",
     });
     setIsModalOpen(true);
   }
 
   function getStatusVariant(status: string) {
-    switch(status) {
-      case 'vip': return 'accent';
-      case 'recorrente': return 'info';
-      case 'novo': return 'success';
-      case 'inativo': return 'muted';
-      default: return 'default';
+    switch (status) {
+      case "vip":
+        return "accent";
+      case "recorrente":
+        return "info";
+      case "novo":
+        return "success";
+      case "inativo":
+        return "muted";
+      default:
+        return "default";
     }
   }
 
   return (
     <>
-      <PageHeader 
-        title="Clientes" 
-        description="Gerencie sua base de clientes" 
-        action="Novo cliente" 
-        onAction={() => { resetForm(); setIsModalOpen(true); }}
+      <PageHeader
+        title="Clientes"
+        description="Gerencie sua base de clientes"
+        action="Novo cliente"
+        onAction={() => {
+          resetForm();
+          setIsModalOpen(true);
+        }}
       />
       <Card className="p-4 mb-4">
         <div className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Buscar por nome, empresa, e-mail..." 
-              className="pl-9" 
+            <Input
+              placeholder="Buscar por nome, empresa, e-mail..."
+              className="pl-9"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full md:w-48"><SelectValue placeholder="Status" /></SelectTrigger>
+            <SelectTrigger className="w-full md:w-48">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os tipos</SelectItem>
               <SelectItem value="vip">VIP</SelectItem>
@@ -184,7 +219,7 @@ function ClientesPage() {
           </Select>
         </div>
       </Card>
-      
+
       <Card>
         <Table>
           <TableHeader>
@@ -215,26 +250,36 @@ function ClientesPage() {
               filteredClients?.map((c) => (
                 <TableRow key={c.id} className="cursor-pointer">
                   <TableCell className="font-medium">{c.name}</TableCell>
-                  <TableCell>{c.company_name || '-'}</TableCell>
-                  <TableCell className="text-muted-foreground">{c.whatsapp || '-'}</TableCell>
-                  <TableCell className="hidden lg:table-cell text-muted-foreground">{c.email || '-'}</TableCell>
-                  <TableCell className="font-semibold">
-                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(c.total_spent || 0)}
+                  <TableCell>{c.company_name || "-"}</TableCell>
+                  <TableCell className="text-muted-foreground">{c.whatsapp || "-"}</TableCell>
+                  <TableCell className="hidden lg:table-cell text-muted-foreground">
+                    {c.email || "-"}
                   </TableCell>
-                  <TableCell><StatusBadge variant={getStatusVariant(c.status) as any}>{c.status}</StatusBadge></TableCell>
+                  <TableCell className="font-semibold">
+                    {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
+                      c.total_spent || 0,
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge variant={getStatusVariant(c.status) as any}>
+                      {c.status}
+                    </StatusBadge>
+                  </TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button size="icon" variant="ghost"><MoreVertical className="h-4 w-4" /></Button>
+                        <Button size="icon" variant="ghost">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => handleEdit(c)}>
                           <Edit className="h-4 w-4 mr-2" /> Editar
                         </DropdownMenuItem>
-                        <DropdownMenuItem 
+                        <DropdownMenuItem
                           className="text-destructive focus:text-destructive"
                           onClick={() => {
-                            if(confirm("Tem certeza que deseja remover este cliente?")) {
+                            if (confirm("Tem certeza que deseja remover este cliente?")) {
                               deleteMutation.mutate(c.id);
                             }
                           }}
@@ -259,43 +304,45 @@ function ClientesPage() {
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <Label htmlFor="name">Nome completo *</Label>
-              <Input 
-                id="name" 
-                value={formData.name} 
-                onChange={(e) => setFormData({...formData, name: e.target.value})} 
+              <Input
+                id="name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="company">Empresa</Label>
-              <Input 
-                id="company" 
-                value={formData.company_name} 
-                onChange={(e) => setFormData({...formData, company_name: e.target.value})} 
+              <Input
+                id="company"
+                value={formData.company_name}
+                onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
               />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="whatsapp">WhatsApp</Label>
-              <Input 
-                id="whatsapp" 
+              <Input
+                id="whatsapp"
                 placeholder="(00) 00000-0000"
-                value={formData.whatsapp} 
-                onChange={(e) => setFormData({...formData, whatsapp: e.target.value})} 
+                value={formData.whatsapp}
+                onChange={(e) => setFormData({ ...formData, whatsapp: e.target.value })}
               />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="email">E-mail</Label>
-              <Input 
-                id="email" 
+              <Input
+                id="email"
                 type="email"
-                value={formData.email} 
-                onChange={(e) => setFormData({...formData, email: e.target.value})} 
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsModalOpen(false)}>Cancelar</Button>
-            <Button 
-              disabled={!formData.name || saveMutation.isPending} 
+            <Button variant="outline" onClick={() => setIsModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={!formData.name || saveMutation.isPending}
               onClick={() => saveMutation.mutate(formData)}
             >
               {saveMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

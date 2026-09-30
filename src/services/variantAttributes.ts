@@ -34,7 +34,10 @@ export function descriptorSegments(descriptor: string): string[] {
     const trimmed = block.trim();
     if (!trimmed) continue;
     out.push(trimmed);
-    const parts = trimmed.split(/\s+em\s+/i).map((p) => p.trim()).filter(Boolean);
+    const parts = trimmed
+      .split(/\s+em\s+/i)
+      .map((p) => p.trim())
+      .filter(Boolean);
     if (parts.length > 1) out.push(...parts);
   }
   return out;
@@ -55,7 +58,7 @@ function dimensionCode(text: string): string | undefined {
 /** Contido com borda de token: "couche_300g" está em "88x48mm_em_couche_300g", mas não em "couche_brilho_300g". */
 function containsToken(haystack: string, needle: string): boolean {
   if (!needle) return false;
-  return (`_${haystack}_`).includes(`_${needle}_`);
+  return `_${haystack}_`.includes(`_${needle}_`);
 }
 
 /** Escolhe a única opção candidata; ambiguidade = sem resposta (nunca chuta). */
@@ -95,7 +98,10 @@ export function matchAxisOption(
     .map((o) => ({ o, n: o.normalized_value || normalizeKey(o.value) }))
     .filter(({ n }) => containsToken(norm, n))
     .sort((a, b) => b.n.length - a.n.length);
-  if (contained.length && (contained.length === 1 || contained[0].n.length > contained[1].n.length)) {
+  if (
+    contained.length &&
+    (contained.length === 1 || contained[0].n.length > contained[1].n.length)
+  ) {
     return { value: contained[0].o.value, source: "contains" };
   }
   return undefined;
@@ -126,7 +132,12 @@ export function resolveVariantAttributes(
   // Brilho Frente e Verso") não seja roubado por um casamento "contido".
   const pending = axes.filter((axis) => axis.options.length > 0);
   const rank = { exact: 0, code: 1, contains: 2 } as const;
-  const candidates: Array<{ axis: ImportedVariantAxis; seg: number; value: string; source: keyof typeof rank }> = [];
+  const candidates: Array<{
+    axis: ImportedVariantAxis;
+    seg: number;
+    value: string;
+    source: keyof typeof rank;
+  }> = [];
   for (const axis of pending) {
     segments.forEach((segment, seg) => {
       const m = matchAxisOption(axis, segment);

@@ -23,7 +23,9 @@ async function fields(page) {
   return page.evaluate(() => {
     const vis = (el) => !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length);
     return [...document.querySelectorAll("input, select, textarea")].filter(vis).map((el) => {
-      const label = el.id ? document.querySelector(`label[for="${el.id}"]`)?.textContent?.trim() : "";
+      const label = el.id
+        ? document.querySelector(`label[for="${el.id}"]`)?.textContent?.trim()
+        : "";
       return `${el.tagName.toLowerCase()}[name=${el.name || "-"} type=${el.type}] ${label || el.placeholder || ""} = ${el.type === "radio" || el.type === "checkbox" ? el.checked : el.value}`;
     });
   });
@@ -37,7 +39,10 @@ async function fields(page) {
     storageState: fs.existsSync(STATE) ? STATE : undefined,
   });
   const page = await context.newPage();
-  page.on("console", (m) => m.type() === "error" && console.log("[console]", m.text().slice(0, 200)));
+  page.on(
+    "console",
+    (m) => m.type() === "error" && console.log("[console]", m.text().slice(0, 200)),
+  );
 
   if (step === "cadastro") {
     await page.goto(`${SITE}/cadastro`, { waitUntil: "networkidle" });
@@ -67,7 +72,13 @@ async function fields(page) {
     await shot(page, "04-checkout");
     console.log((await fields(page)).join("\n"));
     const botoes = await page.locator("button").allTextContents();
-    console.log("botões:", botoes.map((b) => b.trim()).filter(Boolean).slice(0, 30));
+    console.log(
+      "botões:",
+      botoes
+        .map((b) => b.trim())
+        .filter(Boolean)
+        .slice(0, 30),
+    );
   }
 
   if (step === "pedido") {

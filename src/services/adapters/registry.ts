@@ -57,10 +57,7 @@ export function rankAdapters(ctx: AdapterMatchContext): AdapterMatch[] {
  * `preferKey` (ex.: adapter_key do perfil aprovado) tem prioridade se casar (>0):
  * o motor NÃO reaprende o site a cada sync — reutiliza o perfil (§5).
  */
-export function resolveAdapter(
-  ctx: AdapterMatchContext,
-  preferKey?: string,
-): AdapterMatch | null {
+export function resolveAdapter(ctx: AdapterMatchContext, preferKey?: string): AdapterMatch | null {
   if (preferKey) {
     const preferred = registry.get(preferKey);
     if (preferred) {

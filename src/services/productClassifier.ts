@@ -39,7 +39,10 @@ export const CATEGORY_TREE: CategoryDef[] = [
     category: "Adesivos e Rótulos",
     subcategories: [
       { name: "DTF UV", keywords: ["dtf uv", "dtfuv", "dtf - uv"] },
-      { name: "Adesivo em Vinil", keywords: ["adesivo em vinil", "adesivo vinil", "vinil adesivo"] },
+      {
+        name: "Adesivo em Vinil",
+        keywords: ["adesivo em vinil", "adesivo vinil", "vinil adesivo"],
+      },
       { name: "Adesivo Perfurado", keywords: ["adesivo perfurado", "perfurado"] },
       { name: "Adesivo Holográfico", keywords: ["adesivo holografico", "holografico"] },
       { name: "Adesivo Eletrostático", keywords: ["eletrostatico"] },
@@ -55,7 +58,10 @@ export const CATEGORY_TREE: CategoryDef[] = [
   {
     category: "Vestuário e Têxtil",
     subcategories: [
-      { name: "DTF Têxtil", keywords: ["dtf textil", "dtf têxtil", "dtf para tecido", "transfer dtf"] },
+      {
+        name: "DTF Têxtil",
+        keywords: ["dtf textil", "dtf têxtil", "dtf para tecido", "transfer dtf"],
+      },
       { name: "Camiseta", keywords: ["camiseta", "dry fit", "baby look"] },
       { name: "Camisa", keywords: ["camisa", "polo"] },
       { name: "Moletom", keywords: ["moletom", "blusa de frio"] },
@@ -177,8 +183,14 @@ export const CATEGORY_TREE: CategoryDef[] = [
 
 // Segmentos (seção 22) — viram tag/segment, NUNCA categoria.
 const SEGMENT_KEYWORDS: Array<{ segment: string; keywords: string[] }> = [
-  { segment: "Restaurante/Pizzaria", keywords: ["pizzaria", "restaurante", "lanchonete", "delivery", "hamburgueria"] },
-  { segment: "Clínica/Saúde", keywords: ["clinica", "clínica", "consultorio", "dentista", "medico"] },
+  {
+    segment: "Restaurante/Pizzaria",
+    keywords: ["pizzaria", "restaurante", "lanchonete", "delivery", "hamburgueria"],
+  },
+  {
+    segment: "Clínica/Saúde",
+    keywords: ["clinica", "clínica", "consultorio", "dentista", "medico"],
+  },
   { segment: "Escola/Educação", keywords: ["escola", "faculdade", "educacao"] },
   { segment: "Academia/Fitness", keywords: ["academia", "fitness", "crossfit"] },
   { segment: "Pet Shop", keywords: ["pet shop", "petshop", "pet"] },
@@ -287,7 +299,11 @@ export function classifyProduct(input: ClassificationInput): ImportedClassificat
 
   // Tags = subcategoria + segmentos + técnica
   const tags = Array.from(
-    new Set([best.subcategory, ...segments, production_sector !== "Não identificado" ? production_sector : ""]),
+    new Set([
+      best.subcategory,
+      ...segments,
+      production_sector !== "Não identificado" ? production_sector : "",
+    ]),
   ).filter(Boolean);
 
   return {

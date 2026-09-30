@@ -1,20 +1,64 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Search, MoreVertical, Loader2, Edit, Trash2, Copy, FilePlus2, Tag, Package, Store, Truck, Hand, Layers, Plus, Sparkles, Settings2, EyeOff, Archive } from "lucide-react";
+import {
+  Search,
+  MoreVertical,
+  Loader2,
+  Edit,
+  Trash2,
+  Copy,
+  FilePlus2,
+  Tag,
+  Package,
+  Store,
+  Truck,
+  Hand,
+  Layers,
+  Plus,
+  Sparkles,
+  Settings2,
+  EyeOff,
+  Archive,
+} from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useState, useMemo } from "react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { MarketplaceVariationsModal } from "@/components/hub/marketplace-variations-modal";
 import { DialogDescription } from "@/components/ui/dialog";
 import { ProductEditor } from "@/components/products/product-editor";
@@ -42,7 +86,15 @@ export const Route = createFileRoute("/_app/produtos")({
   component: ProdutosPage,
 });
 
-const CATEGORIAS = ["DTF Têxtil", "DTF UV", "Sublimação", "Offset", "Comunicação visual", "Design", "Acabamento"];
+const CATEGORIAS = [
+  "DTF Têxtil",
+  "DTF UV",
+  "Sublimação",
+  "Offset",
+  "Comunicação visual",
+  "Design",
+  "Acabamento",
+];
 
 const FILTER_OPTIONS = [
   { value: "all", label: "Todos", icon: Layers },
@@ -95,11 +147,16 @@ type StoreSync = {
   tiragens: number;
 };
 
-const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+const fmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
-function getOriginBadge(origin: string | null, type: string | null, imported_from_supplier?: boolean | null) {
+function getOriginBadge(
+  origin: string | null,
+  type: string | null,
+  imported_from_supplier?: boolean | null,
+) {
   if (type === "service") return <StatusBadge variant="accent">Serviço</StatusBadge>;
-  if (origin === "supplier_import" || imported_from_supplier) return <StatusBadge variant="info">Fornecedor</StatusBadge>;
+  if (origin === "supplier_import" || imported_from_supplier)
+    return <StatusBadge variant="info">Fornecedor</StatusBadge>;
   return <StatusBadge variant="muted">Manual</StatusBadge>;
 }
 
@@ -115,24 +172,32 @@ function ProdutosPage() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [marketplaceProduct, setMarketplaceProduct] = useState<Product | null>(null);
   const [deleteConfirmProduct, setDeleteConfirmProduct] = useState<Product | null>(null);
-  const [withdrawTarget, setWithdrawTarget] = useState<{ product: Product; mode: WithdrawMode } | null>(null);
+  const [withdrawTarget, setWithdrawTarget] = useState<{
+    product: Product;
+    mode: WithdrawMode;
+  } | null>(null);
   const [withdrawReason, setWithdrawReason] = useState("");
 
-  const { data: dbProducts, isLoading, isError, error } = useQuery({
+  const {
+    data: dbProducts,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
     queryKey: ["products"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
         .select("*")
         .order("created_at", { ascending: false });
-      
+
       if (error) {
         throw error;
       }
-      
-      const mapped = (data || []).map(p => ({
+
+      const mapped = (data || []).map((p) => ({
         ...p,
-        active: p.status === 'Ativo' || p.status === null
+        active: p.status === "Ativo" || p.status === null,
       })) as Product[];
       return mapped;
     },
@@ -169,12 +234,22 @@ function ProdutosPage() {
   });
 
   const healthByCrmId = useMemo(
-    () => new Map((syncHealth ?? []).filter((item) => item.crm_id).map((item) => [item.crm_id as string, item])),
+    () =>
+      new Map(
+        (syncHealth ?? [])
+          .filter((item) => item.crm_id)
+          .map((item) => [item.crm_id as string, item]),
+      ),
     [syncHealth],
   );
 
   const storeByCrmId = useMemo(
-    () => new Map((storeProducts ?? []).filter((item) => item.crm_id).map((item) => [item.crm_id as string, item])),
+    () =>
+      new Map(
+        (storeProducts ?? [])
+          .filter((item) => item.crm_id)
+          .map((item) => [item.crm_id as string, item]),
+      ),
     [storeProducts],
   );
 
@@ -194,7 +269,11 @@ function ProdutosPage() {
 
   const importFromHubMutation = useMutation({
     mutationFn: async ({ item, type }: { item: any; type: "product" | "service" }) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", (await supabase.auth.getUser()).data.user?.id || "")
+        .single();
       if (!profileData?.company_id) throw new Error("Empresa não identificada.");
 
       // Dedup robusto (mesma lógica do importador "por link"): casa por source_url
@@ -210,9 +289,9 @@ function ProdutosPage() {
           .select("id, source_url")
           .eq("company_id", profileData.company_id)
           .not("source_url", "is", null);
-        existingId = (candidates || []).find(
-          (c: any) => normalizeUrlForMatch(c.source_url) === targetUrl,
-        )?.id ?? null;
+        existingId =
+          (candidates || []).find((c: any) => normalizeUrlForMatch(c.source_url) === targetUrl)
+            ?.id ?? null;
       }
 
       if (!existingId && item.supplier_sku) {
@@ -238,7 +317,7 @@ function ProdutosPage() {
 
       const margin = 50;
       const cost = Number(item.current_price) || 0;
-      const suggested = parseFloat((cost * (1 + (margin/100))).toFixed(2));
+      const suggested = parseFloat((cost * (1 + margin / 100)).toFixed(2));
 
       const payload = {
         company_id: profileData.company_id,
@@ -275,7 +354,7 @@ function ProdutosPage() {
         // Produtos & Serviços quanto no Hub de Fornecedores. O flag abaixo só
         // registra por qual fluxo entrou (aqui, via modal); o Hub não depende dele.
         imported_from_supplier: false,
-        status: "Ativo"
+        status: "Ativo",
       };
 
       const { error } = await supabase.from("products").insert([payload]);
@@ -301,16 +380,26 @@ function ProdutosPage() {
     },
     onError: (err) => {
       toast.error("Erro ao importar produto: " + err.message);
-    }
+    },
   });
 
   const filteredData = useMemo(() => {
-    console.log("Calculando filteredData. dbProducts:", dbProducts, "searchTerm:", searchTerm, "selectedCat:", selectedCat, "filterType:", filterType);
-    const result = dbProducts?.filter(item => {
+    console.log(
+      "Calculando filteredData. dbProducts:",
+      dbProducts,
+      "searchTerm:",
+      searchTerm,
+      "selectedCat:",
+      selectedCat,
+      "filterType:",
+      filterType,
+    );
+    const result = dbProducts?.filter((item) => {
       const name = item.name || "";
-      const matchesSearch = 
-        name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        (item.commercial_name && item.commercial_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      const matchesSearch =
+        name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (item.commercial_name &&
+          item.commercial_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (item.internal_sku && item.internal_sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (item.supplier_sku && item.supplier_sku.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (item.supplier_name && item.supplier_name.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -319,7 +408,8 @@ function ProdutosPage() {
 
       let matchesFilter = true;
       if (filterType === "manual") {
-        matchesFilter = (item.origin === "manual" || item.origin === null) && !item.imported_from_supplier;
+        matchesFilter =
+          (item.origin === "manual" || item.origin === null) && !item.imported_from_supplier;
       } else if (filterType === "supplier") {
         matchesFilter = item.origin === "supplier_import" || item.imported_from_supplier === true;
       } else if (filterType === "services") {
@@ -331,7 +421,9 @@ function ProdutosPage() {
       }
 
       const match = matchesSearch && matchesCat && matchesFilter;
-      console.log(`Produto "${item.name}": matchesSearch=${matchesSearch}, matchesCat=${matchesCat}, matchesFilter=${matchesFilter} -> match=${match}`);
+      console.log(
+        `Produto "${item.name}": matchesSearch=${matchesSearch}, matchesCat=${matchesCat}, matchesFilter=${matchesFilter} -> match=${match}`,
+      );
       return match;
     });
     console.log("Resultado final filteredData:", result);
@@ -344,7 +436,7 @@ function ProdutosPage() {
   const importedKeys = useMemo(() => {
     const urls = new Set<string>();
     const skus = new Set<string>();
-    (dbProducts || []).forEach(p => {
+    (dbProducts || []).forEach((p) => {
       if (p.origin === "supplier_import") {
         if (p.source_url) urls.add(p.source_url);
         if (p.supplier_sku) skus.add(p.supplier_sku);
@@ -358,11 +450,15 @@ function ProdutosPage() {
     if (!dbProducts) return {};
     return {
       all: dbProducts.length,
-      manual: dbProducts.filter(p => (p.origin === "manual" || p.origin === null) && !p.imported_from_supplier).length,
-      supplier: dbProducts.filter(p => p.origin === "supplier_import" || p.imported_from_supplier === true).length,
-      services: dbProducts.filter(p => p.type === "service").length,
-      products: dbProducts.filter(p => p.type === "product" || p.type === null).length,
-      marketplace: dbProducts.filter(p => !!p.marketplace_title).length,
+      manual: dbProducts.filter(
+        (p) => (p.origin === "manual" || p.origin === null) && !p.imported_from_supplier,
+      ).length,
+      supplier: dbProducts.filter(
+        (p) => p.origin === "supplier_import" || p.imported_from_supplier === true,
+      ).length,
+      services: dbProducts.filter((p) => p.type === "service").length,
+      products: dbProducts.filter((p) => p.type === "product" || p.type === null).length,
+      marketplace: dbProducts.filter((p) => !!p.marketplace_title).length,
     };
   }, [dbProducts]);
 
@@ -382,14 +478,20 @@ function ProdutosPage() {
 
   const duplicateMutation = useMutation({
     mutationFn: async (product: Product) => {
-      const { data: profileData } = await supabase.from('profiles').select('company_id').eq('user_id', (await supabase.auth.getUser()).data.user?.id || "").single();
-      
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", (await supabase.auth.getUser()).data.user?.id || "")
+        .single();
+
       if (!profileData?.company_id) throw new Error("Empresa não identificada.");
-      
+
       const payload = {
         company_id: profileData.company_id,
         name: `${product.name} (Cópia)`,
-        commercial_name: product.commercial_name ? `${product.commercial_name} (Cópia)` : `${product.name} (Cópia)`,
+        commercial_name: product.commercial_name
+          ? `${product.commercial_name} (Cópia)`
+          : `${product.name} (Cópia)`,
         type: product.type || "product",
         origin: "manual",
         internal_sku: `PRD-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
@@ -406,7 +508,7 @@ function ProdutosPage() {
         technical_description: product.technical_description,
         image_url: product.image_url,
         main_image_url: product.image_url,
-        status: product.status || "Ativo"
+        status: product.status || "Ativo",
       };
 
       const { error } = await supabase.from("products").insert([payload]);
@@ -419,7 +521,7 @@ function ProdutosPage() {
     },
     onError: (err) => {
       toast.error("Erro ao duplicar produto: " + err.message);
-    }
+    },
   });
 
   const deleteMutation = useMutation({
@@ -437,7 +539,7 @@ function ProdutosPage() {
     },
     onError: (err) => {
       toast.error("Erro ao remover produto: " + err.message);
-    }
+    },
   });
 
   const publishToStoreMutation = useMutation({
@@ -457,8 +559,15 @@ function ProdutosPage() {
 
   const withdrawMutation = useMutation({
     // Despublicar/arquivar nunca apaga; só confirma com o retorno do banco.
-    mutationFn: ({ product, mode, reason }: { product: Product; mode: WithdrawMode; reason: string }) =>
-      withdrawCrmProduct(supabase as any, product.id, mode, reason),
+    mutationFn: ({
+      product,
+      mode,
+      reason,
+    }: {
+      product: Product;
+      mode: WithdrawMode;
+      reason: string;
+    }) => withdrawCrmProduct(supabase as any, product.id, mode, reason),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["site_products"] });
       const queued = result.cancelled_queue_items
@@ -478,9 +587,9 @@ function ProdutosPage() {
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData.user?.id || "";
       const { data: profileData } = await supabase
-        .from('profiles')
-        .select('company_id')
-        .eq('user_id', userId)
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", userId)
         .single();
       if (!profileData?.company_id) throw new Error("Empresa não identificada.");
 
@@ -500,7 +609,9 @@ function ProdutosPage() {
       }
       const parts = [
         `${result.commercial_products_created} criados`,
-        result.commercial_products_updated ? `${result.commercial_products_updated} atualizados` : "",
+        result.commercial_products_updated
+          ? `${result.commercial_products_updated} atualizados`
+          : "",
         result.price_changes ? `${result.price_changes} preços alterados` : "",
         result.commercial_products_removed ? `${result.commercial_products_removed} removidos` : "",
       ].filter(Boolean);
@@ -522,18 +633,21 @@ function ProdutosPage() {
       const { data: userData } = await supabase.auth.getUser();
       const userId = userData.user?.id || "";
       const { data: profileData } = await supabase
-        .from('profiles')
-        .select('company_id')
-        .eq('user_id', userId)
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", userId)
         .single();
       if (!profileData?.company_id) throw new Error("Empresa não identificada.");
 
       const supplierProducts = (dbProducts || []).filter(
         (p) => p.supplier_id || p.imported_from_supplier,
       );
-      if (supplierProducts.length === 0) throw new Error("Nenhum produto de fornecedor para catalogar.");
+      if (supplierProducts.length === 0)
+        throw new Error("Nenhum produto de fornecedor para catalogar.");
 
-      let ok = 0, fail = 0, totalCombos = 0;
+      let ok = 0,
+        fail = 0,
+        totalCombos = 0;
       for (const p of supplierProducts) {
         try {
           const gen = await generateCommercialProducts({
@@ -555,7 +669,8 @@ function ProdutosPage() {
       queryClient.invalidateQueries({ queryKey: ["imported-products"] });
       toast.success(
         `Catalogação concluída: ${r.ok}/${r.total} produtos · ${r.totalCombos} produtos comerciais` +
-          (r.fail ? ` · ${r.fail} falharam` : "") + ".",
+          (r.fail ? ` · ${r.fail} falharam` : "") +
+          ".",
       );
     },
     onError: (err: any) => {
@@ -589,9 +704,9 @@ function ProdutosPage() {
 
   return (
     <>
-      <PageHeader 
-        title="Produtos & Serviços" 
-        description="Catálogo unificado — manuais e importados de fornecedores" 
+      <PageHeader
+        title="Produtos & Serviços"
+        description="Catálogo unificado — manuais e importados de fornecedores"
         action={
           <div className="flex gap-3 items-center">
             <Button
@@ -603,48 +718,65 @@ function ProdutosPage() {
             </Button>
 
             <div className="h-6 w-[1px] bg-border mx-1 hidden sm:block"></div>
-            
-            <Button variant="outline" onClick={() => setIsImportModalOpen(true)} className="border-dashed border-2 hover:bg-secondary/80 transition-all">
+
+            <Button
+              variant="outline"
+              onClick={() => setIsImportModalOpen(true)}
+              className="border-dashed border-2 hover:bg-secondary/80 transition-all"
+            >
               <Truck className="h-4 w-4 mr-2 text-muted-foreground" /> Hub
             </Button>
-            
+
             <Button
               variant="outline"
               disabled={generateAllMutation.isPending}
               onClick={() => {
-                if (window.confirm("Gerar as combinações do fornecedor para TODOS os produtos importados? Isso cria/atualiza os produtos comerciais e não duplica.")) {
+                if (
+                  window.confirm(
+                    "Gerar as combinações do fornecedor para TODOS os produtos importados? Isso cria/atualiza os produtos comerciais e não duplica.",
+                  )
+                ) {
                   generateAllMutation.mutate();
                 }
               }}
               className="shadow-sm hover:shadow-md transition-all"
             >
-              {generateAllMutation.isPending
-                ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                : <Layers className="h-4 w-4 mr-2 text-muted-foreground" />}
+              {generateAllMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Layers className="h-4 w-4 mr-2 text-muted-foreground" />
+              )}
               Catalogar combinações
             </Button>
 
-            <Button variant="outline" onClick={() => navigate({ to: "/motor-produtos" })} className="shadow-sm hover:shadow-md transition-all">
+            <Button
+              variant="outline"
+              onClick={() => navigate({ to: "/motor-produtos" })}
+              className="shadow-sm hover:shadow-md transition-all"
+            >
               <Settings2 className="h-4 w-4 mr-2 text-muted-foreground" /> Motor Técnico
             </Button>
-            
-            <Button onClick={handleNew} className="shadow-md hover:shadow-lg transition-all hover:scale-105">
+
+            <Button
+              onClick={handleNew}
+              className="shadow-md hover:shadow-lg transition-all hover:scale-105"
+            >
               <Plus className="h-4 w-4 mr-2" /> Novo Produto
             </Button>
           </div>
         }
       />
-      
+
       {/* Filtros superiores */}
       <Card className="p-4 mb-4">
         <div className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder="Buscar por nome, SKU ou fornecedor..." 
+            <Input
+              placeholder="Buscar por nome, SKU ou fornecedor..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-9" 
+              className="pl-9"
             />
           </div>
           <Select value={filterType} onValueChange={setFilterType}>
@@ -652,13 +784,15 @@ function ProdutosPage() {
               <SelectValue placeholder="Filtrar por tipo" />
             </SelectTrigger>
             <SelectContent>
-              {FILTER_OPTIONS.map(opt => (
+              {FILTER_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
                   <span className="flex items-center gap-2">
                     <opt.icon className="h-3.5 w-3.5" />
                     {opt.label}
                     {filterCounts[opt.value as keyof typeof filterCounts] !== undefined && (
-                      <span className="text-muted-foreground text-[10px] ml-1">({filterCounts[opt.value as keyof typeof filterCounts]})</span>
+                      <span className="text-muted-foreground text-[10px] ml-1">
+                        ({filterCounts[opt.value as keyof typeof filterCounts]})
+                      </span>
                     )}
                   </span>
                 </SelectItem>
@@ -668,15 +802,15 @@ function ProdutosPage() {
         </div>
         {/* Chips de categoria */}
         <div className="flex flex-wrap gap-2 mt-4">
-          <button 
+          <button
             onClick={() => setSelectedCat("Todos")}
             className={`text-xs px-3 py-1.5 rounded-full transition-colors ${selectedCat === "Todos" ? "bg-primary text-primary-foreground font-semibold" : "bg-secondary hover:bg-primary hover:text-primary-foreground"}`}
           >
             Todos
           </button>
           {CATEGORIAS.map((c) => (
-            <button 
-              key={c} 
+            <button
+              key={c}
               onClick={() => setSelectedCat(c)}
               className={`text-xs px-3 py-1.5 rounded-full transition-colors ${selectedCat === c ? "bg-primary text-primary-foreground font-semibold" : "bg-secondary hover:bg-primary hover:text-primary-foreground"}`}
             >
@@ -714,7 +848,8 @@ function ProdutosPage() {
             ) : isError ? (
               <TableRow>
                 <TableCell colSpan={11} className="text-center py-6 text-destructive font-semibold">
-                  Erro ao carregar produtos: {error instanceof Error ? error.message : String(error)}
+                  Erro ao carregar produtos:{" "}
+                  {error instanceof Error ? error.message : String(error)}
                 </TableCell>
               </TableRow>
             ) : filteredData?.length === 0 ? (
@@ -723,170 +858,219 @@ function ProdutosPage() {
                   Nenhum produto encontrado.
                 </TableCell>
               </TableRow>
-            ) : filteredData?.map((p) => {
-              try {
-                const imgSrc = p.image_url || p.main_image_url;
-                const costVal = Number(p.cost_price || p.base_cost || 0);
-                const saleVal = Number(p.sale_price || p.suggested_price || 0);
-                const marginVal = Number(p.margin_percent || p.target_margin || 0);
-                const skuDisplay = p.internal_sku || p.supplier_sku || "—";
-                const isMarginValid = !isNaN(marginVal);
-                const storeSync = storeByCrmId.get(p.id);
-                const health = healthByCrmId.get(p.id);
-                const syncDetail = health ? describeSyncHealth(health) : null;
-                const withdrawn = isWithdrawn(health);
-
-                let formattedCost = "R$ 0,00";
+            ) : (
+              filteredData?.map((p) => {
                 try {
-                  formattedCost = fmt.format(costVal);
-                } catch (e) {
-                  console.error("Erro ao formatar custo:", e);
-                }
+                  const imgSrc = p.image_url || p.main_image_url;
+                  const costVal = Number(p.cost_price || p.base_cost || 0);
+                  const saleVal = Number(p.sale_price || p.suggested_price || 0);
+                  const marginVal = Number(p.margin_percent || p.target_margin || 0);
+                  const skuDisplay = p.internal_sku || p.supplier_sku || "—";
+                  const isMarginValid = !isNaN(marginVal);
+                  const storeSync = storeByCrmId.get(p.id);
+                  const health = healthByCrmId.get(p.id);
+                  const syncDetail = health ? describeSyncHealth(health) : null;
+                  const withdrawn = isWithdrawn(health);
 
-                let formattedSale = "R$ 0,00";
-                try {
-                  formattedSale = fmt.format(saleVal);
-                } catch (e) {
-                  console.error("Erro ao formatar preço de venda:", e);
-                }
+                  let formattedCost = "R$ 0,00";
+                  try {
+                    formattedCost = fmt.format(costVal);
+                  } catch (e) {
+                    console.error("Erro ao formatar custo:", e);
+                  }
 
-                return (
-                  <TableRow key={p.id}>
-                    {/* Imagem */}
-                    <TableCell>
-                      {imgSrc ? (
-                        <img src={imgSrc} alt={p.name || "Sem nome"} className="h-10 w-10 rounded-md object-cover border" />
-                      ) : (
-                        <div className="h-10 w-10 rounded-md bg-secondary flex items-center justify-center">
-                          <Package className="h-4 w-4 text-muted-foreground" />
-                        </div>
-                      )}
-                    </TableCell>
-                    {/* Nome + nome comercial + fornecedor */}
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="font-semibold text-sm leading-tight">{p.name || "Sem nome"}</span>
-                        {p.commercial_name && p.commercial_name !== p.name && (
-                          <span className="text-xs text-muted-foreground">{p.commercial_name}</span>
+                  let formattedSale = "R$ 0,00";
+                  try {
+                    formattedSale = fmt.format(saleVal);
+                  } catch (e) {
+                    console.error("Erro ao formatar preço de venda:", e);
+                  }
+
+                  return (
+                    <TableRow key={p.id}>
+                      {/* Imagem */}
+                      <TableCell>
+                        {imgSrc ? (
+                          <img
+                            src={imgSrc}
+                            alt={p.name || "Sem nome"}
+                            className="h-10 w-10 rounded-md object-cover border"
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded-md bg-secondary flex items-center justify-center">
+                            <Package className="h-4 w-4 text-muted-foreground" />
+                          </div>
                         )}
-                        {p.supplier_name && (
-                          <span className="text-[10px] text-info flex items-center gap-1 mt-0.5">
-                            <Truck className="h-2.5 w-2.5" /> {p.supplier_name}
+                      </TableCell>
+                      {/* Nome + nome comercial + fornecedor */}
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-sm leading-tight">
+                            {p.name || "Sem nome"}
                           </span>
-                        )}
-                        {storeSync ? (
-                          <span className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
-                            <StatusBadge variant={syncStatusDisplay(storeSync.sync_status).variant}>
-                              {syncStatusDisplay(storeSync.sync_status).label}
-                            </StatusBadge>
-                            <span className="text-muted-foreground">
-                              {storeSync.imagens} mídia(s) · {storeSync.opcoes} opção(ões) · {storeSync.tiragens} tiragem(ns)
+                          {p.commercial_name && p.commercial_name !== p.name && (
+                            <span className="text-xs text-muted-foreground">
+                              {p.commercial_name}
                             </span>
-                          </span>
-                        ) : null}
-                        {syncDetail && syncDetail.summary.length > 0 ? (
-                          <span className="mt-0.5 text-[10px] text-warning" title={syncDetail.dates.join("\n")}>
-                            {syncDetail.summary.join(" · ")}
-                          </span>
-                        ) : syncDetail ? (
-                          <span className="mt-0.5 text-[10px] text-muted-foreground">{syncDetail.dates.join(" · ")}</span>
-                        ) : null}
-                      </div>
-                    </TableCell>
-                    {/* Origem */}
-                    <TableCell className="hidden md:table-cell">
-                      {getOriginBadge(p.origin, p.type, p.imported_from_supplier)}
-                    </TableCell>
-                    {/* SKU */}
-                    <TableCell className="hidden lg:table-cell">
-                      <span className="font-mono text-xs text-muted-foreground">{skuDisplay}</span>
-                    </TableCell>
-                    {/* Categoria */}
-                    <TableCell><StatusBadge variant="muted">{p.category || "Geral"}</StatusBadge></TableCell>
-                    {/* Unidade */}
-                    <TableCell className="hidden md:table-cell text-muted-foreground">{p.unit_measure || "—"}</TableCell>
-                    {/* Custo */}
-                    <TableCell className="text-sm">{formattedCost}</TableCell>
-                    {/* Preço venda */}
-                    <TableCell className="font-bold text-foreground text-sm">{formattedSale}</TableCell>
-                    {/* Margem */}
-                    <TableCell className="hidden lg:table-cell">
-                      <span className={`font-semibold text-sm ${marginVal >= 30 ? "text-success" : marginVal >= 15 ? "text-warning" : "text-destructive"}`}>
-                        {isMarginValid ? `${marginVal.toFixed(0)}%` : "—%"}
-                      </span>
-                    </TableCell>
-                    {/* Status */}
-                    <TableCell><StatusBadge variant={p.status === 'Ativo' ? 'success' : 'muted'}>{p.status || "Ativo"}</StatusBadge></TableCell>
-                    {/* Ações */}
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button size="icon" variant="ghost"><MoreVertical className="h-4 w-4" /></Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleEdit(p)}>
-                            <Edit className="h-4 w-4 mr-2" /> Editar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => duplicateMutation.mutate(p)}>
-                            <Copy className="h-4 w-4 mr-2" /> Duplicar
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onClick={() => handleGenerateQuote(p)}>
-                            <FilePlus2 className="h-4 w-4 mr-2" /> Gerar Orçamento
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => publishToStoreMutation.mutate(p)}
-                            disabled={publishToStoreMutation.isPending}
-                          >
-                            <Store className="h-4 w-4 mr-2" /> {storeSync && !withdrawn ? "Ressincronizar loja" : "Publicar na loja"}
-                          </DropdownMenuItem>
-                          {storeSync && !withdrawn ? (
-                            <>
-                              <DropdownMenuItem onClick={() => setWithdrawTarget({ product: p, mode: "unpublish" })}>
-                                <EyeOff className="h-4 w-4 mr-2" /> {WITHDRAW_LABEL.unpublish.action}
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => setWithdrawTarget({ product: p, mode: "archive" })}>
-                                <Archive className="h-4 w-4 mr-2" /> {WITHDRAW_LABEL.archive.action}
-                              </DropdownMenuItem>
-                            </>
-                          ) : null}
-                          <DropdownMenuItem onClick={() => setMarketplaceProduct(p)}>
-                            <Store className="h-4 w-4 mr-2" /> Rascunho Marketplace
-                          </DropdownMenuItem>
-                          {(p.supplier_id || p.imported_from_supplier) && (
-                            <DropdownMenuItem
-                              onClick={() => generateCombinationsMutation.mutate(p)}
-                              disabled={generateCombinationsMutation.isPending}
-                            >
-                              <Layers className="h-4 w-4 mr-2" /> Gerar Combinações do Fornecedor
-                            </DropdownMenuItem>
                           )}
-                          <DropdownMenuSeparator />
-                          {/* Publicado nunca é excluído: o banco recusa (despublique ou arquive). */}
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            disabled={!!storeSync}
-                            title={storeSync ? "Já publicado na loja: despublique ou arquive." : undefined}
-                            onClick={() => setDeleteConfirmProduct(p)}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" /> {storeSync ? "Remover (publicado)" : "Remover"}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                );
-              } catch (err) {
-                console.error("Erro renderizando produto na tabela:", p, err);
-                return (
-                  <TableRow key={p?.id || Math.random().toString()}>
-                    <TableCell colSpan={11} className="text-destructive text-xs py-2 text-center">
-                      Erro ao exibir produto "{p?.name || 'Sem nome'}". Verifique o console de desenvolvedor.
-                    </TableCell>
-                  </TableRow>
-                );
-              }
-            })}
+                          {p.supplier_name && (
+                            <span className="text-[10px] text-info flex items-center gap-1 mt-0.5">
+                              <Truck className="h-2.5 w-2.5" /> {p.supplier_name}
+                            </span>
+                          )}
+                          {storeSync ? (
+                            <span className="mt-1 flex flex-wrap items-center gap-1 text-[10px]">
+                              <StatusBadge
+                                variant={syncStatusDisplay(storeSync.sync_status).variant}
+                              >
+                                {syncStatusDisplay(storeSync.sync_status).label}
+                              </StatusBadge>
+                              <span className="text-muted-foreground">
+                                {storeSync.imagens} mídia(s) · {storeSync.opcoes} opção(ões) ·{" "}
+                                {storeSync.tiragens} tiragem(ns)
+                              </span>
+                            </span>
+                          ) : null}
+                          {syncDetail && syncDetail.summary.length > 0 ? (
+                            <span
+                              className="mt-0.5 text-[10px] text-warning"
+                              title={syncDetail.dates.join("\n")}
+                            >
+                              {syncDetail.summary.join(" · ")}
+                            </span>
+                          ) : syncDetail ? (
+                            <span className="mt-0.5 text-[10px] text-muted-foreground">
+                              {syncDetail.dates.join(" · ")}
+                            </span>
+                          ) : null}
+                        </div>
+                      </TableCell>
+                      {/* Origem */}
+                      <TableCell className="hidden md:table-cell">
+                        {getOriginBadge(p.origin, p.type, p.imported_from_supplier)}
+                      </TableCell>
+                      {/* SKU */}
+                      <TableCell className="hidden lg:table-cell">
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {skuDisplay}
+                        </span>
+                      </TableCell>
+                      {/* Categoria */}
+                      <TableCell>
+                        <StatusBadge variant="muted">{p.category || "Geral"}</StatusBadge>
+                      </TableCell>
+                      {/* Unidade */}
+                      <TableCell className="hidden md:table-cell text-muted-foreground">
+                        {p.unit_measure || "—"}
+                      </TableCell>
+                      {/* Custo */}
+                      <TableCell className="text-sm">{formattedCost}</TableCell>
+                      {/* Preço venda */}
+                      <TableCell className="font-bold text-foreground text-sm">
+                        {formattedSale}
+                      </TableCell>
+                      {/* Margem */}
+                      <TableCell className="hidden lg:table-cell">
+                        <span
+                          className={`font-semibold text-sm ${marginVal >= 30 ? "text-success" : marginVal >= 15 ? "text-warning" : "text-destructive"}`}
+                        >
+                          {isMarginValid ? `${marginVal.toFixed(0)}%` : "—%"}
+                        </span>
+                      </TableCell>
+                      {/* Status */}
+                      <TableCell>
+                        <StatusBadge variant={p.status === "Ativo" ? "success" : "muted"}>
+                          {p.status || "Ativo"}
+                        </StatusBadge>
+                      </TableCell>
+                      {/* Ações */}
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="icon" variant="ghost">
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleEdit(p)}>
+                              <Edit className="h-4 w-4 mr-2" /> Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => duplicateMutation.mutate(p)}>
+                              <Copy className="h-4 w-4 mr-2" /> Duplicar
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => handleGenerateQuote(p)}>
+                              <FilePlus2 className="h-4 w-4 mr-2" /> Gerar Orçamento
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => publishToStoreMutation.mutate(p)}
+                              disabled={publishToStoreMutation.isPending}
+                            >
+                              <Store className="h-4 w-4 mr-2" />{" "}
+                              {storeSync && !withdrawn ? "Ressincronizar loja" : "Publicar na loja"}
+                            </DropdownMenuItem>
+                            {storeSync && !withdrawn ? (
+                              <>
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    setWithdrawTarget({ product: p, mode: "unpublish" })
+                                  }
+                                >
+                                  <EyeOff className="h-4 w-4 mr-2" />{" "}
+                                  {WITHDRAW_LABEL.unpublish.action}
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => setWithdrawTarget({ product: p, mode: "archive" })}
+                                >
+                                  <Archive className="h-4 w-4 mr-2" />{" "}
+                                  {WITHDRAW_LABEL.archive.action}
+                                </DropdownMenuItem>
+                              </>
+                            ) : null}
+                            <DropdownMenuItem onClick={() => setMarketplaceProduct(p)}>
+                              <Store className="h-4 w-4 mr-2" /> Rascunho Marketplace
+                            </DropdownMenuItem>
+                            {(p.supplier_id || p.imported_from_supplier) && (
+                              <DropdownMenuItem
+                                onClick={() => generateCombinationsMutation.mutate(p)}
+                                disabled={generateCombinationsMutation.isPending}
+                              >
+                                <Layers className="h-4 w-4 mr-2" /> Gerar Combinações do Fornecedor
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            {/* Publicado nunca é excluído: o banco recusa (despublique ou arquive). */}
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              disabled={!!storeSync}
+                              title={
+                                storeSync
+                                  ? "Já publicado na loja: despublique ou arquive."
+                                  : undefined
+                              }
+                              onClick={() => setDeleteConfirmProduct(p)}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />{" "}
+                              {storeSync ? "Remover (publicado)" : "Remover"}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                } catch (err) {
+                  console.error("Erro renderizando produto na tabela:", p, err);
+                  return (
+                    <TableRow key={p?.id || Math.random().toString()}>
+                      <TableCell colSpan={11} className="text-destructive text-xs py-2 text-center">
+                        Erro ao exibir produto "{p?.name || "Sem nome"}". Verifique o console de
+                        desenvolvedor.
+                      </TableCell>
+                    </TableRow>
+                  );
+                }
+              })
+            )}
           </TableBody>
         </Table>
       </Card>
@@ -894,11 +1078,17 @@ function ProdutosPage() {
       {/* Editor Avançado de Produto (drawer) */}
       <ProductEditor
         open={isModalOpen}
-        onOpenChange={(open) => { setIsModalOpen(open); if (!open) setEditingProduct(null); }}
+        onOpenChange={(open) => {
+          setIsModalOpen(open);
+          if (!open) setEditingProduct(null);
+        }}
         product={editingProduct}
         suppliers={suppliers}
         onRequestQuote={(id) => navigate({ to: "/orcamentos", search: { selectProductId: id } })}
-        onRequestMarketplace={(p) => { setIsModalOpen(false); setMarketplaceProduct(p); }}
+        onRequestMarketplace={(p) => {
+          setIsModalOpen(false);
+          setMarketplaceProduct(p);
+        }}
         onRequestDuplicate={(p) => duplicateMutation.mutate(p)}
       />
 
@@ -945,21 +1135,29 @@ function ProdutosPage() {
                         <TableRow key={item.id} className={isAlreadyImported ? "opacity-60" : ""}>
                           <TableCell>
                             {item.main_image_url ? (
-                              <img src={item.main_image_url} alt={item.product_name} className="h-9 w-9 rounded-md object-cover border" />
+                              <img
+                                src={item.main_image_url}
+                                alt={item.product_name}
+                                className="h-9 w-9 rounded-md object-cover border"
+                              />
                             ) : (
                               <div className="h-9 w-9 rounded-md bg-secondary flex items-center justify-center">
                                 <Package className="h-4 w-4 text-muted-foreground" />
                               </div>
                             )}
                           </TableCell>
-                          <TableCell className="font-semibold text-sm max-w-[200px] truncate">{item.product_name}</TableCell>
+                          <TableCell className="font-semibold text-sm max-w-[200px] truncate">
+                            {item.product_name}
+                          </TableCell>
                           <TableCell>
-                            <StatusBadge variant="info">{item.suppliers?.name || "Parceiro"}</StatusBadge>
+                            <StatusBadge variant="info">
+                              {item.suppliers?.name || "Parceiro"}
+                            </StatusBadge>
                           </TableCell>
-                          <TableCell className="font-mono text-xs">{item.supplier_sku || "—"}</TableCell>
-                          <TableCell className="text-sm font-medium">
-                            {fmt.format(cost)}
+                          <TableCell className="font-mono text-xs">
+                            {item.supplier_sku || "—"}
                           </TableCell>
+                          <TableCell className="text-sm font-medium">{fmt.format(cost)}</TableCell>
                           <TableCell>
                             {isAlreadyImported ? (
                               <StatusBadge variant="success">Importado</StatusBadge>
@@ -973,9 +1171,9 @@ function ProdutosPage() {
                             ) : (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button 
-                                    size="sm" 
-                                    variant="outline" 
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
                                     disabled={importFromHubMutation.isPending}
                                   >
                                     {importFromHubMutation.isPending ? (
@@ -987,10 +1185,18 @@ function ProdutosPage() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => importFromHubMutation.mutate({ item, type: 'product' })}>
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      importFromHubMutation.mutate({ item, type: "product" })
+                                    }
+                                  >
                                     <Package className="h-4 w-4 mr-2" /> Como Produto
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => importFromHubMutation.mutate({ item, type: 'service' })}>
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      importFromHubMutation.mutate({ item, type: "service" })
+                                    }
+                                  >
                                     <Tag className="h-4 w-4 mr-2" /> Como Serviço
                                   </DropdownMenuItem>
                                 </DropdownMenuContent>
@@ -1006,8 +1212,12 @@ function ProdutosPage() {
             ) : (
               <div className="text-center p-8 border border-dashed rounded-lg">
                 <Package className="h-10 w-10 mx-auto mb-3 text-muted-foreground/30" />
-                <p className="text-muted-foreground mb-2 font-semibold">Nenhum produto capturado ainda.</p>
-                <p className="text-xs text-muted-foreground mb-4">Use o Importador por Link para trazer produtos do fornecedor.</p>
+                <p className="text-muted-foreground mb-2 font-semibold">
+                  Nenhum produto capturado ainda.
+                </p>
+                <p className="text-xs text-muted-foreground mb-4">
+                  Use o Importador por Link para trazer produtos do fornecedor.
+                </p>
                 <Button onClick={() => navigate({ to: "/produtos/importar" })}>
                   <Sparkles className="h-4 w-4 mr-2" />
                   Ir para o Importador por Link
@@ -1016,7 +1226,11 @@ function ProdutosPage() {
             )}
           </div>
           <DialogFooter className="mt-4 pt-4 border-t">
-            <Button variant="ghost" onClick={() => navigate({ to: "/produtos/importar" })} className="mr-auto text-muted-foreground">
+            <Button
+              variant="ghost"
+              onClick={() => navigate({ to: "/produtos/importar" })}
+              className="mr-auto text-muted-foreground"
+            >
               Não achou o que procurava? Importar por link
             </Button>
             <Button onClick={() => setIsImportModalOpen(false)}>Concluir</Button>
@@ -1036,7 +1250,9 @@ function ProdutosPage() {
       >
         <DialogContent className="sm:max-w-[440px]">
           <DialogHeader>
-            <DialogTitle>{withdrawTarget ? WITHDRAW_LABEL[withdrawTarget.mode].action : ""}</DialogTitle>
+            <DialogTitle>
+              {withdrawTarget ? WITHDRAW_LABEL[withdrawTarget.mode].action : ""}
+            </DialogTitle>
             <DialogDescription>
               {withdrawTarget?.mode === "archive"
                 ? "O produto sai de venda e fica preservado com pedidos e histórico. Só volta publicando de novo pelo Flow."
@@ -1073,23 +1289,29 @@ function ProdutosPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!deleteConfirmProduct} onOpenChange={(open) => !open && setDeleteConfirmProduct(null)}>
+      <Dialog
+        open={!!deleteConfirmProduct}
+        onOpenChange={(open) => !open && setDeleteConfirmProduct(null)}
+      >
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
             <DialogTitle>Confirmar exclusão</DialogTitle>
           </DialogHeader>
           <p className="text-muted-foreground text-sm">
-            Tem certeza que deseja remover o produto <strong>{deleteConfirmProduct?.name}</strong>? Ele nunca foi publicado na loja; esta ação não pode ser desfeita.
+            Tem certeza que deseja remover o produto <strong>{deleteConfirmProduct?.name}</strong>?
+            Ele nunca foi publicado na loja; esta ação não pode ser desfeita.
           </p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteConfirmProduct(null)}>Cancelar</Button>
-            <Button 
-              variant="destructive" 
+            <Button variant="outline" onClick={() => setDeleteConfirmProduct(null)}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
               disabled={deleteMutation.isPending}
               onClick={() => {
                 if (deleteConfirmProduct) {
                   deleteMutation.mutate(deleteConfirmProduct.id, {
-                    onSuccess: () => setDeleteConfirmProduct(null)
+                    onSuccess: () => setDeleteConfirmProduct(null),
                   });
                 }
               }}
@@ -1110,7 +1332,6 @@ function ProdutosPage() {
           onNavigateToDrafts={() => navigate({ to: "/hub-fornecedores" })}
         />
       )}
-
     </>
   );
 }

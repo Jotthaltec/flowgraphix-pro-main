@@ -28,7 +28,10 @@ async function shot(page, name) {
   if (page.url().includes("/entrar")) {
     await page.fill('input[type="email"]', "dono@homolog.local");
     await page.fill('input[type="password"]', "Homolog#2026");
-    await Promise.all([page.waitForURL((u) => !u.pathname.startsWith("/entrar"), { timeout: 60000 }), page.click('button[type="submit"]')]);
+    await Promise.all([
+      page.waitForURL((u) => !u.pathname.startsWith("/entrar"), { timeout: 60000 }),
+      page.click('button[type="submit"]'),
+    ]);
     await page.goto(`${SITE}/admin`, { waitUntil: "networkidle" });
   }
 
@@ -39,7 +42,9 @@ async function shot(page, name) {
     if (click) {
       await page.click(`button:has-text("${click}")`);
       await page.waitForTimeout(1500);
-      const confirm = page.locator('[role="dialog"] button, [role="alertdialog"] button').filter({ hasText: new RegExp(click.split(" ")[0], "i") });
+      const confirm = page
+        .locator('[role="dialog"] button, [role="alertdialog"] button')
+        .filter({ hasText: new RegExp(click.split(" ")[0], "i") });
       if (await confirm.count()) {
         await confirm.last().click();
       }

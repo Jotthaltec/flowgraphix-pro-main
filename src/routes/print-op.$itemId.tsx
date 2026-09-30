@@ -18,30 +18,34 @@ function PrintOpPage() {
     queryKey: ["print_op", itemId],
     queryFn: async () => {
       // 1. Busca Item, OP, Cliente e Produto
-      const { data: itemData, error: itemErr } = await (db)
+      const { data: itemData, error: itemErr } = await db
         .from("production_order_items")
-        .select(`
+        .select(
+          `
           id, quantity, status,
           products (name, internal_sku),
           production_orders (
             order_number, expected_delivery, notes,
             clients (name, phone, email)
           )
-        `)
+        `,
+        )
         .eq("id", itemId)
         .single();
-      
+
       if (itemErr) throw itemErr;
 
       // 2. Busca Ficha Técnica Preenchida
-      const { data: attrData, error: attrErr } = await (db)
+      const { data: attrData, error: attrErr } = await db
         .from("production_item_attributes")
-        .select(`
+        .select(
+          `
           value,
           technical_attributes (name, code, technical_attribute_groups(name))
-        `)
+        `,
+        )
         .eq("production_order_item_id", itemId);
-      
+
       if (attrErr) throw attrErr;
 
       return { item: itemData, attributes: attrData };
@@ -50,16 +54,24 @@ function PrintOpPage() {
   });
 
   if (isLoading) {
-    return <div className="flex h-screen items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
   }
   if (error || !data) {
-    return <div className="p-10 text-center text-destructive">Erro ao carregar os dados de impressão.</div>;
+    return (
+      <div className="p-10 text-center text-destructive">
+        Erro ao carregar os dados de impressão.
+      </div>
+    );
   }
 
   const { item, attributes } = data;
   const client = item.production_orders?.clients;
   const op = item.production_orders;
-  
+
   // Agrupar atributos para exibição organizada
   const groupedAttributes: Record<string, any[]> = {};
   attributes?.forEach((a: any) => {
@@ -73,7 +85,6 @@ function PrintOpPage() {
 
   return (
     <div className="min-h-screen bg-neutral-100 print:bg-white text-neutral-900 font-sans">
-      
       {/* Barra de controle Flutuante (não aparece na impressão) */}
       <div className="print:hidden sticky top-0 bg-white border-b shadow-sm p-4 flex justify-between items-center z-10">
         <div>
@@ -87,7 +98,6 @@ function PrintOpPage() {
 
       {/* Papel A4 */}
       <div className="w-full max-w-[210mm] min-h-[297mm] mx-auto bg-white shadow-xl print:shadow-none print:w-auto print:max-w-none print:mx-0 p-8 sm:p-12 box-border">
-        
         {/* Cabeçalho */}
         <div className="border-b-2 border-neutral-800 pb-6 mb-6 flex justify-between items-start">
           <div className="flex items-center gap-3">
@@ -110,8 +120,12 @@ function PrintOpPage() {
         {/* Informações Macro (Cliente e Prazo) */}
         <div className="grid grid-cols-2 gap-8 mb-8 border border-neutral-300 rounded-lg p-5 bg-neutral-50">
           <div>
-            <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1">Cliente</p>
-            <p className="text-base font-bold text-neutral-900">{client?.name || "Não informado"}</p>
+            <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1">
+              Cliente
+            </p>
+            <p className="text-base font-bold text-neutral-900">
+              {client?.name || "Não informado"}
+            </p>
             {client?.phone && <p className="text-sm text-neutral-600">Tel: {client.phone}</p>}
           </div>
           <div>
@@ -119,7 +133,9 @@ function PrintOpPage() {
               <Calendar className="h-3 w-3" /> Previsão de Entrega
             </p>
             <p className="text-lg font-black text-neutral-900">
-              {op?.expected_delivery ? new Date(op.expected_delivery).toLocaleDateString('pt-BR', { timeZone: 'UTC' }) : "Sem prazo"}
+              {op?.expected_delivery
+                ? new Date(op.expected_delivery).toLocaleDateString("pt-BR", { timeZone: "UTC" })
+                : "Sem prazo"}
             </p>
           </div>
         </div>
@@ -131,9 +147,15 @@ function PrintOpPage() {
           </h2>
           <div className="grid grid-cols-4 gap-4">
             <div className="col-span-3">
-              <p className="text-xs font-bold text-neutral-500 uppercase mb-1">Descrição do Produto</p>
+              <p className="text-xs font-bold text-neutral-500 uppercase mb-1">
+                Descrição do Produto
+              </p>
               <p className="text-xl font-bold">{item.products?.name || "Produto Genérico"}</p>
-              {item.products?.internal_sku && <p className="text-sm font-mono text-neutral-500 mt-1">SKU: {item.products.internal_sku}</p>}
+              {item.products?.internal_sku && (
+                <p className="text-sm font-mono text-neutral-500 mt-1">
+                  SKU: {item.products.internal_sku}
+                </p>
+              )}
             </div>
             <div>
               <p className="text-xs font-bold text-neutral-500 uppercase mb-1">Quantidade</p>
@@ -147,9 +169,11 @@ function PrintOpPage() {
           <h2 className="text-lg font-black border-b border-neutral-300 pb-2 mb-4 uppercase tracking-tight">
             Ficha Técnica / Especificações
           </h2>
-          
+
           {Object.keys(groupedAttributes).length === 0 ? (
-            <p className="text-sm text-neutral-500 italic">Nenhuma especificação técnica preenchida.</p>
+            <p className="text-sm text-neutral-500 italic">
+              Nenhuma especificação técnica preenchida.
+            </p>
           ) : (
             <div className="space-y-6">
               {Object.keys(groupedAttributes).map((groupName) => (
@@ -160,8 +184,16 @@ function PrintOpPage() {
                   <div className="grid grid-cols-2 gap-y-3 gap-x-6 px-3">
                     {groupedAttributes[groupName].map((attr: any, i: number) => (
                       <div key={i} className="flex flex-col border-b border-neutral-100 pb-1">
-                        <span className="text-[10px] font-bold text-neutral-500 uppercase">{attr.name}</span>
-                        <span className="text-base font-medium">{attr.value === "true" ? "Sim" : attr.value === "false" ? "Não" : attr.value}</span>
+                        <span className="text-[10px] font-bold text-neutral-500 uppercase">
+                          {attr.name}
+                        </span>
+                        <span className="text-base font-medium">
+                          {attr.value === "true"
+                            ? "Sim"
+                            : attr.value === "false"
+                              ? "Não"
+                              : attr.value}
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -174,7 +206,9 @@ function PrintOpPage() {
         {/* Observações Gerais */}
         {op?.notes && (
           <div className="mb-8 p-4 border-l-4 border-neutral-800 bg-neutral-50">
-            <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1">Observações do Vendedor</p>
+            <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1">
+              Observações do Vendedor
+            </p>
             <p className="text-sm text-neutral-800 whitespace-pre-wrap">{op.notes}</p>
           </div>
         )}
@@ -193,7 +227,7 @@ function PrintOpPage() {
         </div>
 
         <div className="text-center text-[9px] text-neutral-400 mt-8 font-mono">
-          Documento gerado pelo Motor PrintFlow CRM — {new Date().toLocaleString('pt-BR')}
+          Documento gerado pelo Motor PrintFlow CRM — {new Date().toLocaleString("pt-BR")}
         </div>
       </div>
     </div>

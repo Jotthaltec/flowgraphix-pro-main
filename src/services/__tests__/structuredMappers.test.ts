@@ -14,7 +14,8 @@ import type { ImportedProduct } from "@/types/importedProduct";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixture = (n: string) => readFileSync(join(__dirname, "fixtures", n), "utf8");
-const URL = "https://www.futuraim.com.br/produto/cartao-de-visita-em-couche-fosco-com-laminacao-fosca-e-verniz-localizado?id=4627";
+const URL =
+  "https://www.futuraim.com.br/produto/cartao-de-visita-em-couche-fosco-com-laminacao-fosca-e-verniz-localizado?id=4627";
 
 describe("structuredMappers (a partir do produto real parseado)", () => {
   let product: ImportedProduct;

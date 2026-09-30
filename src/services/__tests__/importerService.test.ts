@@ -101,7 +101,12 @@ describe("deduplicação (seção 26)", () => {
       canonical_url: "https://www.futuraim.com.br/produto/cartao?id=4627",
       normalized_name: "Cartão de Visita",
       specifications: [
-        { name: "Material", normalized_name: "material", value: "Couché", normalized_value: "couche" },
+        {
+          name: "Material",
+          normalized_name: "material",
+          value: "Couché",
+          normalized_value: "couche",
+        },
       ],
       variants: [{ sku: "4627", price_tiers: [] }],
     } as unknown as ImportedProduct;

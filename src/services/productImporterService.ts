@@ -148,7 +148,8 @@ export function buildDeadlineText(product: ImportedProduct): string | null {
   const pt = product.production_time;
   if (!pt) return null;
   const { supplierDays, ourDays, totalDays } = computeDeadlineDays(product);
-  const supplierLabel = pt.original_production_time || (supplierDays ? `${supplierDays} dias` : "—");
+  const supplierLabel =
+    pt.original_production_time || (supplierDays ? `${supplierDays} dias` : "—");
   if (!ourDays) return supplierLabel;
   return `Total: ${totalDays} dias (fornecedor ${supplierDays} + nossos ${ourDays})${pt.freight_not_included ? " + frete" : ""}`;
 }
@@ -238,8 +239,8 @@ export function buildProductRow(product: ImportedProduct, opts: BuildProductRowO
     source_url: product.source_url,
     category: product.classification.category,
     subcategory: product.classification.subcategory,
-    description: opts.descriptionInternalOnly ? null : product.description ?? null,
-    technical_description: opts.descriptionInternalOnly ? product.description ?? null : null,
+    description: opts.descriptionInternalOnly ? null : (product.description ?? null),
+    technical_description: opts.descriptionInternalOnly ? (product.description ?? null) : null,
     main_image_url: product.images.find((i) => i.is_main)?.url ?? null,
     image_url: product.images.find((i) => i.is_main)?.url ?? null,
     gallery_images: product.images.map((i) => i.url),

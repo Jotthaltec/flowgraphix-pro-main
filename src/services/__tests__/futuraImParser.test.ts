@@ -93,7 +93,10 @@ describe("futuraImParser (HTML real da FuturaIM)", () => {
 
   it("processa também o banner sem quebrar", () => {
     const bannerHtml = fixture("futuraim-banner.html");
-    const p = parseFuturaImProduct(bannerHtml, "https://www.futuraim.com.br/produto/banner-personalizado?id=22502");
+    const p = parseFuturaImProduct(
+      bannerHtml,
+      "https://www.futuraim.com.br/produto/banner-personalizado?id=22502",
+    );
     expect(p.external_id).toBe("22502");
     expect(p.original_name.length).toBeGreaterThan(0);
     expect(p.classification.category).toBe("Comunicação Visual");

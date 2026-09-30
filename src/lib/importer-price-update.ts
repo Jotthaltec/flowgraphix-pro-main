@@ -15,7 +15,11 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { analyzeSupplierLink } from "@/integrations/supabase/importer-actions";
-import { comparePriceTiers, type PriceComparison, type CurrentTier } from "@/services/priceComparison";
+import {
+  comparePriceTiers,
+  type PriceComparison,
+  type CurrentTier,
+} from "@/services/priceComparison";
 import { persistStructured } from "@/lib/importer-structured-persistence";
 import type { ImportedProduct } from "@/types/importedProduct";
 
@@ -43,7 +47,9 @@ export interface PriceCheckResult {
 export async function loadImportedProducts(companyId: string): Promise<ImportedProductRow[]> {
   const { data, error } = await supabase
     .from("products")
-    .select("id, name, source_url, supplier_sku, cost_price, sale_price, margin_percent, quantity_price_table")
+    .select(
+      "id, name, source_url, supplier_sku, cost_price, sale_price, margin_percent, quantity_price_table",
+    )
     .eq("company_id", companyId)
     .eq("origin", "supplier_import")
     .not("source_url", "is", null)
@@ -90,7 +96,8 @@ export async function applyCostUpdate(result: PriceCheckResult, companyId: strin
   // Mapa do preço de venda atual por quantidade (para preservar).
   const oldSellByQty = new Map<number, number>();
   for (const t of row.quantity_price_table || []) {
-    if (t?.quantity != null && t?.sellPrice != null) oldSellByQty.set(Number(t.quantity), Number(t.sellPrice));
+    if (t?.quantity != null && t?.sellPrice != null)
+      oldSellByQty.set(Number(t.quantity), Number(t.sellPrice));
   }
 
   const newTable = freshTiers.map((t) => {

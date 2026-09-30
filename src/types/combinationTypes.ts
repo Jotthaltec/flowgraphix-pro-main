@@ -14,28 +14,40 @@
 // ---------------------------------------------------------------------------
 
 /** Estratégia de cálculo de preço para a família de produto. */
-export type PricingStrategy = 'MATRIX' | 'FORMULA' | 'LIVE_RESOLVER';
+export type PricingStrategy = "MATRIX" | "FORMULA" | "LIVE_RESOLVER";
 
 /** Regra de cálculo do prazo quando há extras selecionados. */
-export type LeadTimeRule = 'max_extra' | 'sum_extras' | 'replace' | 'custom';
+export type LeadTimeRule = "max_extra" | "sum_extras" | "replace" | "custom";
 
 /** Status do preço de um item de orçamento. */
-export type PriceStatus = 'confirmed' | 'unconfirmed' | 'outdated' | 'revalidated';
+export type PriceStatus = "confirmed" | "unconfirmed" | "outdated" | "revalidated";
 
 /** Status de revalidação do orçamento. */
-export type RevalidationStatus = 'not_required' | 'pending' | 'revalidated' | 'changed' | 'approved_override';
+export type RevalidationStatus =
+  | "not_required"
+  | "pending"
+  | "revalidated"
+  | "changed"
+  | "approved_override";
 
 /** Tipo de acabamento extra. */
-export type ExtraType = 'finishing' | 'cutting' | 'lamination' | 'coating' | 'folding' | 'binding' | 'other';
+export type ExtraType =
+  | "finishing"
+  | "cutting"
+  | "lamination"
+  | "coating"
+  | "folding"
+  | "binding"
+  | "other";
 
 /** Resultado de um teste de paridade. */
-export type CalcTestResult = 'pending' | 'passed' | 'failed' | 'error';
+export type CalcTestResult = "pending" | "passed" | "failed" | "error";
 
 /** Ação tomada após divergência em teste. */
-export type CalcTestAction = 'none' | 'auto_updated' | 'flagged_review' | 'blocked';
+export type CalcTestAction = "none" | "auto_updated" | "flagged_review" | "blocked";
 
 /** Estratégia de preço para tamanho personalizado. */
-export type CustomSizePricingStrategy = 'MATRIX' | 'FORMULA' | 'LIVE_RESOLVER';
+export type CustomSizePricingStrategy = "MATRIX" | "FORMULA" | "LIVE_RESOLVER";
 
 // ---------------------------------------------------------------------------
 // Entidades do banco
@@ -92,7 +104,7 @@ export interface SupplierOptionValue {
 }
 
 /** Disponibilidade de um produto comercial. */
-export type CommercialProductAvailability = 'available' | 'unavailable' | 'removed';
+export type CommercialProductAvailability = "available" | "unavailable" | "removed";
 
 /**
  * PRODUTO COMERCIAL — 1 combinação COMPLETA e comercializável, INCLUINDO a
@@ -523,7 +535,13 @@ export interface RevalidationItemDiff {
   new_margin: number | null;
   margin_impact: number | null;
   // Status
-  status: 'unchanged' | 'price_changed' | 'unavailable' | 'promo_changed' | 'lead_time_changed' | 'extras_changed';
+  status:
+    | "unchanged"
+    | "price_changed"
+    | "unavailable"
+    | "promo_changed"
+    | "lead_time_changed"
+    | "extras_changed";
 }
 
 /** Diferença em um extra durante revalidação. */
@@ -531,7 +549,7 @@ export interface ExtraDiff {
   extra_name: string;
   old_price: number;
   new_price: number | null;
-  status: 'unchanged' | 'price_changed' | 'removed' | 'new';
+  status: "unchanged" | "price_changed" | "removed" | "new";
 }
 
 // ---------------------------------------------------------------------------

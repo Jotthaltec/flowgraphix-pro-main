@@ -2,28 +2,47 @@ import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Card, CardContent, CardHeader, CardTitle, CardDescription
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  Tabs, TabsContent, TabsList, TabsTrigger
-} from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/status-badge";
 import {
-  Loader2, Building2, Mail, MapPin, KeyRound,
-  UserCircle2, Truck, Clipboard, CheckCircle2, CircleDot,
-  WifiOff, Copy, Save, ExternalLink, Link2, PlugZap, Trash2
+  Loader2,
+  Building2,
+  Mail,
+  MapPin,
+  KeyRound,
+  UserCircle2,
+  Truck,
+  Clipboard,
+  CheckCircle2,
+  CircleDot,
+  WifiOff,
+  Copy,
+  Save,
+  ExternalLink,
+  Link2,
+  PlugZap,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -125,11 +144,26 @@ function connectionStatus(acc: SupplierAccountSafe | undefined): {
 } {
   // "Conectado" = já dá para logar no site (usuário + senha guardada).
   if (acc && acc.login_username && acc.has_password)
-    return { state: "connected", variant: "success", label: "Conectado", icon: <CheckCircle2 className="h-3 w-3" /> };
+    return {
+      state: "connected",
+      variant: "success",
+      label: "Conectado",
+      icon: <CheckCircle2 className="h-3 w-3" />,
+    };
   // Tem algum dado, mas ainda falta login/senha para conectar de fato.
   if (acc && (acc.login_username || acc.registration_email))
-    return { state: "partial", variant: "warning", label: "Conexão incompleta", icon: <CircleDot className="h-3 w-3" /> };
-  return { state: "none", variant: "muted", label: "Não conectado", icon: <WifiOff className="h-3 w-3" /> };
+    return {
+      state: "partial",
+      variant: "warning",
+      label: "Conexão incompleta",
+      icon: <CircleDot className="h-3 w-3" />,
+    };
+  return {
+    state: "none",
+    variant: "muted",
+    label: "Não conectado",
+    icon: <WifiOff className="h-3 w-3" />,
+  };
 }
 
 /** URL de login/site do fornecedor, com fallback para o domínio. */
@@ -200,7 +234,9 @@ export function PerfisForncedores() {
   const openSupplierSite = (supplier?: Supplier) => {
     const url = supplierSiteUrl(supplier);
     if (!url) {
-      toast.error("Este fornecedor não tem site cadastrado. Adicione o link em Fornecedores Vinculados.");
+      toast.error(
+        "Este fornecedor não tem site cadastrado. Adicione o link em Fornecedores Vinculados.",
+      );
       return;
     }
     window.open(url, "_blank", "noopener,noreferrer");
@@ -245,24 +281,26 @@ export function PerfisForncedores() {
       toast.error("Dados da empresa não carregados ainda.");
       return;
     }
-    setForm(prev => ({
+    setForm((prev) => ({
       ...prev,
       registration_name: company.legal_name || company.name || "",
       registration_cnpj: company.cnpj || "",
       registration_email: company.email || "",
       registration_phone: company.whatsapp || company.phone || "",
       // Se delivery_override, preenche também o endereço de entrega padrão da empresa
-      ...(prev.delivery_override ? {
-        delivery_recipient: company.delivery_recipient || company.name || "",
-        delivery_zip: company.delivery_zip || company.zip_code || "",
-        delivery_address: company.delivery_address || company.address || "",
-        delivery_number: company.delivery_number || company.address_number || "",
-        delivery_complement: company.delivery_complement || company.complement || "",
-        delivery_neighborhood: company.delivery_neighborhood || company.neighborhood || "",
-        delivery_city: company.delivery_city || "",
-        delivery_state: company.delivery_state || "",
-        delivery_phone: company.delivery_phone || company.phone || company.whatsapp || "",
-      } : {}),
+      ...(prev.delivery_override
+        ? {
+            delivery_recipient: company.delivery_recipient || company.name || "",
+            delivery_zip: company.delivery_zip || company.zip_code || "",
+            delivery_address: company.delivery_address || company.address || "",
+            delivery_number: company.delivery_number || company.address_number || "",
+            delivery_complement: company.delivery_complement || company.complement || "",
+            delivery_neighborhood: company.delivery_neighborhood || company.neighborhood || "",
+            delivery_city: company.delivery_city || "",
+            delivery_state: company.delivery_state || "",
+            delivery_phone: company.delivery_phone || company.phone || company.whatsapp || "",
+          }
+        : {}),
     }));
     toast.success("Dados da gráfica aplicados ao formulário!");
   };
@@ -270,7 +308,7 @@ export function PerfisForncedores() {
   /** Preenche o endereço de entrega com os dados da empresa */
   const fillDeliveryFromCompany = () => {
     if (!company) return;
-    setForm(prev => ({
+    setForm((prev) => ({
       ...prev,
       delivery_recipient: company.delivery_recipient || company.name || "",
       delivery_zip: company.delivery_zip || company.zip_code || "",
@@ -317,7 +355,7 @@ export function PerfisForncedores() {
       });
       if (error) throw error;
 
-      const supplierToOpen = suppliers.find(s => s.id === form.supplier_id);
+      const supplierToOpen = suppliers.find((s) => s.id === form.supplier_id);
       toast.success(editingAccountId ? "Conexão atualizada!" : "Conta conectada!");
       queryClient.invalidateQueries({ queryKey: ["supplier_accounts_safe"] });
       setOpen(false);
@@ -332,11 +370,9 @@ export function PerfisForncedores() {
   };
 
   const handleDelete = async (acc: SupplierAccountSafe) => {
-    if (!window.confirm("Deseja remover o perfil deste fornecedor? As credenciais serão apagadas.")) return;
-    const { error } = await supabase
-      .from("supplier_accounts")
-      .delete()
-      .eq("id", acc.id);
+    if (!window.confirm("Deseja remover o perfil deste fornecedor? As credenciais serão apagadas."))
+      return;
+    const { error } = await supabase.from("supplier_accounts").delete().eq("id", acc.id);
     if (error) {
       toast.error(`Erro ao remover: ${error.message}`);
     } else {
@@ -345,11 +381,10 @@ export function PerfisForncedores() {
     }
   };
 
-  const accountOf = (supplierId: string) =>
-    accounts.find(a => a.supplier_id === supplierId);
+  const accountOf = (supplierId: string) => accounts.find((a) => a.supplier_id === supplierId);
 
   const isLoading = loadingSuppliers || loadingAccounts;
-  const selectedSupplier = suppliers.find(s => s.id === form.supplier_id);
+  const selectedSupplier = suppliers.find((s) => s.id === form.supplier_id);
 
   // ─── Render ─────────────────────────────────────────────────────────────
 
@@ -380,18 +415,22 @@ export function PerfisForncedores() {
         <div className="border border-dashed rounded-lg p-10 text-center text-muted-foreground">
           <Building2 className="h-10 w-10 mx-auto mb-3 opacity-20 animate-pulse" />
           <p className="text-sm font-semibold">Nenhum fornecedor vinculado</p>
-          <p className="text-xs mt-1">Cadastre fornecedores na aba "Fornecedores Vinculados" primeiro.</p>
+          <p className="text-xs mt-1">
+            Cadastre fornecedores na aba "Fornecedores Vinculados" primeiro.
+          </p>
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {suppliers.map(supplier => {
+          {suppliers.map((supplier) => {
             const acc = accountOf(supplier.id);
             const st = connectionStatus(acc);
             const hasSite = !!supplierSiteUrl(supplier);
             const borderColor =
-              st.state === "connected" ? "border-t-emerald-500"
-              : st.state === "partial" ? "border-t-amber-500"
-              : "border-t-slate-300 dark:border-t-slate-700";
+              st.state === "connected"
+                ? "border-t-emerald-500"
+                : st.state === "partial"
+                  ? "border-t-amber-500"
+                  : "border-t-slate-300 dark:border-t-slate-700";
             return (
               <Card key={supplier.id} className={`border-t-4 ${borderColor} flex flex-col`}>
                 <CardContent className="pt-4 flex flex-col gap-3 flex-1">
@@ -400,11 +439,15 @@ export function PerfisForncedores() {
                     <div className="min-w-0">
                       <div className="font-semibold text-sm truncate">{supplier.name}</div>
                       {supplier.domain && (
-                        <div className="text-xs text-muted-foreground font-mono truncate">{supplier.domain}</div>
+                        <div className="text-xs text-muted-foreground font-mono truncate">
+                          {supplier.domain}
+                        </div>
                       )}
                     </div>
                     <StatusBadge variant={st.variant}>
-                      <span className="flex items-center gap-1 whitespace-nowrap">{st.icon} {st.label}</span>
+                      <span className="flex items-center gap-1 whitespace-nowrap">
+                        {st.icon} {st.label}
+                      </span>
                     </StatusBadge>
                   </div>
 
@@ -427,23 +470,35 @@ export function PerfisForncedores() {
                           <span className="truncate">{acc.registration_email}</span>
                         </div>
                       )}
-                      <StatusBadge variant={acc.receiving_mode === "delivery" ? "info" : acc.receiving_mode === "pickup" ? "warning" : "muted"}>
-                        {acc.receiving_mode === "delivery" ? "Entrega na gráfica"
-                          : acc.receiving_mode === "pickup" ? "Retirar no balcão"
-                          : "Recebimento padrão"}
+                      <StatusBadge
+                        variant={
+                          acc.receiving_mode === "delivery"
+                            ? "info"
+                            : acc.receiving_mode === "pickup"
+                              ? "warning"
+                              : "muted"
+                        }
+                      >
+                        {acc.receiving_mode === "delivery"
+                          ? "Entrega na gráfica"
+                          : acc.receiving_mode === "pickup"
+                            ? "Retirar no balcão"
+                            : "Recebimento padrão"}
                       </StatusBadge>
                       {acc.delivery_override && acc.delivery_address && (
                         <div className="flex items-center gap-1 text-muted-foreground">
                           <MapPin className="h-3 w-3 shrink-0" />
                           <span className="truncate">
-                            {acc.delivery_address}{acc.delivery_number ? `, ${acc.delivery_number}` : ""}
+                            {acc.delivery_address}
+                            {acc.delivery_number ? `, ${acc.delivery_number}` : ""}
                           </span>
                         </div>
                       )}
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground flex-1">
-                      Conta ainda não conectada. Conecte para comprar direto no site deste fornecedor.
+                      Conta ainda não conectada. Conecte para comprar direto no site deste
+                      fornecedor.
                     </p>
                   )}
 
@@ -465,7 +520,11 @@ export function PerfisForncedores() {
                           className="h-8 text-xs flex-1"
                           disabled={!hasSite}
                           onClick={() => openSupplierSite(supplier)}
-                          title={hasSite ? "Abrir o site do fornecedor para login" : "Fornecedor sem site cadastrado"}
+                          title={
+                            hasSite
+                              ? "Abrir o site do fornecedor para login"
+                              : "Fornecedor sem site cadastrado"
+                          }
                         >
                           <ExternalLink className="h-3.5 w-3.5 mr-1" /> Abrir site
                         </Button>
@@ -499,7 +558,16 @@ export function PerfisForncedores() {
       )}
 
       {/* ── Modal de Edição ──────────────────────────────────────────────── */}
-      <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setForm(emptyForm); setEditingAccountId(null); } }}>
+      <Dialog
+        open={open}
+        onOpenChange={(v) => {
+          setOpen(v);
+          if (!v) {
+            setForm(emptyForm);
+            setEditingAccountId(null);
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -519,15 +587,16 @@ export function PerfisForncedores() {
               <Label>Fornecedor *</Label>
               <Select
                 value={form.supplier_id}
-                onValueChange={v => setForm(prev => ({ ...prev, supplier_id: v }))}
+                onValueChange={(v) => setForm((prev) => ({ ...prev, supplier_id: v }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione o fornecedor..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {suppliers.map(s => (
+                  {suppliers.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
-                      {s.name}{s.domain ? ` — ${s.domain}` : ""}
+                      {s.name}
+                      {s.domain ? ` — ${s.domain}` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -559,7 +628,8 @@ export function PerfisForncedores() {
                     Usar meus dados da gráfica
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Preenche automaticamente com os dados cadastrais da sua empresa (nome, CNPJ, e-mail, telefone).
+                    Preenche automaticamente com os dados cadastrais da sua empresa (nome, CNPJ,
+                    e-mail, telefone).
                   </p>
                 </div>
                 <Button
@@ -578,7 +648,7 @@ export function PerfisForncedores() {
                   <Label>Nome / Razão Social para Cadastro</Label>
                   <Input
                     value={form.registration_name}
-                    onChange={e => setForm(p => ({ ...p, registration_name: e.target.value }))}
+                    onChange={(e) => setForm((p) => ({ ...p, registration_name: e.target.value }))}
                     placeholder="Nome que será usado no cadastro do fornecedor"
                   />
                 </div>
@@ -586,7 +656,7 @@ export function PerfisForncedores() {
                   <Label>CNPJ</Label>
                   <Input
                     value={form.registration_cnpj}
-                    onChange={e => setForm(p => ({ ...p, registration_cnpj: e.target.value }))}
+                    onChange={(e) => setForm((p) => ({ ...p, registration_cnpj: e.target.value }))}
                     placeholder="00.000.000/0000-00"
                   />
                 </div>
@@ -594,7 +664,7 @@ export function PerfisForncedores() {
                   <Label>Telefone / WhatsApp</Label>
                   <Input
                     value={form.registration_phone}
-                    onChange={e => setForm(p => ({ ...p, registration_phone: e.target.value }))}
+                    onChange={(e) => setForm((p) => ({ ...p, registration_phone: e.target.value }))}
                     placeholder="(00) 90000-0000"
                   />
                 </div>
@@ -603,7 +673,7 @@ export function PerfisForncedores() {
                   <Input
                     type="email"
                     value={form.registration_email}
-                    onChange={e => setForm(p => ({ ...p, registration_email: e.target.value }))}
+                    onChange={(e) => setForm((p) => ({ ...p, registration_email: e.target.value }))}
                     placeholder="contato@suagrafica.com.br"
                   />
                 </div>
@@ -615,8 +685,11 @@ export function PerfisForncedores() {
               <div className="flex items-start gap-2.5 p-3 rounded-lg border border-amber-500/20 bg-amber-500/5">
                 <KeyRound className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
                 <div className="text-xs text-muted-foreground">
-                  <p className="font-semibold text-foreground mb-0.5">Credenciais protegidas</p>
-                  A senha é cifrada no servidor antes de ser armazenada e <strong>nunca é retornada</strong> em consultas normais. Ela poderá ser usada futuramente para preenchimento automático de formulários nos sites dos fornecedores.
+                  <p className="font-semibold text-foreground mb-0.5">Credenciais protegidas</p>A
+                  senha é cifrada no servidor antes de ser armazenada e{" "}
+                  <strong>nunca é retornada</strong> em consultas normais. Ela poderá ser usada
+                  futuramente para preenchimento automático de formulários nos sites dos
+                  fornecedores.
                 </div>
               </div>
 
@@ -627,7 +700,7 @@ export function PerfisForncedores() {
                     <UserCircle2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                     <Input
                       value={form.login_username}
-                      onChange={e => setForm(p => ({ ...p, login_username: e.target.value }))}
+                      onChange={(e) => setForm((p) => ({ ...p, login_username: e.target.value }))}
                       placeholder="seuemail@grafica.com.br ou usuário"
                       className="pl-9"
                     />
@@ -647,7 +720,7 @@ export function PerfisForncedores() {
                     <Input
                       type="password"
                       value={form.login_password}
-                      onChange={e => setForm(p => ({ ...p, login_password: e.target.value }))}
+                      onChange={(e) => setForm((p) => ({ ...p, login_password: e.target.value }))}
                       placeholder={editingAccountId ? "••••••••• (inalterada)" : "Nova senha..."}
                       className="pl-9"
                       autoComplete="new-password"
@@ -659,7 +732,7 @@ export function PerfisForncedores() {
                   <Label>Observações sobre o acesso</Label>
                   <Textarea
                     value={form.notes}
-                    onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+                    onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))}
                     placeholder="Ex: conta vinculada ao CNPJ filial, perfil empresarial ativado..."
                     rows={3}
                   />
@@ -674,7 +747,9 @@ export function PerfisForncedores() {
                 <Label>Modo de Recebimento (específico para este fornecedor)</Label>
                 <Select
                   value={form.receiving_mode || "__default"}
-                  onValueChange={v => setForm(p => ({ ...p, receiving_mode: v === "__default" ? "" : v }))}
+                  onValueChange={(v) =>
+                    setForm((p) => ({ ...p, receiving_mode: v === "__default" ? "" : v }))
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Usar padrão da empresa..." />
@@ -690,7 +765,9 @@ export function PerfisForncedores() {
                     <Label>Ponto de Retirada Preferido</Label>
                     <Input
                       value={form.preferred_pickup_point}
-                      onChange={e => setForm(p => ({ ...p, preferred_pickup_point: e.target.value }))}
+                      onChange={(e) =>
+                        setForm((p) => ({ ...p, preferred_pickup_point: e.target.value }))
+                      }
                       placeholder="Ex: balcão central, filial SP..."
                     />
                   </div>
@@ -701,14 +778,16 @@ export function PerfisForncedores() {
               <div className="border rounded-lg p-3 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
-                    <Label className="text-sm font-semibold">Endereço de Entrega Personalizado</Label>
+                    <Label className="text-sm font-semibold">
+                      Endereço de Entrega Personalizado
+                    </Label>
                     <p className="text-xs text-muted-foreground">
                       Ative para usar um endereço diferente do padrão da empresa neste fornecedor.
                     </p>
                   </div>
                   <Switch
                     checked={form.delivery_override}
-                    onCheckedChange={v => setForm(p => ({ ...p, delivery_override: v }))}
+                    onCheckedChange={(v) => setForm((p) => ({ ...p, delivery_override: v }))}
                     id="delivery-override"
                   />
                 </div>
@@ -733,7 +812,9 @@ export function PerfisForncedores() {
                         <Label>Destinatário / Nome para recebimento</Label>
                         <Input
                           value={form.delivery_recipient}
-                          onChange={e => setForm(p => ({ ...p, delivery_recipient: e.target.value }))}
+                          onChange={(e) =>
+                            setForm((p) => ({ ...p, delivery_recipient: e.target.value }))
+                          }
                           placeholder="Nome do responsável pelo recebimento"
                         />
                       </div>
@@ -741,7 +822,7 @@ export function PerfisForncedores() {
                         <Label>CEP</Label>
                         <Input
                           value={form.delivery_zip}
-                          onChange={e => setForm(p => ({ ...p, delivery_zip: e.target.value }))}
+                          onChange={(e) => setForm((p) => ({ ...p, delivery_zip: e.target.value }))}
                           placeholder="00000-000"
                         />
                       </div>
@@ -749,7 +830,9 @@ export function PerfisForncedores() {
                         <Label>Telefone para entrega</Label>
                         <Input
                           value={form.delivery_phone}
-                          onChange={e => setForm(p => ({ ...p, delivery_phone: e.target.value }))}
+                          onChange={(e) =>
+                            setForm((p) => ({ ...p, delivery_phone: e.target.value }))
+                          }
                           placeholder="(00) 90000-0000"
                         />
                       </div>
@@ -757,7 +840,9 @@ export function PerfisForncedores() {
                         <Label>Logradouro</Label>
                         <Input
                           value={form.delivery_address}
-                          onChange={e => setForm(p => ({ ...p, delivery_address: e.target.value }))}
+                          onChange={(e) =>
+                            setForm((p) => ({ ...p, delivery_address: e.target.value }))
+                          }
                           placeholder="Rua, Av., etc."
                         />
                       </div>
@@ -765,7 +850,9 @@ export function PerfisForncedores() {
                         <Label>Número</Label>
                         <Input
                           value={form.delivery_number}
-                          onChange={e => setForm(p => ({ ...p, delivery_number: e.target.value }))}
+                          onChange={(e) =>
+                            setForm((p) => ({ ...p, delivery_number: e.target.value }))
+                          }
                           placeholder="123"
                         />
                       </div>
@@ -773,7 +860,9 @@ export function PerfisForncedores() {
                         <Label>Complemento</Label>
                         <Input
                           value={form.delivery_complement}
-                          onChange={e => setForm(p => ({ ...p, delivery_complement: e.target.value }))}
+                          onChange={(e) =>
+                            setForm((p) => ({ ...p, delivery_complement: e.target.value }))
+                          }
                           placeholder="Sala, apto, bloco..."
                         />
                       </div>
@@ -781,7 +870,9 @@ export function PerfisForncedores() {
                         <Label>Bairro</Label>
                         <Input
                           value={form.delivery_neighborhood}
-                          onChange={e => setForm(p => ({ ...p, delivery_neighborhood: e.target.value }))}
+                          onChange={(e) =>
+                            setForm((p) => ({ ...p, delivery_neighborhood: e.target.value }))
+                          }
                           placeholder="Bairro"
                         />
                       </div>
@@ -789,7 +880,9 @@ export function PerfisForncedores() {
                         <Label>Cidade</Label>
                         <Input
                           value={form.delivery_city}
-                          onChange={e => setForm(p => ({ ...p, delivery_city: e.target.value }))}
+                          onChange={(e) =>
+                            setForm((p) => ({ ...p, delivery_city: e.target.value }))
+                          }
                           placeholder="São Paulo"
                         />
                       </div>
@@ -797,7 +890,9 @@ export function PerfisForncedores() {
                         <Label>UF</Label>
                         <Input
                           value={form.delivery_state}
-                          onChange={e => setForm(p => ({ ...p, delivery_state: e.target.value }))}
+                          onChange={(e) =>
+                            setForm((p) => ({ ...p, delivery_state: e.target.value }))
+                          }
                           placeholder="SP"
                           maxLength={2}
                         />
@@ -818,7 +913,11 @@ export function PerfisForncedores() {
               onClick={() => handleSave(true)}
               disabled={saving || !form.supplier_id || !supplierSiteUrl(selectedSupplier)}
               className="flex items-center gap-1.5"
-              title={supplierSiteUrl(selectedSupplier) ? "Salva e abre o site do fornecedor para login" : "Fornecedor sem site cadastrado"}
+              title={
+                supplierSiteUrl(selectedSupplier)
+                  ? "Salva e abre o site do fornecedor para login"
+                  : "Fornecedor sem site cadastrado"
+              }
             >
               <ExternalLink className="h-4 w-4" />
               Conectar e abrir site
@@ -828,9 +927,7 @@ export function PerfisForncedores() {
               disabled={saving || !form.supplier_id}
               className="flex items-center gap-1.5"
             >
-              {saving
-                ? <Loader2 className="h-4 w-4 animate-spin" />
-                : <Save className="h-4 w-4" />}
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               {editingAccountId ? "Salvar conexão" : "Conectar"}
             </Button>
           </DialogFooter>

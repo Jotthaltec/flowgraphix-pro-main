@@ -14,7 +14,7 @@ import type {
   SnapshotExtra,
   SnapshotService,
   QuoteItemCalculation,
-} from '@/types/combinationTypes';
+} from "@/types/combinationTypes";
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -31,7 +31,7 @@ export interface SnapshotBuildParams {
   family_id: string | null;
   family_name: string | null;
   // Produto comercial
-  external_code: string | null;         // external_product_id do produto comercial
+  external_code: string | null; // external_product_id do produto comercial
   combination_hash: string | null;
   selected_options: SnapshotOption[];
   // Cálculo
@@ -65,7 +65,7 @@ export interface SnapshotBuildParams {
  */
 export function buildPriceSnapshot(
   params: SnapshotBuildParams,
-): Omit<SupplierPriceSnapshot, 'id' | 'quote_item_id' | 'created_at'> {
+): Omit<SupplierPriceSnapshot, "id" | "quote_item_id" | "created_at"> {
   const calc = params.calculation;
 
   return {
@@ -84,7 +84,7 @@ export function buildPriceSnapshot(
     promotional_price: params.promotional_price,
     unit_price_display: calc.unit_price_display,
     // Extras congelados
-    extras: calc.selected_extras.map(e => ({
+    extras: calc.selected_extras.map((e) => ({
       name: e.name,
       extra_id: e.extra_id,
       price: e.price,
@@ -92,7 +92,7 @@ export function buildPriceSnapshot(
     })),
     extras_total: calc.supplier_extras_cost,
     // Serviços congelados
-    services: calc.selected_services.map(s => ({
+    services: calc.selected_services.map((s) => ({
       name: s.name,
       service_id: s.service_id,
       price: s.price,
@@ -180,7 +180,7 @@ export function compareSnapshotWithCurrent(
 
   let extrasChanged = false;
   if (currentExtras != null) {
-    const snapshotExtraMap = new Map(snapshot.extras.map(e => [e.name, e.price]));
+    const snapshotExtraMap = new Map(snapshot.extras.map((e) => [e.name, e.price]));
     for (const ce of currentExtras) {
       const snapPrice = snapshotExtraMap.get(ce.name);
       if (snapPrice == null || snapPrice !== ce.price) {

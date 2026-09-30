@@ -88,7 +88,7 @@ export const Route = createFileRoute("/_app/integracao-nexus")({ component: Inte
 
 const LOJA_URL = import.meta.env.VITE_LOJA_URL ?? "http://localhost:3000";
 // O schema store não está nos tipos gerados do Supabase.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+
 const db = supabase as any;
 
 const dateTime = (iso: string | null) =>

@@ -16,18 +16,18 @@
  * - runCalculationTests: Executa testes de paridade
  */
 
-import { createServerFn } from '@tanstack/react-start';
-import { createClient } from '@supabase/supabase-js';
-import { importCombinationsFromProduct } from '@/services/combinationImporter';
+import { createServerFn } from "@tanstack/react-start";
+import { createClient } from "@supabase/supabase-js";
+import { importCombinationsFromProduct } from "@/services/combinationImporter";
 
 // Supabase server-side client (chaves não expostas ao frontend)
 function getServerSupabase() {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
-  const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
+  const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
   if (!url || !key) {
     throw new Error(
-      'Faltam SUPABASE_URL e/ou SUPABASE_SECRET_KEY (ou a chave legada SUPABASE_SERVICE_ROLE_KEY) nas variáveis de ambiente do servidor.',
+      "Faltam SUPABASE_URL e/ou SUPABASE_SECRET_KEY (ou a chave legada SUPABASE_SERVICE_ROLE_KEY) nas variáveis de ambiente do servidor.",
     );
   }
 
@@ -37,17 +37,17 @@ function getServerSupabase() {
 // ---------------------------------------------------------------------------
 // 1. Listar famílias de produto de um fornecedor
 // ---------------------------------------------------------------------------
-export const getProductFamilies = createServerFn({ method: 'GET' })
+export const getProductFamilies = createServerFn({ method: "GET" })
   .inputValidator((input: { supplier_id: string; company_id: string }) => input)
   .handler(async ({ data }) => {
     const sb = getServerSupabase();
     const { data: families, error } = await sb
-      .from('supplier_product_families')
-      .select('*')
-      .eq('company_id', data.company_id)
-      .eq('supplier_id', data.supplier_id)
-      .eq('is_active', true)
-      .order('name');
+      .from("supplier_product_families")
+      .select("*")
+      .eq("company_id", data.company_id)
+      .eq("supplier_id", data.supplier_id)
+      .eq("is_active", true)
+      .order("name");
 
     if (error) throw new Error(`Erro ao buscar famílias: ${error.message}`);
     return families || [];
@@ -57,52 +57,52 @@ export const getProductFamilies = createServerFn({ method: 'GET' })
 // 2. Carregar dados completos da família para filtragem em cascata
 //    Produtos comerciais = 1 por combinação completa (incl. quantidade).
 // ---------------------------------------------------------------------------
-export const getFamilyCombinationData = createServerFn({ method: 'GET' })
+export const getFamilyCombinationData = createServerFn({ method: "GET" })
   .inputValidator((input: { family_id: string; company_id: string }) => input)
   .handler(async ({ data }) => {
     const sb = getServerSupabase();
 
     const familyRes = await sb
-      .from('supplier_product_families')
-      .select('*')
-      .eq('id', data.family_id)
-      .eq('company_id', data.company_id)
+      .from("supplier_product_families")
+      .select("*")
+      .eq("id", data.family_id)
+      .eq("company_id", data.company_id)
       .single();
 
     if (familyRes.error) throw new Error(`Família não encontrada: ${familyRes.error.message}`);
 
     // IDs dos grupos desta família
     const groupsRes = await sb
-      .from('supplier_option_groups')
-      .select('*')
-      .eq('family_id', data.family_id)
-      .eq('company_id', data.company_id)
-      .order('order_index');
+      .from("supplier_option_groups")
+      .select("*")
+      .eq("family_id", data.family_id)
+      .eq("company_id", data.company_id)
+      .order("order_index");
     const groupIds = (groupsRes.data || []).map((g: any) => g.id);
 
     const [valuesRes, productsRes] = await Promise.all([
       groupIds.length
         ? sb
-            .from('supplier_option_values')
-            .select('*')
-            .eq('company_id', data.company_id)
-            .in('group_id', groupIds)
-            .eq('is_active', true)
-            .order('order_index')
+            .from("supplier_option_values")
+            .select("*")
+            .eq("company_id", data.company_id)
+            .in("group_id", groupIds)
+            .eq("is_active", true)
+            .order("order_index")
         : Promise.resolve({ data: [] as any[] }),
       sb
-        .from('supplier_commercial_products')
-        .select('*')
-        .eq('family_id', data.family_id)
-        .eq('company_id', data.company_id),
+        .from("supplier_commercial_products")
+        .select("*")
+        .eq("family_id", data.family_id)
+        .eq("company_id", data.company_id),
     ]);
 
     const productIds = (productsRes.data || []).map((p: any) => p.id);
     const productOptionsRes = productIds.length
       ? await sb
-          .from('supplier_commercial_product_options')
-          .select('*')
-          .in('commercial_product_id', productIds)
+          .from("supplier_commercial_product_options")
+          .select("*")
+          .in("commercial_product_id", productIds)
       : { data: [] as any[] };
 
     return {
@@ -117,32 +117,35 @@ export const getFamilyCombinationData = createServerFn({ method: 'GET' })
 // ---------------------------------------------------------------------------
 // 2b. Matriz completa da família (interface administrativa — §12/§13)
 // ---------------------------------------------------------------------------
-export const getFamilyMatrix = createServerFn({ method: 'GET' })
+export const getFamilyMatrix = createServerFn({ method: "GET" })
   .inputValidator((input: { family_id: string; company_id: string }) => input)
   .handler(async ({ data }) => {
     const sb = getServerSupabase();
     const { data: products, error } = await sb
-      .from('supplier_commercial_products')
-      .select('*')
-      .eq('family_id', data.family_id)
-      .eq('company_id', data.company_id)
-      .order('quantity');
+      .from("supplier_commercial_products")
+      .select("*")
+      .eq("family_id", data.family_id)
+      .eq("company_id", data.company_id)
+      .order("quantity");
     if (error) throw new Error(`Erro ao carregar matriz: ${error.message}`);
 
     const list = products || [];
-    const active = list.filter((p: any) => p.availability === 'available');
+    const active = list.filter((p: any) => p.availability === "available");
     // §13 validação: alerta para produtos sem external_product_id / sem preço
     const missingExternalId = list.filter((p: any) => !p.external_product_id).length;
     const missingPrice = list.filter(
-      (p: any) => p.list_price == null && p.promotional_price == null && p.availability === 'available',
+      (p: any) =>
+        p.list_price == null && p.promotional_price == null && p.availability === "available",
     ).length;
 
     return {
       products: list,
       total: list.length,
       active: active.length,
-      unavailable: list.filter((p: any) => p.availability !== 'available').length,
-      distinct_quantities: [...new Set(list.map((p: any) => p.quantity))].sort((a: number, b: number) => a - b),
+      unavailable: list.filter((p: any) => p.availability !== "available").length,
+      distinct_quantities: [...new Set(list.map((p: any) => p.quantity))].sort(
+        (a: number, b: number) => a - b,
+      ),
       distinct_materials: [...new Set(list.map((p: any) => p.material).filter(Boolean))],
       distinct_formats: [...new Set(list.map((p: any) => p.format).filter(Boolean))],
       distinct_prints: [...new Set(list.map((p: any) => p.print_color).filter(Boolean))],
@@ -153,32 +156,36 @@ export const getFamilyMatrix = createServerFn({ method: 'GET' })
 // ---------------------------------------------------------------------------
 // 3. Extras compatíveis com preço
 // ---------------------------------------------------------------------------
-export const getCompatibleExtrasServer = createServerFn({ method: 'GET' })
+export const getCompatibleExtrasServer = createServerFn({ method: "GET" })
   .inputValidator(
-    (input: { family_id: string; commercial_product_id: string; quantity: number; company_id: string }) =>
-      input,
+    (input: {
+      family_id: string;
+      commercial_product_id: string;
+      quantity: number;
+      company_id: string;
+    }) => input,
   )
   .handler(async ({ data }) => {
     const sb = getServerSupabase();
 
     const [extrasRes, compatRes, pricesRes] = await Promise.all([
       sb
-        .from('supplier_extras')
-        .select('*')
-        .eq('family_id', data.family_id)
-        .eq('company_id', data.company_id)
-        .eq('is_active', true),
+        .from("supplier_extras")
+        .select("*")
+        .eq("family_id", data.family_id)
+        .eq("company_id", data.company_id)
+        .eq("is_active", true),
       sb
-        .from('supplier_extra_compatibility')
-        .select('*')
-        .eq('company_id', data.company_id)
-        .eq('is_active', true),
+        .from("supplier_extra_compatibility")
+        .select("*")
+        .eq("company_id", data.company_id)
+        .eq("is_active", true),
       sb
-        .from('supplier_extra_prices')
-        .select('*')
-        .eq('company_id', data.company_id)
-        .eq('quantity', data.quantity)
-        .eq('available', true),
+        .from("supplier_extra_prices")
+        .select("*")
+        .eq("company_id", data.company_id)
+        .eq("quantity", data.quantity)
+        .eq("available", true),
     ]);
 
     return {
@@ -191,17 +198,17 @@ export const getCompatibleExtrasServer = createServerFn({ method: 'GET' })
 // ---------------------------------------------------------------------------
 // 4. Serviços do fornecedor
 // ---------------------------------------------------------------------------
-export const getServicesForSupplier = createServerFn({ method: 'GET' })
+export const getServicesForSupplier = createServerFn({ method: "GET" })
   .inputValidator((input: { supplier_id: string; company_id: string; family_id?: string }) => input)
   .handler(async ({ data }) => {
     const sb = getServerSupabase();
 
     const { data: services, error } = await sb
-      .from('supplier_services')
-      .select('*')
-      .eq('supplier_id', data.supplier_id)
-      .eq('company_id', data.company_id)
-      .eq('is_active', true);
+      .from("supplier_services")
+      .select("*")
+      .eq("supplier_id", data.supplier_id)
+      .eq("company_id", data.company_id)
+      .eq("is_active", true);
 
     if (error) throw new Error(`Erro ao buscar serviços: ${error.message}`);
 
@@ -210,10 +217,10 @@ export const getServicesForSupplier = createServerFn({ method: 'GET' })
     let prices: any[] = [];
     if (serviceIds.length > 0) {
       const pricesQuery = sb
-        .from('supplier_service_prices')
-        .select('*')
-        .eq('company_id', data.company_id)
-        .in('service_id', serviceIds);
+        .from("supplier_service_prices")
+        .select("*")
+        .eq("company_id", data.company_id)
+        .in("service_id", serviceIds);
 
       if (data.family_id) {
         // Priorizar preços específicos da família, depois genéricos
@@ -229,7 +236,7 @@ export const getServicesForSupplier = createServerFn({ method: 'GET' })
 // ---------------------------------------------------------------------------
 // 5. Salvar snapshot imutável
 // ---------------------------------------------------------------------------
-export const savePriceSnapshot = createServerFn({ method: 'POST' })
+export const savePriceSnapshot = createServerFn({ method: "POST" })
   .inputValidator((input: { snapshot: Record<string, any>; quote_item_id?: string }) => input)
   .handler(async ({ data }) => {
     const sb = getServerSupabase();
@@ -240,19 +247,16 @@ export const savePriceSnapshot = createServerFn({ method: 'POST' })
     };
 
     const { data: saved, error } = await sb
-      .from('supplier_price_snapshots')
+      .from("supplier_price_snapshots")
       .insert([payload])
-      .select('id')
+      .select("id")
       .single();
 
     if (error) throw new Error(`Erro ao salvar snapshot: ${error.message}`);
 
     // Vincular ao quote_item se fornecido
     if (data.quote_item_id && saved) {
-      await sb
-        .from('quote_items')
-        .update({ snapshot_id: saved.id })
-        .eq('id', data.quote_item_id);
+      await sb.from("quote_items").update({ snapshot_id: saved.id }).eq("id", data.quote_item_id);
     }
 
     return { snapshot_id: saved?.id };
@@ -261,50 +265,50 @@ export const savePriceSnapshot = createServerFn({ method: 'POST' })
 // ---------------------------------------------------------------------------
 // 6. Revalidar item do orçamento
 // ---------------------------------------------------------------------------
-export const revalidateQuoteItem = createServerFn({ method: 'POST' })
+export const revalidateQuoteItem = createServerFn({ method: "POST" })
   .inputValidator(
-    (input: {
-      quote_item_id: string;
-      commercial_product_id: string;
-      company_id: string;
-    }) => input,
+    (input: { quote_item_id: string; commercial_product_id: string; company_id: string }) => input,
   )
   .handler(async ({ data }) => {
     const sb = getServerSupabase();
 
     // Snapshot original (fonte imutável do que foi cotado)
     const { data: snapshot } = await sb
-      .from('supplier_price_snapshots')
-      .select('*')
-      .eq('quote_item_id', data.quote_item_id)
-      .order('snapshot_at', { ascending: false })
+      .from("supplier_price_snapshots")
+      .select("*")
+      .eq("quote_item_id", data.quote_item_id)
+      .order("snapshot_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (!snapshot) {
-      return { has_snapshot: false, revalidation: null, message: 'Nenhum snapshot encontrado para este item.' };
+      return {
+        has_snapshot: false,
+        revalidation: null,
+        message: "Nenhum snapshot encontrado para este item.",
+      };
     }
 
     // Produto comercial atual (preço, promoção, prazo, disponibilidade)
     const { data: current } = await sb
-      .from('supplier_commercial_products')
-      .select('*')
-      .eq('id', data.commercial_product_id)
+      .from("supplier_commercial_products")
+      .select("*")
+      .eq("id", data.commercial_product_id)
       .maybeSingle();
 
     // Promoção ativa atual
     const { data: promos } = await sb
-      .from('supplier_promotions')
-      .select('*')
-      .eq('company_id', data.company_id)
-      .eq('commercial_product_id', data.commercial_product_id)
-      .eq('status', 'active');
+      .from("supplier_promotions")
+      .select("*")
+      .eq("company_id", data.company_id)
+      .eq("commercial_product_id", data.commercial_product_id)
+      .eq("status", "active");
     const nowIso = new Date().toISOString();
     const activePromo = (promos || []).find(
       (p: any) => (!p.starts_at || p.starts_at <= nowIso) && (!p.ends_at || p.ends_at >= nowIso),
     );
 
-    const isAvailable = current ? current.availability === 'available' : false;
+    const isAvailable = current ? current.availability === "available" : false;
     const newNormal = current?.list_price ?? null;
     const newPromo = activePromo?.promo_price ?? current?.promotional_price ?? null;
     const newPrice = current ? (newPromo ?? newNormal) : null;
@@ -358,17 +362,17 @@ export const revalidateQuoteItem = createServerFn({ method: 'POST' })
 // ---------------------------------------------------------------------------
 // 7. Promoções ativas para uma família
 // ---------------------------------------------------------------------------
-export const getActivePromotions = createServerFn({ method: 'GET' })
+export const getActivePromotions = createServerFn({ method: "GET" })
   .inputValidator((input: { family_id: string; company_id: string }) => input)
   .handler(async ({ data }) => {
     const sb = getServerSupabase();
 
     const { data: promos, error } = await sb
-      .from('supplier_promotions')
-      .select('*')
-      .eq('company_id', data.company_id)
-      .eq('family_id', data.family_id)
-      .eq('status', 'active');
+      .from("supplier_promotions")
+      .select("*")
+      .eq("company_id", data.company_id)
+      .eq("family_id", data.family_id)
+      .eq("status", "active");
 
     if (error) throw new Error(`Erro ao buscar promoções: ${error.message}`);
     return promos || [];
@@ -377,18 +381,18 @@ export const getActivePromotions = createServerFn({ method: 'GET' })
 // ---------------------------------------------------------------------------
 // 8. Executar testes de paridade
 // ---------------------------------------------------------------------------
-export const runCalculationTests = createServerFn({ method: 'POST' })
+export const runCalculationTests = createServerFn({ method: "POST" })
   .inputValidator((input: { family_id: string; company_id: string }) => input)
   .handler(async ({ data }) => {
     const sb = getServerSupabase();
 
     // Buscar testes ativos
     const { data: tests, error } = await sb
-      .from('supplier_calculation_tests')
-      .select('*')
-      .eq('family_id', data.family_id)
-      .eq('company_id', data.company_id)
-      .eq('is_active', true);
+      .from("supplier_calculation_tests")
+      .select("*")
+      .eq("family_id", data.family_id)
+      .eq("company_id", data.company_id)
+      .eq("is_active", true);
 
     if (error) throw new Error(`Erro ao buscar testes: ${error.message}`);
     if (!tests || tests.length === 0) return { total: 0, passed: 0, failed: 0, results: [] };
@@ -408,18 +412,23 @@ export const runCalculationTests = createServerFn({ method: 'POST' })
       try {
         // Buscar o produto comercial EXATO pelo external_product_id + quantidade
         const { data: product } = await sb
-          .from('supplier_commercial_products')
-          .select('id, list_price, promotional_price, production_days, availability, quantity')
-          .eq('family_id', data.family_id)
-          .eq('external_product_id', test.external_code)
-          .eq('quantity', test.quantity)
-          .eq('company_id', data.company_id)
+          .from("supplier_commercial_products")
+          .select("id, list_price, promotional_price, production_days, availability, quantity")
+          .eq("family_id", data.family_id)
+          .eq("external_product_id", test.external_code)
+          .eq("quantity", test.quantity)
+          .eq("company_id", data.company_id)
           .maybeSingle();
 
         if (!product) {
           results.push({
-            test_id: test.id, name: test.name, passed: false, expected: test.expected_price,
-            calculated: null, diff: null, diff_percent: null,
+            test_id: test.id,
+            name: test.name,
+            passed: false,
+            expected: test.expected_price,
+            calculated: null,
+            diff: null,
+            diff_percent: null,
             error: `Produto comercial ${test.external_code} (${test.quantity}un) não encontrado.`,
           });
           continue;
@@ -429,13 +438,19 @@ export const runCalculationTests = createServerFn({ method: 'POST' })
         const officialPrice =
           product.promotional_price != null ? product.promotional_price : product.list_price;
 
-        if (officialPrice == null || product.availability !== 'available') {
+        if (officialPrice == null || product.availability !== "available") {
           results.push({
-            test_id: test.id, name: test.name, passed: false, expected: test.expected_price,
-            calculated: null, diff: null, diff_percent: null,
-            error: product.availability !== 'available'
-              ? `Produto ${test.external_code} indisponível.`
-              : `Produto ${test.external_code} sem preço confirmado.`,
+            test_id: test.id,
+            name: test.name,
+            passed: false,
+            expected: test.expected_price,
+            calculated: null,
+            diff: null,
+            diff_percent: null,
+            error:
+              product.availability !== "available"
+                ? `Produto ${test.external_code} indisponível.`
+                : `Produto ${test.external_code} sem preço confirmado.`,
           });
           continue;
         }
@@ -449,7 +464,7 @@ export const runCalculationTests = createServerFn({ method: 'POST' })
           test.expected_price > 0 ? Math.round((diff / test.expected_price) * 1000) / 10 : null;
         const passed = priceMatch && leadTimeMatch;
 
-        await sb.from('supplier_calculation_logs').insert([
+        await sb.from("supplier_calculation_logs").insert([
           {
             company_id: data.company_id,
             test_id: test.id,
@@ -464,25 +479,30 @@ export const runCalculationTests = createServerFn({ method: 'POST' })
               expected_lead_time: test.expected_lead_time,
               actual_lead_time: product.production_days,
             },
-            action_taken: passed ? 'none' : 'flagged_review',
+            action_taken: passed ? "none" : "flagged_review",
           },
         ]);
 
         await sb
-          .from('supplier_calculation_tests')
+          .from("supplier_calculation_tests")
           .update({
-            last_result: passed ? 'passed' : 'failed',
+            last_result: passed ? "passed" : "failed",
             last_calculated_price: officialPrice,
             last_diff_amount: diff,
             last_diff_percent: diffPercent,
             validated_at: new Date().toISOString(),
           })
-          .eq('id', test.id);
+          .eq("id", test.id);
 
         results.push({
-          test_id: test.id, name: test.name, passed, expected: test.expected_price,
-          calculated: officialPrice, diff, diff_percent: diffPercent,
-          error: passed ? null : (!priceMatch ? 'Preço divergente.' : 'Prazo divergente.'),
+          test_id: test.id,
+          name: test.name,
+          passed,
+          expected: test.expected_price,
+          calculated: officialPrice,
+          diff,
+          diff_percent: diffPercent,
+          error: passed ? null : !priceMatch ? "Preço divergente." : "Prazo divergente.",
         });
       } catch (err: any) {
         results.push({
@@ -500,8 +520,8 @@ export const runCalculationTests = createServerFn({ method: 'POST' })
 
     return {
       total: results.length,
-      passed: results.filter(r => r.passed).length,
-      failed: results.filter(r => !r.passed).length,
+      passed: results.filter((r) => r.passed).length,
+      failed: results.filter((r) => !r.passed).length,
       results,
     };
   });
@@ -516,17 +536,19 @@ export const runCalculationTests = createServerFn({ method: 'POST' })
 // Idempotente: reexecutar apenas cria novas versões quando o dado muda,
 // nunca sobrescreve o histórico. Requer que o produto tenha supplier_id.
 // ---------------------------------------------------------------------------
-export const importProductCombinations = createServerFn({ method: 'POST' })
-  .inputValidator((input: { product_id: string; company_id: string; supplier_id?: string }) => input)
+export const importProductCombinations = createServerFn({ method: "POST" })
+  .inputValidator(
+    (input: { product_id: string; company_id: string; supplier_id?: string }) => input,
+  )
   .handler(async ({ data }) => {
     const sb = getServerSupabase();
 
     // 1. Carregar o produto
     const { data: product, error: prodErr } = await sb
-      .from('products')
-      .select('*')
-      .eq('id', data.product_id)
-      .eq('company_id', data.company_id)
+      .from("products")
+      .select("*")
+      .eq("id", data.product_id)
+      .eq("company_id", data.company_id)
       .single();
 
     if (prodErr || !product) {
@@ -536,37 +558,37 @@ export const importProductCombinations = createServerFn({ method: 'POST' })
     const supplierId = data.supplier_id || product.supplier_id;
     if (!supplierId) {
       throw new Error(
-        'Produto sem fornecedor vinculado. Só é possível gerar combinações de produtos importados de um fornecedor.',
+        "Produto sem fornecedor vinculado. Só é possível gerar combinações de produtos importados de um fornecedor.",
       );
     }
 
     // 2. Carregar variantes, tiragens e extras
     const { data: variants } = await sb
-      .from('product_variants')
-      .select('*')
-      .eq('product_id', data.product_id)
-      .eq('company_id', data.company_id);
+      .from("product_variants")
+      .select("*")
+      .eq("product_id", data.product_id)
+      .eq("company_id", data.company_id);
 
     const variantIds = (variants || []).map((v: any) => v.id);
     let priceTiers: any[] = [];
     if (variantIds.length > 0) {
       const { data: tiers } = await sb
-        .from('product_price_tiers')
-        .select('*')
-        .eq('company_id', data.company_id)
-        .in('variant_id', variantIds);
+        .from("product_price_tiers")
+        .select("*")
+        .eq("company_id", data.company_id)
+        .in("variant_id", variantIds);
       priceTiers = tiers || [];
     }
 
     const { data: extras } = await sb
-      .from('product_extras')
-      .select('*')
-      .eq('product_id', data.product_id)
-      .eq('company_id', data.company_id);
+      .from("product_extras")
+      .select("*")
+      .eq("product_id", data.product_id)
+      .eq("company_id", data.company_id);
 
     if (!variants || variants.length === 0) {
       throw new Error(
-        'Produto sem variantes. Reimporte o produto pelo importador antes de gerar as combinações.',
+        "Produto sem variantes. Reimporte o produto pelo importador antes de gerar as combinações.",
       );
     }
 
@@ -583,9 +605,9 @@ export const importProductCombinations = createServerFn({ method: 'POST' })
     // 4. Vincular a família ao produto canônico (comparação multi-fornecedor)
     if (result.family_id && result.errors.length === 0) {
       await sb
-        .from('supplier_product_families')
+        .from("supplier_product_families")
         .update({ catalog_product_id: data.product_id, last_synced_at: new Date().toISOString() })
-        .eq('id', result.family_id);
+        .eq("id", result.family_id);
     }
 
     return result;

@@ -92,7 +92,22 @@ export function discountPercent(oldPrice: number, current: number): number {
 // Formato / medidas (seção 12)
 // ---------------------------------------------------------------------------
 
-const SIZE_LABELS = new Set(["p", "m", "g", "gg", "gg1", "gg2", "xg", "xgg", "pp", "xs", "s", "l", "xl", "xxl"]);
+const SIZE_LABELS = new Set([
+  "p",
+  "m",
+  "g",
+  "gg",
+  "gg1",
+  "gg2",
+  "xg",
+  "xgg",
+  "pp",
+  "xs",
+  "s",
+  "l",
+  "xl",
+  "xxl",
+]);
 
 function toMm(value: number, unit: string): number {
   switch (unit) {

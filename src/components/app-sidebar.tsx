@@ -17,7 +17,8 @@ import {
   Printer,
   Globe,
   ShoppingCart,
-  Store, Activity
+  Store,
+  Activity,
 } from "lucide-react";
 import {
   Sidebar,

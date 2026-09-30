@@ -6,7 +6,13 @@ interface AuthContextValue {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  profile: { full_name: string | null; company_name: string | null; company_id: string | null; id: string | null; role: string | null } | null;
+  profile: {
+    full_name: string | null;
+    company_name: string | null;
+    company_id: string | null;
+    id: string | null;
+    role: string | null;
+  } | null;
   signOut: () => Promise<void>;
 }
 
@@ -19,7 +25,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<AuthContextValue["profile"]>(null);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, s) => {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {

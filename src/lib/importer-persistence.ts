@@ -58,7 +58,12 @@ export function normalizeUrlForMatch(raw?: string | null): string | null {
     const query = params.map(([k, v]) => `${k}=${v}`).join("&");
     return `${host}${path}${query ? `?${query}` : ""}`;
   } catch {
-    return raw.trim().replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/+$/, "").toLowerCase();
+    return raw
+      .trim()
+      .replace(/^https?:\/\//i, "")
+      .replace(/^www\./i, "")
+      .replace(/\/+$/, "")
+      .toLowerCase();
   }
 }
 
@@ -148,7 +153,11 @@ export async function persistImportedProduct(
   let effectiveOpts = opts;
   if (!opts.supplierId) {
     try {
-      const resolved = await resolveSupplierByUrl(opts.companyId, product.source_url, product.supplier);
+      const resolved = await resolveSupplierByUrl(
+        opts.companyId,
+        product.source_url,
+        product.supplier,
+      );
       if (resolved) {
         effectiveOpts = {
           ...opts,
@@ -165,7 +174,11 @@ export async function persistImportedProduct(
   const existingId = await findExisting(product, opts.companyId);
 
   if (existingId && !opts.updateExisting) {
-    return { productId: existingId, action: "skipped", message: "Produto já existe (atualização desativada)." };
+    return {
+      productId: existingId,
+      action: "skipped",
+      message: "Produto já existe (atualização desativada).",
+    };
   }
 
   let productId: string;
@@ -206,14 +219,26 @@ export async function persistImportedProduct(
     try {
       const res = await copyImagesToStorage(product.images, productId, opts.companyId);
       product.images = res.images;
-      imageCopy = { copied: res.copied, total: Math.min(res.images.length, 8), errors: res.warnings };
+      imageCopy = {
+        copied: res.copied,
+        total: Math.min(res.images.length, 8),
+        errors: res.warnings,
+      };
       const main = res.images.find((i) => i.is_main)?.url ?? res.images[0]?.url ?? null;
       await supabase
         .from("products")
-        .update({ image_url: main, main_image_url: main, gallery_images: res.images.map((i) => i.url) } as any)
+        .update({
+          image_url: main,
+          main_image_url: main,
+          gallery_images: res.images.map((i) => i.url),
+        } as any)
         .eq("id", productId);
     } catch (e: any) {
-      imageCopy = { copied: 0, total: product.images.length, errors: [`cópia de imagens: ${e?.message || e}`] };
+      imageCopy = {
+        copied: 0,
+        total: product.images.length,
+        errors: [`cópia de imagens: ${e?.message || e}`],
+      };
     }
   }
 

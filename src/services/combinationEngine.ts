@@ -43,7 +43,7 @@ import type {
   SelectedService,
   QuoteItemCalculation,
   QuoteItemCalculationParams,
-} from '@/types/combinationTypes';
+} from "@/types/combinationTypes";
 
 // ---------------------------------------------------------------------------
 // Normalização e hash determinístico da combinação
@@ -51,12 +51,7 @@ import type {
 
 /** Normaliza texto para o hash (minúsculo, sem acentos, tokens estáveis). */
 export function normalizeForHash(text: string): string {
-  return text
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/\s+/g, '_')
-    .trim();
+  return text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, "_").trim();
 }
 
 /**
@@ -69,7 +64,7 @@ export function normalizeForHash(text: string): string {
  */
 export function buildCombinationHash(optionValueIds: string[], quantity: number): string {
   const sorted = [...optionValueIds].sort();
-  return `q${quantity}|${sorted.join('|')}`;
+  return `q${quantity}|${sorted.join("|")}`;
 }
 
 /**
@@ -77,7 +72,7 @@ export function buildCombinationHash(optionValueIds: string[], quantity: number)
  * quantidades disponíveis de uma mesma configuração de opções.
  */
 export function buildOptionSetKey(optionValueIds: string[]): string {
-  return [...optionValueIds].sort().join('|');
+  return [...optionValueIds].sort().join("|");
 }
 
 // ---------------------------------------------------------------------------
@@ -132,7 +127,7 @@ function buildProductOptionMap(
 
 /** Produto comercial é vendável? */
 function isProductSellable(p: SupplierCommercialProduct): boolean {
-  return p.availability === 'available';
+  return p.availability === "available";
 }
 
 /**
@@ -169,7 +164,7 @@ export function getCompatibleValues(
 
   const selectedOptionIds = new Set(selection.values());
   const productOptionMap = buildProductOptionMap(productOptions);
-  const valueToGroup = new Map(values.map(v => [v.id, v.group_id]));
+  const valueToGroup = new Map(values.map((v) => [v.id, v.group_id]));
 
   // Grupos "usados": só os que têm ao menos um valor referenciado por algum
   // produto comercial. Grupos órfãos (ex.: eixo importado do configurador mas
@@ -181,11 +176,11 @@ export function getCompatibleValues(
   }
 
   const sortedGroups = [...groups]
-    .filter(g => usedGroupIds.has(g.id))
+    .filter((g) => usedGroupIds.has(g.id))
     .sort((a, b) => a.order_index - b.order_index);
 
   // Produtos comerciais compatíveis com a seleção atual
-  const compatibleProducts = products.filter(p => {
+  const compatibleProducts = products.filter((p) => {
     if (!isProductSellable(p)) return false;
     return productMatchesSelection(productOptionMap.get(p.id), selectedOptionIds);
   });
@@ -194,10 +189,10 @@ export function getCompatibleValues(
 
   for (const group of sortedGroups) {
     const selectedValueId = selection.get(group.id) || null;
-    const groupValues = values.filter(v => v.group_id === group.id && v.is_active);
+    const groupValues = values.filter((v) => v.group_id === group.id && v.is_active);
 
     if (selectedValueId) {
-      const selectedValue = groupValues.find(v => v.id === selectedValueId);
+      const selectedValue = groupValues.find((v) => v.id === selectedValueId);
       results.push({
         group,
         values: selectedValue ? [selectedValue] : [],
@@ -214,7 +209,7 @@ export function getCompatibleValues(
         }
       }
       const filteredValues = groupValues
-        .filter(v => compatibleValueIds.has(v.id))
+        .filter((v) => compatibleValueIds.has(v.id))
         .sort((a, b) => a.order_index - b.order_index);
 
       results.push({
@@ -251,7 +246,7 @@ export function getAvailableQuantities(
 
   const productOptionMap = buildProductOptionMap(productOptions);
 
-  const matching = products.filter(p => {
+  const matching = products.filter((p) => {
     const optSet = productOptionMap.get(p.id);
     if (!optSet) return false;
     // Correspondência EXATA: mesmo tamanho e contém todas as opções da seleção
@@ -260,7 +255,7 @@ export function getAvailableQuantities(
   });
 
   return matching
-    .map(p => {
+    .map((p) => {
       const promo = findActivePromotion(p, promotions);
       const eff = resolveEffectivePrice(p, promo);
       const normal = eff.normal;
@@ -304,7 +299,7 @@ export function resolveCommercialProduct(
       found: false,
       product: null,
       active_promotion: null,
-      error_message: 'Nenhuma opção selecionada.',
+      error_message: "Nenhuma opção selecionada.",
     };
   }
   if (!quantity || quantity <= 0) {
@@ -312,14 +307,14 @@ export function resolveCommercialProduct(
       found: false,
       product: null,
       active_promotion: null,
-      error_message: 'Selecione uma quantidade válida.',
+      error_message: "Selecione uma quantidade válida.",
     };
   }
 
   const selectedOptionIds = new Set(selection.values());
   const productOptionMap = buildProductOptionMap(data.productOptions);
 
-  const product = data.products.find(p => {
+  const product = data.products.find((p) => {
     if (!isProductSellable(p)) return false;
     if (p.quantity !== quantity) return false;
     const optSet = productOptionMap.get(p.id);
@@ -333,7 +328,7 @@ export function resolveCommercialProduct(
       product: null,
       active_promotion: null,
       error_message:
-        'Produto correspondente não encontrado no fornecedor. Necessária atualização ou revisão do mapeamento.',
+        "Produto correspondente não encontrado no fornecedor. Necessária atualização ou revisão do mapeamento.",
     };
   }
 
@@ -353,8 +348,8 @@ function findActivePromotion(
   if (!promotions?.length) return null;
   const now = new Date().toISOString();
   const promo = promotions.find(
-    p =>
-      p.status === 'active' &&
+    (p) =>
+      p.status === "active" &&
       (p.commercial_product_id === product.id || p.commercial_product_id === null) &&
       (p.quantity === product.quantity || p.quantity === null) &&
       (!p.starts_at || p.starts_at <= now) &&
@@ -428,7 +423,7 @@ export function getCompatibleExtras(
   for (const extra of extras) {
     if (!extra.is_active) continue;
 
-    const rules = compatibility.filter(c => c.extra_id === extra.id && c.is_active);
+    const rules = compatibility.filter((c) => c.extra_id === extra.id && c.is_active);
     let isCompatible = rules.length === 0; // sem regras = compatível com toda a família
 
     if (!isCompatible) {
@@ -443,11 +438,13 @@ export function getCompatibleExtras(
         // Regra por filtros de material/formato/impressão (option_value_ids)
         if (productOptionIds) {
           const matchMaterial =
-            !rule.material_filter?.length || rule.material_filter.some(id => productOptionIds.has(id));
+            !rule.material_filter?.length ||
+            rule.material_filter.some((id) => productOptionIds.has(id));
           const matchFormat =
-            !rule.format_filter?.length || rule.format_filter.some(id => productOptionIds.has(id));
+            !rule.format_filter?.length ||
+            rule.format_filter.some((id) => productOptionIds.has(id));
           const matchPrint =
-            !rule.print_filter?.length || rule.print_filter.some(id => productOptionIds.has(id));
+            !rule.print_filter?.length || rule.print_filter.some((id) => productOptionIds.has(id));
           if (matchMaterial && matchFormat && matchPrint) {
             isCompatible = true;
             break;
@@ -461,11 +458,11 @@ export function getCompatibleExtras(
 
     if (!isCompatible) continue;
 
-    const compatRuleIds = new Set(rules.map(r => r.id));
+    const compatRuleIds = new Set(rules.map((r) => r.id));
 
     // Prioridade: preço com compatibility_id específico > preço genérico (null)
     let priceEntry = extraPrices.find(
-      p =>
+      (p) =>
         p.extra_id === extra.id &&
         p.quantity === quantity &&
         p.available &&
@@ -474,8 +471,11 @@ export function getCompatibleExtras(
     );
     if (!priceEntry) {
       priceEntry = extraPrices.find(
-        p =>
-          p.extra_id === extra.id && p.quantity === quantity && p.available && p.compatibility_id == null,
+        (p) =>
+          p.extra_id === extra.id &&
+          p.quantity === quantity &&
+          p.available &&
+          p.compatibility_id == null,
       );
     }
     if (!priceEntry) continue; // sem preço p/ a quantidade exata → não retorna
@@ -507,22 +507,22 @@ export function calculateLeadTime(
   selectedExtras: Array<{ additional_days: number }>,
   rule: LeadTimeRule,
 ): { base: number; extras: number; total: number } {
-  if (!selectedExtras.length || rule === 'custom') {
+  if (!selectedExtras.length || rule === "custom") {
     return { base: baseDays, extras: 0, total: baseDays };
   }
-  const extraDays = selectedExtras.map(e => e.additional_days).filter(d => d > 0);
+  const extraDays = selectedExtras.map((e) => e.additional_days).filter((d) => d > 0);
   if (extraDays.length === 0) return { base: baseDays, extras: 0, total: baseDays };
 
   switch (rule) {
-    case 'sum_extras': {
+    case "sum_extras": {
       const c = extraDays.reduce((s, d) => s + d, 0);
       return { base: baseDays, extras: c, total: baseDays + c };
     }
-    case 'replace': {
+    case "replace": {
       const maxExtra = Math.max(...extraDays);
       return { base: baseDays, extras: maxExtra, total: Math.max(baseDays, maxExtra) };
     }
-    case 'max_extra':
+    case "max_extra":
     default: {
       const c = Math.max(...extraDays);
       return { base: baseDays, extras: c, total: baseDays + c };
@@ -578,15 +578,13 @@ export function calculateQuoteItem(
   finalSalePrice = round2(finalSalePrice);
 
   const marginPercent =
-    finalSalePrice > 0
-      ? round1(((finalSalePrice - totalSupplierCost) / finalSalePrice) * 100)
-      : 0;
+    finalSalePrice > 0 ? round1(((finalSalePrice - totalSupplierCost) / finalSalePrice) * 100) : 0;
 
   const leadTime = calculateLeadTime(product.production_days ?? 0, selectedExtras, leadTimeRule);
   const unitPriceDisplay = params.quantity > 0 ? round2(finalSalePrice / params.quantity) : 0;
   // Sem preço oficial válido (> 0) → não confirmado, nunca "confirmado a R$ 0" (§18).
   const priceStatus: PriceStatus =
-    isProductSellable(product) && official.total_price > 0 ? 'confirmed' : 'unconfirmed';
+    isProductSellable(product) && official.total_price > 0 ? "confirmed" : "unconfirmed";
 
   return {
     commercial_product_id: product.id,

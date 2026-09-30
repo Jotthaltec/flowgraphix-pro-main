@@ -45,7 +45,8 @@ export function parseWithAdapter(
   opts?: { domain?: string; preferKey?: string },
 ): ParseWithAdapterResult {
   const domain =
-    opts?.domain ?? (() => {
+    opts?.domain ??
+    (() => {
       try {
         return new URL(url).hostname.replace(/^www\./, "");
       } catch {

@@ -19,11 +19,21 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { StatusBadge } from "@/components/status-badge";
 import {
-  ExternalLink, Copy, Check, KeyRound, Truck, Store, ShoppingCart, Loader2, ClipboardList,
+  ExternalLink,
+  Copy,
+  Check,
+  KeyRound,
+  Truck,
+  Store,
+  ShoppingCart,
+  Loader2,
+  ClipboardList,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  buildPurchaseChecklist, formatDeliveryText, type ChecklistItem,
+  buildPurchaseChecklist,
+  formatDeliveryText,
+  type ChecklistItem,
 } from "@/lib/purchase-assist";
 
 const fmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -118,7 +128,9 @@ export function ComprarDialog({
       if (!po?.supplier_id) return null;
       const { data } = await supabase
         .from("supplier_accounts_safe")
-        .select("login_username, has_password, registration_cnpj, registration_email, registration_phone")
+        .select(
+          "login_username, has_password, registration_cnpj, registration_email, registration_phone",
+        )
         .eq("company_id", companyId)
         .eq("supplier_id", po.supplier_id)
         .maybeSingle();
@@ -158,7 +170,9 @@ export function ComprarDialog({
           status: "comprado",
           supplier_order_number: form.supplier_order_number || null,
           actual_cost: form.actual_cost === "" ? null : Number(form.actual_cost),
-          purchased_at: form.purchased_at ? new Date(form.purchased_at).toISOString() : new Date().toISOString(),
+          purchased_at: form.purchased_at
+            ? new Date(form.purchased_at).toISOString()
+            : new Date().toISOString(),
           expected_delivery: form.expected_delivery || null,
           tracking_code: form.tracking_code || null,
           purchase_notes: form.purchase_notes || null,
@@ -210,7 +224,9 @@ export function ComprarDialog({
           <DialogTitle className="flex items-center gap-2">
             <ShoppingCart className="h-5 w-5" />
             <span className="font-mono">{po.po_number}</span>
-            <span className="text-muted-foreground font-normal text-sm">· {po.suppliers?.name}</span>
+            <span className="text-muted-foreground font-normal text-sm">
+              · {po.suppliers?.name}
+            </span>
           </DialogTitle>
         </DialogHeader>
 
@@ -233,20 +249,26 @@ export function ComprarDialog({
           <section className="rounded-lg border p-3">
             <p className="text-sm font-medium mb-2 flex items-center gap-1.5">
               <KeyRound className="h-4 w-4" /> Conta no fornecedor
-              {account
-                ? account.has_password
-                  ? <StatusBadge variant="success">conectado</StatusBadge>
-                  : <StatusBadge variant="warning">login sem senha</StatusBadge>
-                : <StatusBadge variant="muted">não conectado</StatusBadge>}
+              {account ? (
+                account.has_password ? (
+                  <StatusBadge variant="success">conectado</StatusBadge>
+                ) : (
+                  <StatusBadge variant="warning">login sem senha</StatusBadge>
+                )
+              ) : (
+                <StatusBadge variant="muted">não conectado</StatusBadge>
+              )}
             </p>
             {account ? (
               <div className="space-y-1">
                 <Field label="Login" value={account.login_username} />
                 <div className="flex items-center gap-1.5 text-sm">
                   <span className="text-muted-foreground w-20 shrink-0">Senha</span>
-                  {account.has_password
-                    ? <StatusBadge variant="success">salva no perfil</StatusBadge>
-                    : <StatusBadge variant="muted">não cadastrada</StatusBadge>}
+                  {account.has_password ? (
+                    <StatusBadge variant="success">salva no perfil</StatusBadge>
+                  ) : (
+                    <StatusBadge variant="muted">não cadastrada</StatusBadge>
+                  )}
                 </div>
                 <Field label="CNPJ" value={account.registration_cnpj} />
                 <Field label="E-mail" value={account.registration_email} />
@@ -254,7 +276,8 @@ export function ComprarDialog({
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                Nenhum perfil de conta cadastrado para este fornecedor. Cadastre em Hub de Fornecedores → Perfis.
+                Nenhum perfil de conta cadastrado para este fornecedor. Cadastre em Hub de
+                Fornecedores → Perfis.
               </p>
             )}
           </section>
@@ -262,7 +285,11 @@ export function ComprarDialog({
           {/* Destino */}
           <section className="rounded-lg border p-3">
             <p className="text-sm font-medium mb-2 flex items-center gap-1.5">
-              {po.receiving_mode === "pickup" ? <Store className="h-4 w-4" /> : <Truck className="h-4 w-4" />}
+              {po.receiving_mode === "pickup" ? (
+                <Store className="h-4 w-4" />
+              ) : (
+                <Truck className="h-4 w-4" />
+              )}
               {po.receiving_mode === "pickup" ? "Retirada" : "Entrega"}
             </p>
             <div className="flex items-start gap-1.5">
@@ -282,7 +309,8 @@ export function ComprarDialog({
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{it.product_name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {it.quantity} un × {fmt.format(it.unit_cost)} = <span className="font-medium">{fmt.format(it.total_cost)}</span>
+                      {it.quantity} un × {fmt.format(it.unit_cost)} ={" "}
+                      <span className="font-medium">{fmt.format(it.total_cost)}</span>
                       {it.supplier_sku ? ` · SKU ${it.supplier_sku}` : ""}
                     </p>
                   </div>
@@ -320,31 +348,55 @@ export function ComprarDialog({
               <div className="grid gap-1.5">
                 <Label className="text-xs">Custo pago (R$)</Label>
                 <Input
-                  type="number" min="0" step="0.01"
+                  type="number"
+                  min="0"
+                  step="0.01"
                   value={form.actual_cost}
                   onChange={(e) => setForm({ ...form, actual_cost: e.target.value })}
                 />
               </div>
               <div className="grid gap-1.5">
                 <Label className="text-xs">Data da compra</Label>
-                <Input type="date" value={form.purchased_at} onChange={(e) => setForm({ ...form, purchased_at: e.target.value })} />
+                <Input
+                  type="date"
+                  value={form.purchased_at}
+                  onChange={(e) => setForm({ ...form, purchased_at: e.target.value })}
+                />
               </div>
               <div className="grid gap-1.5">
                 <Label className="text-xs">Previsão de entrega</Label>
-                <Input type="date" value={form.expected_delivery} onChange={(e) => setForm({ ...form, expected_delivery: e.target.value })} />
+                <Input
+                  type="date"
+                  value={form.expected_delivery}
+                  onChange={(e) => setForm({ ...form, expected_delivery: e.target.value })}
+                />
               </div>
               <div className="grid gap-1.5 col-span-2">
                 <Label className="text-xs">Código de rastreio</Label>
-                <Input value={form.tracking_code} onChange={(e) => setForm({ ...form, tracking_code: e.target.value })} placeholder="opcional" />
+                <Input
+                  value={form.tracking_code}
+                  onChange={(e) => setForm({ ...form, tracking_code: e.target.value })}
+                  placeholder="opcional"
+                />
               </div>
               <div className="grid gap-1.5 col-span-2">
                 <Label className="text-xs">Observações</Label>
-                <Textarea rows={2} value={form.purchase_notes} onChange={(e) => setForm({ ...form, purchase_notes: e.target.value })} placeholder="opcional" />
+                <Textarea
+                  rows={2}
+                  value={form.purchase_notes}
+                  onChange={(e) => setForm({ ...form, purchase_notes: e.target.value })}
+                  placeholder="opcional"
+                />
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-3">
-              <Button variant="outline" onClick={() => onOpenChange(false)}>Fechar</Button>
-              <Button onClick={() => registerMutation.mutate()} disabled={registerMutation.isPending}>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Fechar
+              </Button>
+              <Button
+                onClick={() => registerMutation.mutate()}
+                disabled={registerMutation.isPending}
+              >
                 {registerMutation.isPending && <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />}
                 {alreadyBought ? "Atualizar registro" : "Marcar como comprado"}
               </Button>

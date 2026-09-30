@@ -30,23 +30,35 @@ function ForgotPage() {
     toast.success("Link enviado! Verifique seu e-mail.");
   }
 
-  return <AuthShell>
-    <div className="text-center mb-8">
-      <h1 className="text-2xl font-bold tracking-tight">Recuperar senha</h1>
-      <p className="text-sm text-muted-foreground mt-1">Enviaremos um link para redefinir sua senha</p>
-    </div>
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Label htmlFor="email">E-mail</Label>
-        <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+  return (
+    <AuthShell>
+      <div className="text-center mb-8">
+        <h1 className="text-2xl font-bold tracking-tight">Recuperar senha</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Enviaremos um link para redefinir sua senha
+        </p>
       </div>
-      <Button type="submit" className="w-full" disabled={loading}>
-        {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-        Enviar link de recuperação
-      </Button>
-    </form>
-    <p className="text-center text-sm text-muted-foreground mt-6">
-      <Link to="/login" className="text-primary font-medium hover:underline">Voltar para login</Link>
-    </p>
-  </AuthShell>;
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="email">E-mail</Label>
+          <Input
+            id="email"
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </div>
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          Enviar link de recuperação
+        </Button>
+      </form>
+      <p className="text-center text-sm text-muted-foreground mt-6">
+        <Link to="/login" className="text-primary font-medium hover:underline">
+          Voltar para login
+        </Link>
+      </p>
+    </AuthShell>
+  );
 }

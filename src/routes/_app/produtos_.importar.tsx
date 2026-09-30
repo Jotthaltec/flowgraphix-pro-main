@@ -5,7 +5,14 @@ import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { StatusBadge } from "@/components/status-badge";
 import { ImportadorProdutos } from "@/components/products/importador-produtos";
 import { AtualizarPrecos } from "@/components/products/atualizar-precos";
@@ -29,7 +36,9 @@ function ImportarProdutosPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("supplier_imports")
-        .select("id, source_url, product_name, supplier_sku, current_price, extraction_status, created_at")
+        .select(
+          "id, source_url, product_name, supplier_sku, current_price, extraction_status, created_at",
+        )
         .eq("company_id", profile!.company_id!)
         .order("created_at", { ascending: false })
         .limit(50);
@@ -98,7 +107,9 @@ function ImportarProdutosPage() {
                   <TableBody>
                     {history.map((h) => (
                       <TableRow key={h.id}>
-                        <TableCell className="font-medium text-sm max-w-[280px] truncate">{h.product_name}</TableCell>
+                        <TableCell className="font-medium text-sm max-w-[280px] truncate">
+                          {h.product_name}
+                        </TableCell>
                         <TableCell className="font-mono text-xs">{h.supplier_sku || "—"}</TableCell>
                         <TableCell className="text-sm">{fmtBRL(h.current_price)}</TableCell>
                         <TableCell>

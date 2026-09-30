@@ -162,19 +162,30 @@ export const isOpenStatus = (s: ImportItemStatus) => OPEN_STATUSES.includes(s);
 /** Atualiza um item da fila (status / dados normalizados / erros / product_id). */
 export async function updateImportItem(
   itemId: string,
-  patch: Partial<Pick<ImportItemRow, "status" | "normalized_data" | "errors" | "warnings" | "product_id">>,
+  patch: Partial<
+    Pick<ImportItemRow, "status" | "normalized_data" | "errors" | "warnings" | "product_id">
+  >,
 ): Promise<void> {
   try {
-    await db.from("product_import_items").update(patch as any).eq("id", itemId);
+    await db
+      .from("product_import_items")
+      .update(patch as any)
+      .eq("id", itemId);
   } catch {
     /* tolerante a falha */
   }
 }
 
 /** Atualiza contadores/estado do job. */
-export async function updateImportJob(jobId: string, patch: Partial<ImportJobRow> & { finished_at?: string }): Promise<void> {
+export async function updateImportJob(
+  jobId: string,
+  patch: Partial<ImportJobRow> & { finished_at?: string },
+): Promise<void> {
   try {
-    await db.from("product_import_jobs").update(patch as any).eq("id", jobId);
+    await db
+      .from("product_import_jobs")
+      .update(patch as any)
+      .eq("id", jobId);
   } catch {
     /* tolerante a falha */
   }
@@ -187,9 +198,13 @@ export async function syncJobCounters(jobId: string): Promise<void> {
     if (!items.length) return;
     const processed = items.filter((i) => !["pendente", "analisando"].includes(i.status)).length;
     const success = items.filter((i) => SUCCESS_STATUSES.includes(i.status)).length;
-    const errorCount = items.filter((i) => [...FAILED_STATUSES, "bloqueado"].includes(i.status)).length;
+    const errorCount = items.filter((i) =>
+      [...FAILED_STATUSES, "bloqueado"].includes(i.status),
+    ).length;
     const retryable = items.filter((i) => FAILED_STATUSES.includes(i.status)).length;
-    const allDone = items.every((i) => !["pendente", "analisando", "importando", "publicando"].includes(i.status));
+    const allDone = items.every(
+      (i) => !["pendente", "analisando", "importando", "publicando"].includes(i.status),
+    );
     await updateImportJob(jobId, {
       total_processed: processed,
       total_success: success,
