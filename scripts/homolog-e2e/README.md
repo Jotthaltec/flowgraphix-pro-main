@@ -16,7 +16,17 @@ cd scripts/homolog-e2e && npm i playwright@1.63.0
 Os scripts usam o site em `http://localhost:3001`; ajuste `SITE` se ele subir na 3000.
 Login local do dono (só existe no banco local): `dono@homolog.local` / `Homolog#2026`.
 
-## Roteiro validado em 30/09/2026
+## Jornada automática
+
+```bash
+node jornada.cjs      # 10 etapas; sai com código 1 se alguma falhar (~3 min)
+```
+
+Importar → publicar → preço pela fila → site → cadastro → pedido (e envio duplo)
+→ pagamento → produção → cancelamento → arquivar e republicar. Cada etapa age
+pela interface e confere o banco. Cria um cliente novo por execução.
+
+## Passos avulsos (roteiro validado em 30/09/2026)
 
 | Passo | Comando | Confere |
 |---|---|---|
