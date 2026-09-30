@@ -37,3 +37,6 @@ deploy-out
 *.njsproj
 *.sln
 *.sw?
+
+# Supabase CLI local
+supabase/.branches

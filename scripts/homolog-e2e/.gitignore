@@ -1,0 +1,5 @@
+shots/
+*-state.json
+pedido*.txt
+node_modules/
+package*.json

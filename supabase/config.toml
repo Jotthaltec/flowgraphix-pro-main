@@ -1,1 +1,6 @@
 project_id = "gkbbzypdakjrvxwvfjlc"
+# Stack local (homologação: scripts/homolog-local.sh). Espelha a produção: a
+# loja lê o schema store pela API; private nunca é exposto.
+[api]
+schemas = ["public", "graphql_public", "store"]
+extra_search_path = ["public", "extensions"]

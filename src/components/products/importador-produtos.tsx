@@ -748,8 +748,13 @@ export function ImportadorProdutos() {
                     </Button>
                   )}
                   <Select value={destination} onValueChange={(v) => setDestination(v as SaveDestination)}>
-                    <SelectTrigger className="h-9 w-[230px]" aria-label="Destino dos produtos">
-                      <SelectValue />
+                    <SelectTrigger
+                      className="h-9 w-[260px]"
+                      aria-label="Destino dos produtos"
+                      title={SAVE_DESTINATIONS.find((d) => d.value === destination)!.description}
+                    >
+                      {/* Só o rótulo: a descrição do item não cabe no campo fechado. */}
+                      <SelectValue>{SAVE_DESTINATIONS.find((d) => d.value === destination)!.label}</SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       {SAVE_DESTINATIONS.map((d) => (
