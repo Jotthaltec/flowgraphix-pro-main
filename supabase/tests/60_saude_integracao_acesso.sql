@@ -20,9 +20,11 @@ begin
   values ('QA-ACESSO', 'QA acesso', 'qa-acesso', 'unidade', 10, 'crm',
           '00000000-0000-4000-8000-0000000000e1', 'error', true, 'segredo interno');
   -- Um cliente da loja: perfil sem papel de equipe.
-  insert into auth.users (id) values ('00000000-0000-4000-8000-0000000000e2');
-  insert into store.profiles (id, role, active)
-  values ('00000000-0000-4000-8000-0000000000e2', 'cliente', true)
+  -- Com e-mail e nome: na homologação o gatilho real de cadastro cria o perfil.
+  insert into auth.users (id, email, raw_user_meta_data)
+  values ('00000000-0000-4000-8000-0000000000e2', 'qa.acesso@homolog.local', '{"full_name": "QA acesso"}');
+  insert into store.profiles (id, role, full_name, email, active)
+  values ('00000000-0000-4000-8000-0000000000e2', 'cliente', 'QA acesso', 'qa.acesso@homolog.local', true)
   on conflict (id) do update set role = 'cliente', active = true;
 end $$;
 

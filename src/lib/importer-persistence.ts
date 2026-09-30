@@ -47,7 +47,9 @@ export function normalizeUrlForMatch(raw?: string | null): string | null {
   if (!raw) return null;
   try {
     const u = new URL(raw.trim());
-    const TRACKING = /^(utm_|fbclid|gclid|gclsrc|mc_|_hs|ref|source)$/i;
+    // Prefixos (utm_*, mc_*, _hs*) e nomes exatos. Antes o "$" exigia o nome
+    // exato "utm_" e utm_source/utm_medium nunca eram descartados.
+    const TRACKING = /^(utm_.*|mc_.*|_hs.*|fbclid|gclid|gclsrc|ref|source)$/i;
     const params = [...u.searchParams.entries()]
       .filter(([k]) => !TRACKING.test(k))
       .sort(([a], [b]) => a.localeCompare(b));

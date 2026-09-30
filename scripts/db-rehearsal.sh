@@ -11,7 +11,8 @@
 # O dump contém dados reais — mantenha-o fora do repositório.
 #
 #   pg_dump --dbname="$SUPABASE_DB_URL" --schema=store --schema=public \
-#     --format=custom --no-owner --no-privileges --file=<dump>
+#     --schema=private --format=custom --no-owner --file=<dump>
+#   (sem --no-privileges o ensaio reproduz as permissões reais da produção)
 #
 #   bash scripts/db-rehearsal.sh restore <dump>     recria o container e restaura
 #   bash scripts/db-rehearsal.sh apply <arquivo>... aplica migrações, em ordem
@@ -48,9 +49,19 @@ case "$cmd" in
     # O public vazio da imagem dá lugar ao de produção. Erros de restauração não
     # são tolerados: um ensaio sobre cópia incompleta não prova nada.
     psql_c -c "drop schema if exists public cascade;"
+    # Dump com privilégios (sem --no-privileges) reproduz as permissões reais;
+    # sem eles, o ensaio concede tudo e os testes de acesso deixam de valer.
+    with_acl=$(docker exec "$CONTAINER" sh -c "pg_restore -l /tmp/restore.dump | grep -c ' ACL '" || true)
+    # Privilégios padrão de supabase_admin só o superusuário interno altera.
+    docker exec "$CONTAINER" sh -c "pg_restore -l /tmp/restore.dump | grep -v ' DEFAULT ACL ' > /tmp/restore.list"
     restore_section() {
-      docker exec "$CONTAINER" pg_restore -U postgres -d postgres --no-owner --no-privileges \
-        --exit-on-error --section="$1" /tmp/restore.dump
+      if [[ "$with_acl" -gt 0 ]]; then
+        docker exec "$CONTAINER" pg_restore -U postgres -d postgres --no-owner \
+          --exit-on-error --section="$1" -L /tmp/restore.list /tmp/restore.dump
+      else
+        docker exec "$CONTAINER" pg_restore -U postgres -d postgres --no-owner --no-privileges \
+          --exit-on-error --section="$1" /tmp/restore.dump
+      fi
     }
     restore_section pre-data
     restore_section data
@@ -63,6 +74,10 @@ case "$cmd" in
           printf "insert into auth.users(id) select distinct %s from %s where %s is not null on conflict do nothing;\n", m[1], t, m[1] }' \
       | psql_c
     restore_section post-data
+    if [[ "$with_acl" -gt 0 ]]; then
+      echo "permissões: as da produção ($with_acl regras do dump)"
+    else
+    echo "AVISO: dump sem privilégios; o ensaio libera tudo e os testes de acesso (50, 60) não valem."
     # Os grants não vêm no dump; sem eles as políticas RLS não podem ser ensaiadas.
     psql_c <<'SQL'
 grant usage on schema public, store to anon, authenticated, service_role;
@@ -77,6 +92,7 @@ revoke select on store.product_variants from anon, authenticated;
 grant select (id, product_id, sku, selection, production_days, available, is_default, position, created_at, updated_at)
   on store.product_variants to anon, authenticated;
 SQL
+    fi
     echo "restaurado: $(psql_c -tAc "select count(*) from store.products") produtos no site, $(psql_c -tAc "select count(*) from public.products") no CRM"
     ;;
   apply)

@@ -20,11 +20,11 @@ Login local do dono (só existe no banco local): `dono@homolog.local` / `Homolog
 
 | Passo | Comando | Confere |
 |---|---|---|
-| Importar e publicar | `node importar.js <link FuturaIM>` | "Publicado", link da loja, sem duplicar |
-| Cadastro do cliente | `node cliente.js cadastro` | perfil `cliente`, `store.customers`, `public.clients` |
-| Carrinho e checkout | `node cliente.js carrinho` / `node cliente.js pedido` | pedido único por compra |
-| Pagamento | `node admin.js pedido <id> "nota" "Confirmar pagamento manualmente"` | pagamento, financeiro e espelho no CRM "pago" |
-| Produção | `node admin.js situacao <id> aprovado_producao` | ordem em `store.production_orders` |
-| Atualização de preço | `ANON_KEY=… node preco.js 50 59.90` | fila processa em até 1 min; site mostra o preço novo |
-| Painel e telas do CRM | `node crm.js ver <nome> /integracao-nexus` | status real, fila, datas |
+| Importar e publicar | `node importar.cjs <link FuturaIM>` | "Publicado", link da loja, sem duplicar |
+| Cadastro do cliente | `node cliente.cjs cadastro` | perfil `cliente`, `store.customers`, `public.clients` |
+| Carrinho e checkout | `node cliente.cjs carrinho` / `node cliente.cjs pedido` | pedido único por compra |
+| Pagamento | `node admin.cjs pedido <id> "nota" "Confirmar pagamento manualmente"` | pagamento, financeiro e espelho no CRM "pago" |
+| Produção | `node admin.cjs situacao <id> aprovado_producao` | ordem em `store.production_orders` |
+| Atualização de preço | `ANON_KEY=… node preco.cjs 50 59.90` | fila processa em até 1 min; site mostra o preço novo |
+| Painel e telas do CRM | `node crm.cjs ver <nome> /integracao-nexus` | status real, fila, datas |
 | Estado de um pedido | `psql -v num=NP-26-01005 -f estado-pedido.sql` | loja, pagamentos, financeiro, produção, CRM, histórico |

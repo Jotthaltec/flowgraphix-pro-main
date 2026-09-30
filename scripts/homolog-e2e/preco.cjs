@@ -1,6 +1,6 @@
 // Altera o preço de venda de uma tiragem no Flow, como o editor do CRM faz
 // (public.products.quantity_prices), com a sessão do dono e o RLS normal.
-// Uso: node preco.js <quantidade> <novo total>
+// Uso: node preco.cjs <quantidade> <novo total>
 const API = "http://127.0.0.1:54321";
 const KEY = process.env.ANON_KEY;
 

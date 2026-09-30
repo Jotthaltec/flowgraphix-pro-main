@@ -1,5 +1,5 @@
 // Jornada do cliente na homologação local (site em :3001, banco local).
-// Uso: node cliente.js <etapa>   etapas: cadastro | carrinho
+// Uso: node cliente.cjs <etapa>   etapas: cadastro | carrinho
 const { chromium } = require("playwright");
 const fs = require("fs");
 const SHOTS = __dirname + "/shots";

@@ -1,4 +1,4 @@
-// Lado do CRM na homologação local (:8080). Uso: node crm.js <etapa> [args]
+// Lado do CRM na homologação local (:8080). Uso: node crm.cjs <etapa> [args]
 const { chromium } = require("playwright");
 const fs = require("fs");
 const SHOTS = __dirname + "/shots";
@@ -33,7 +33,7 @@ async function login(page) {
   if (page.url().includes("/login")) await login(page);
 
   if (step === "ver") {
-    // node crm.js ver <nome> <rota> — print e texto principal de uma tela
+    // node crm.cjs ver <nome> <rota> — print e texto principal de uma tela
     const [name, route] = args;
     await page.goto(`${CRM}${route}`, { waitUntil: "networkidle" });
     await page.waitForTimeout(1500);

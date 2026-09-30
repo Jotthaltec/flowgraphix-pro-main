@@ -185,7 +185,9 @@ begin
     format('13b: %s', row_to_json(st));
 
   -- 14. Nativo não tem estado de sincronização.
-  assert (select status from store.product_sync_state((select id from store.products where sync_origin = 'site' limit 1)))
+  insert into store.products (sku, name, slug, price_unit, base_price)
+  values ('QA-NATIVO-40', 'QA nativo', 'qa-nativo-40', 'unidade', 10);
+  assert (select status from store.product_sync_state((select id from store.products where sku = 'QA-NATIVO-40')))
     = 'native', '14: nativo';
 end $$;
 

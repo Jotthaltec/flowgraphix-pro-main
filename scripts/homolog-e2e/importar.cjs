@@ -1,5 +1,5 @@
 // Importação pelo CRM na homologação: link do fornecedor -> analisar ->
-// "Salvar e publicar na Nexus". Uso: node importar.js <url do fornecedor>
+// "Salvar e publicar na Nexus". Uso: node importar.cjs <url do fornecedor>
 const { chromium } = require("playwright");
 const SHOTS = __dirname + "/shots";
 

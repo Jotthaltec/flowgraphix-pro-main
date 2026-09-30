@@ -35,7 +35,8 @@ begin
 
   v_result := store.publish_crm_product(v_crm);
   assert v_result ->> 'ok' = 'true', 'publicação retorna ok';
-  assert v_result ->> 'action' = 'update', 'republicar é update, não insert';
+  -- Já publicado: update (sem assinatura ou com mudança) ou noop (igual). Nunca insert.
+  assert v_result ->> 'action' in ('update', 'noop'), format('republicar não pode ser %s', v_result ->> 'action');
 
   select to_jsonb(x) into v_after from (
     select sp.imagens, sp.grupos_opcao, sp.opcoes, sp.variantes, sp.tiragens, s.active, s.sync_origin

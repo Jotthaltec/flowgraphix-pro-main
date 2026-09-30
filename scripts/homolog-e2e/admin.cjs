@@ -1,4 +1,4 @@
-// Admin da loja (site :3001) na homologação. Uso: node admin.js <etapa> [args]
+// Admin da loja (site :3001) na homologação. Uso: node admin.cjs <etapa> [args]
 const { chromium } = require("playwright");
 const fs = require("fs");
 const SHOTS = __dirname + "/shots";
@@ -33,7 +33,7 @@ async function shot(page, name) {
   }
 
   if (step === "pedido") {
-    // node admin.js pedido <order-id> [clicar "Texto do botão"]
+    // node admin.cjs pedido <order-id> [clicar "Texto do botão"]
     const [orderId, , click] = args;
     await page.goto(`${SITE}/admin/pedidos/${orderId}`, { waitUntil: "networkidle" });
     if (click) {
@@ -54,7 +54,7 @@ async function shot(page, name) {
   }
 
   if (step === "situacao") {
-    // node admin.js situacao <order-id> <status>
+    // node admin.cjs situacao <order-id> <status>
     const [orderId, status] = args;
     await page.goto(`${SITE}/admin/pedidos/${orderId}`, { waitUntil: "networkidle" });
     await page.selectOption("select#status", status);

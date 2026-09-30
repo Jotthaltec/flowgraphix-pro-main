@@ -42,7 +42,9 @@ begin
   ) into v_owner;
   perform pg_temp.act_as(v_owner);
 
-  select id into v_native from store.products where sync_origin = 'site' limit 1;
+  -- Nativo próprio do teste: a cópia pode não ter nenhum (os mockups foram apagados em 29/09).
+  insert into store.products (sku, name, slug, price_unit, base_price)
+  values ('QA-NATIVO-30', 'QA nativo', 'qa-nativo-30', 'unidade', 10) returning id into v_native;
   v_native_hash := store.product_content_hash(v_native);
 
   insert into public.products (id, company_id, name, category, sale_price, status, production_deadline)
