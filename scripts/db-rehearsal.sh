@@ -69,6 +69,9 @@ grant usage on schema public, store to anon, authenticated, service_role;
 grant all on all tables in schema public, store to anon, authenticated, service_role;
 grant all on all sequences in schema public, store to anon, authenticated, service_role;
 grant execute on all functions in schema public, store to anon, authenticated, service_role;
+-- 20260822185901: as políticas RLS chamam private.is_company_member.
+grant usage on schema private to anon, authenticated, service_role;
+grant execute on all functions in schema private to anon, authenticated, service_role;
 SQL
     echo "restaurado: $(psql_c -tAc "select count(*) from store.products") produtos no site, $(psql_c -tAc "select count(*) from public.products") no CRM"
     ;;
