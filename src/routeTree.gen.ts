@@ -35,6 +35,7 @@ import { Route as AppContratosRouteImport } from './routes/_app/contratos'
 import { Route as AppConfiguracoesRouteImport } from './routes/_app/configuracoes'
 import { Route as AppClientesRouteImport } from './routes/_app/clientes'
 import { Route as AppArquivosRouteImport } from './routes/_app/arquivos'
+import { Route as ApiSocialNewProductRouteImport } from './routes/api.social.new-product'
 import { Route as AppProdutosImportarRouteImport } from './routes/_app/produtos_.importar'
 
 const SignupRoute = SignupRouteImport.update({
@@ -166,6 +167,11 @@ const AppArquivosRoute = AppArquivosRouteImport.update({
   path: '/arquivos',
   getParentRoute: () => AppRoute,
 } as any)
+const ApiSocialNewProductRoute = ApiSocialNewProductRouteImport.update({
+  id: '/api/social/new-product',
+  path: '/api/social/new-product',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppProdutosImportarRoute = AppProdutosImportarRouteImport.update({
   id: '/produtos_/importar',
   path: '/produtos/importar',
@@ -199,6 +205,7 @@ export interface FileRoutesByFullPath {
   '/relatorios': typeof AppRelatoriosRoute
   '/print-op/$itemId': typeof PrintOpItemIdRoute
   '/produtos/importar': typeof AppProdutosImportarRoute
+  '/api/social/new-product': typeof ApiSocialNewProductRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -227,6 +234,7 @@ export interface FileRoutesByTo {
   '/relatorios': typeof AppRelatoriosRoute
   '/print-op/$itemId': typeof PrintOpItemIdRoute
   '/produtos/importar': typeof AppProdutosImportarRoute
+  '/api/social/new-product': typeof ApiSocialNewProductRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -257,6 +265,7 @@ export interface FileRoutesById {
   '/_app/relatorios': typeof AppRelatoriosRoute
   '/print-op/$itemId': typeof PrintOpItemIdRoute
   '/_app/produtos_/importar': typeof AppProdutosImportarRoute
+  '/api/social/new-product': typeof ApiSocialNewProductRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -287,6 +296,7 @@ export interface FileRouteTypes {
     | '/relatorios'
     | '/print-op/$itemId'
     | '/produtos/importar'
+    | '/api/social/new-product'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -315,6 +325,7 @@ export interface FileRouteTypes {
     | '/relatorios'
     | '/print-op/$itemId'
     | '/produtos/importar'
+    | '/api/social/new-product'
   id:
     | '__root__'
     | '/'
@@ -344,6 +355,7 @@ export interface FileRouteTypes {
     | '/_app/relatorios'
     | '/print-op/$itemId'
     | '/_app/produtos_/importar'
+    | '/api/social/new-product'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -354,6 +366,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
   PrintOpItemIdRoute: typeof PrintOpItemIdRoute
+  ApiSocialNewProductRoute: typeof ApiSocialNewProductRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -540,6 +553,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppArquivosRouteImport
       parentRoute: typeof AppRoute
     }
+    '/api/social/new-product': {
+      id: '/api/social/new-product'
+      path: '/api/social/new-product'
+      fullPath: '/api/social/new-product'
+      preLoaderRoute: typeof ApiSocialNewProductRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/produtos_/importar': {
       id: '/_app/produtos_/importar'
       path: '/produtos/importar'
@@ -606,6 +626,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
   PrintOpItemIdRoute: PrintOpItemIdRoute,
+  ApiSocialNewProductRoute: ApiSocialNewProductRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
