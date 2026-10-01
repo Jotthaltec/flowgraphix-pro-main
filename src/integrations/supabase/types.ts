@@ -7052,6 +7052,106 @@ export type Database = {
           },
         ]
       }
+      conversion_events: {
+        Row: {
+          attempts: number
+          company_id: string
+          created_at: string
+          event_id: string
+          event_name: string
+          event_time: string
+          events_received: number | null
+          fbtrace_id: string | null
+          id: string
+          last_error_code: string | null
+          last_error_message: string | null
+          last_http_status: number | null
+          locked_until: string | null
+          next_attempt_at: string
+          order_id: string | null
+          payload: Json
+          quote_id: string | null
+          sent_at: string | null
+          sent_mode: string | null
+          session_id: string | null
+          skip_reason: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          company_id: string
+          created_at?: string
+          event_id: string
+          event_name: string
+          event_time: string
+          events_received?: number | null
+          fbtrace_id?: string | null
+          id?: string
+          last_error_code?: string | null
+          last_error_message?: string | null
+          last_http_status?: number | null
+          locked_until?: string | null
+          next_attempt_at?: string
+          order_id?: string | null
+          payload?: Json
+          quote_id?: string | null
+          sent_at?: string | null
+          sent_mode?: string | null
+          session_id?: string | null
+          skip_reason?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          company_id?: string
+          created_at?: string
+          event_id?: string
+          event_name?: string
+          event_time?: string
+          events_received?: number | null
+          fbtrace_id?: string | null
+          id?: string
+          last_error_code?: string | null
+          last_error_message?: string | null
+          last_http_status?: number | null
+          locked_until?: string | null
+          next_attempt_at?: string
+          order_id?: string | null
+          payload?: Json
+          quote_id?: string | null
+          sent_at?: string | null
+          sent_mode?: string | null
+          session_id?: string | null
+          skip_reason?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversion_events_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversion_events_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "quotes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversion_events_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coupon_uses: {
         Row: {
           coupon_id: string
@@ -7717,6 +7817,269 @@ export type Database = {
         }
         Relationships: []
       }
+      marketing_attribution_audit: {
+        Row: {
+          action: string
+          actor: string | null
+          after: Json | null
+          before: Json | null
+          company_id: string
+          created_at: string
+          id: number
+          order_id: string | null
+          reason: string | null
+        }
+        Insert: {
+          action: string
+          actor?: string | null
+          after?: Json | null
+          before?: Json | null
+          company_id: string
+          created_at?: string
+          id?: never
+          order_id?: string | null
+          reason?: string | null
+        }
+        Update: {
+          action?: string
+          actor?: string | null
+          after?: Json | null
+          before?: Json | null
+          company_id?: string
+          created_at?: string
+          id?: never
+          order_id?: string | null
+          reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_attribution_audit_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketing_attribution_settings: {
+        Row: {
+          company_id: string
+          primary_model: string
+          updated_at: string
+          updated_by: string | null
+          version: number
+          window_days: number
+        }
+        Insert: {
+          company_id: string
+          primary_model?: string
+          updated_at?: string
+          updated_by?: string | null
+          version?: number
+          window_days?: number
+        }
+        Update: {
+          company_id?: string
+          primary_model?: string
+          updated_at?: string
+          updated_by?: string | null
+          version?: number
+          window_days?: number
+        }
+        Relationships: []
+      }
+      marketing_session_links: {
+        Row: {
+          company_id: string
+          id: string
+          linked_at: string
+          session_id: string
+          subject_id: string
+          subject_type: string
+        }
+        Insert: {
+          company_id: string
+          id?: string
+          linked_at?: string
+          session_id: string
+          subject_id: string
+          subject_type: string
+        }
+        Update: {
+          company_id?: string
+          id?: string
+          linked_at?: string
+          session_id?: string
+          subject_id?: string
+          subject_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_session_links_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketing_sessions: {
+        Row: {
+          ads_consent: boolean
+          client_user_agent: string | null
+          company_id: string
+          first_seen_at: string
+          id: string
+          last_seen_at: string
+          profile_id: string | null
+        }
+        Insert: {
+          ads_consent?: boolean
+          client_user_agent?: string | null
+          company_id: string
+          first_seen_at?: string
+          id: string
+          last_seen_at?: string
+          profile_id?: string | null
+        }
+        Update: {
+          ads_consent?: boolean
+          client_user_agent?: string | null
+          company_id?: string
+          first_seen_at?: string
+          id?: string
+          last_seen_at?: string
+          profile_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_sessions_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      marketing_signal_settings: {
+        Row: {
+          company_id: string
+          enabled: boolean
+          graph_api_version: string
+          mode: string
+          pixel_id: string | null
+          site_url: string
+          test_event_code: string | null
+          updated_at: string
+          updated_by: string | null
+          version: number
+        }
+        Insert: {
+          company_id: string
+          enabled?: boolean
+          graph_api_version?: string
+          mode?: string
+          pixel_id?: string | null
+          site_url?: string
+          test_event_code?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          version?: number
+        }
+        Update: {
+          company_id?: string
+          enabled?: boolean
+          graph_api_version?: string
+          mode?: string
+          pixel_id?: string | null
+          site_url?: string
+          test_event_code?: string | null
+          updated_at?: string
+          updated_by?: string | null
+          version?: number
+        }
+        Relationships: []
+      }
+      marketing_touchpoints: {
+        Row: {
+          channel: string
+          company_id: string
+          fbc: string | null
+          fbclid: string | null
+          fbp: string | null
+          first_occurred_at: string
+          hits: number
+          id: string
+          landing_path: string
+          meta_ad_id: string | null
+          meta_adset_id: string | null
+          meta_campaign_id: string | null
+          occurred_at: string
+          referrer_host: string | null
+          session_id: string
+          touch_key: string
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
+        }
+        Insert: {
+          channel: string
+          company_id: string
+          fbc?: string | null
+          fbclid?: string | null
+          fbp?: string | null
+          first_occurred_at?: string
+          hits?: number
+          id?: string
+          landing_path: string
+          meta_ad_id?: string | null
+          meta_adset_id?: string | null
+          meta_campaign_id?: string | null
+          occurred_at?: string
+          referrer_host?: string | null
+          session_id: string
+          touch_key: string
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+        }
+        Update: {
+          channel?: string
+          company_id?: string
+          fbc?: string | null
+          fbclid?: string | null
+          fbp?: string | null
+          first_occurred_at?: string
+          hits?: number
+          id?: string
+          landing_path?: string
+          meta_ad_id?: string | null
+          meta_adset_id?: string | null
+          meta_campaign_id?: string | null
+          occurred_at?: string
+          referrer_host?: string | null
+          session_id?: string
+          touch_key?: string
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "marketing_touchpoints_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           attachment_name: string | null
@@ -8092,6 +8455,114 @@ export type Database = {
             columns: ["opportunity_id"]
             isOneToOne: false
             referencedRelation: "opportunities"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_attributions: {
+        Row: {
+          attributed_at: string
+          channel: string
+          company_id: string
+          currency: string
+          id: string
+          is_primary: boolean
+          meta_ad_id: string | null
+          meta_adset_id: string | null
+          meta_campaign_id: string | null
+          model: string
+          order_id: string
+          order_number: string
+          revenue: number
+          reversal_reason: string | null
+          reversed_at: string | null
+          settings_version: number
+          shipping: number
+          source: string
+          status: string
+          touch_at: string | null
+          touchpoint_id: string | null
+          updated_at: string
+          utm_campaign: string | null
+          utm_content: string | null
+          utm_medium: string | null
+          utm_source: string | null
+          utm_term: string | null
+          window_days: number
+        }
+        Insert: {
+          attributed_at?: string
+          channel: string
+          company_id: string
+          currency?: string
+          id?: string
+          is_primary: boolean
+          meta_ad_id?: string | null
+          meta_adset_id?: string | null
+          meta_campaign_id?: string | null
+          model: string
+          order_id: string
+          order_number: string
+          revenue: number
+          reversal_reason?: string | null
+          reversed_at?: string | null
+          settings_version: number
+          shipping?: number
+          source?: string
+          status?: string
+          touch_at?: string | null
+          touchpoint_id?: string | null
+          updated_at?: string
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          window_days: number
+        }
+        Update: {
+          attributed_at?: string
+          channel?: string
+          company_id?: string
+          currency?: string
+          id?: string
+          is_primary?: boolean
+          meta_ad_id?: string | null
+          meta_adset_id?: string | null
+          meta_campaign_id?: string | null
+          model?: string
+          order_id?: string
+          order_number?: string
+          revenue?: number
+          reversal_reason?: string | null
+          reversed_at?: string | null
+          settings_version?: number
+          shipping?: number
+          source?: string
+          status?: string
+          touch_at?: string | null
+          touchpoint_id?: string | null
+          updated_at?: string
+          utm_campaign?: string | null
+          utm_content?: string | null
+          utm_medium?: string | null
+          utm_source?: string | null
+          utm_term?: string | null
+          window_days?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_attributions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_attributions_touchpoint_id_fkey"
+            columns: ["touchpoint_id"]
+            isOneToOne: false
+            referencedRelation: "marketing_touchpoints"
             referencedColumns: ["id"]
           },
         ]
@@ -10500,6 +10971,57 @@ export type Database = {
         }
         Relationships: []
       }
+      social_product_campaigns: {
+        Row: {
+          caption: string | null
+          completed_at: string | null
+          copy: Json | null
+          created_at: string
+          feed_path: string | null
+          id: string
+          last_error: string | null
+          notification_status: string | null
+          notified_at: string | null
+          product_id: string
+          product_snapshot: Json | null
+          status: string
+          story_path: string | null
+          updated_at: string
+        }
+        Insert: {
+          caption?: string | null
+          completed_at?: string | null
+          copy?: Json | null
+          created_at?: string
+          feed_path?: string | null
+          id?: string
+          last_error?: string | null
+          notification_status?: string | null
+          notified_at?: string | null
+          product_id: string
+          product_snapshot?: Json | null
+          status?: string
+          story_path?: string | null
+          updated_at?: string
+        }
+        Update: {
+          caption?: string | null
+          completed_at?: string | null
+          copy?: Json | null
+          created_at?: string
+          feed_path?: string | null
+          id?: string
+          last_error?: string | null
+          notification_status?: string | null
+          notified_at?: string | null
+          product_id?: string
+          product_snapshot?: Json | null
+          status?: string
+          story_path?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       stock_items: {
         Row: {
           active: boolean
@@ -10887,17 +11409,62 @@ export type Database = {
         Args: { p_crm_product_id: string; p_reason: string }
         Returns: Json
       }
+      attribute_order: { Args: { p_order_id: string }; Returns: undefined }
       auth_role: { Args: never; Returns: string }
       can_access_customer: { Args: { target: string }; Returns: boolean }
       cancel_order: {
         Args: { p_order_id: string; p_reason: string }
         Returns: Json
       }
+      claim_conversion_events: {
+        Args: { p_limit?: number }
+        Returns: {
+          attempts: number
+          event_id: string
+          event_name: string
+          id: string
+          payload: Json
+        }[]
+      }
       close_cash_session: {
         Args: { p_closing_amount: number; p_notes?: string }
         Returns: Json
       }
+      complete_conversion_event: {
+        Args: {
+          p_error_code?: string
+          p_error_message?: string
+          p_events_received?: number
+          p_fbtrace_id?: string
+          p_http_status: number
+          p_id: string
+          p_mode: string
+        }
+        Returns: string
+      }
+      conversion_session_for: {
+        Args: { p_order_id: string; p_quote_id: string }
+        Returns: {
+          ads_consent: boolean
+          client_user_agent: string | null
+          company_id: string
+          first_seen_at: string
+          id: string
+          last_seen_at: string
+          profile_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "marketing_sessions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       convert_quote_to_order: { Args: { p_quote_id: string }; Returns: Json }
+      correct_order_attribution: {
+        Args: { p_order_id: string; p_reason: string; p_touchpoint_id: string }
+        Returns: Json
+      }
       create_order: {
         Args: { p_idempotency_key: string; p_items: Json; p_order: Json }
         Returns: Json
@@ -10928,8 +11495,18 @@ export type Database = {
         Args: { p_attrs: Json; p_store_product_id: string }
         Returns: Json
       }
+      dispatch_conversion_events: { Args: never; Returns: boolean }
+      dispatch_social_product_campaign: {
+        Args: { p_product_id: string }
+        Returns: undefined
+      }
+      enqueue_lead_event: { Args: { p_quote_id: string }; Returns: undefined }
       enqueue_product_sync: {
         Args: { p_crm_product_id: string; p_event: string }
+        Returns: undefined
+      }
+      enqueue_purchase_event: {
+        Args: { p_order_id: string }
         Returns: undefined
       }
       get_public_quote: { Args: { token: string }; Returns: Json }
@@ -10944,6 +11521,31 @@ export type Database = {
         Args: { key_name: string; value: Json }
         Returns: number
       }
+      link_marketing_session: {
+        Args: {
+          p_session_id: string
+          p_subject_id: string
+          p_subject_type: string
+        }
+        Returns: boolean
+      }
+      marketing_channel: {
+        Args: {
+          p_fbclid: string
+          p_medium: string
+          p_meta_ad_id: string
+          p_referrer_host: string
+          p_source: string
+        }
+        Returns: string
+      }
+      marketing_clean: {
+        Args: { p_lower?: boolean; p_value: string }
+        Returns: string
+      }
+      meta_capi_config: { Args: never; Returns: Json }
+      meta_hash: { Args: { p_value: string }; Returns: string }
+      meta_phone: { Args: { p_value: string }; Returns: string }
       open_cash_session: { Args: { p_opening_amount?: number }; Returns: Json }
       order_status_rank: { Args: { p_status: string }; Returns: number }
       process_product_sync_queue: { Args: { p_limit?: number }; Returns: Json }
@@ -10968,6 +11570,7 @@ export type Database = {
           status: string
         }[]
       }
+      public_tracking_config: { Args: never; Returns: Json }
       publish_crm_product: { Args: { p_crm_product_id: string }; Returns: Json }
       publish_crm_product_apply: {
         Args: { p_crm_product_id: string }
@@ -10976,6 +11579,10 @@ export type Database = {
       publish_crm_product_internal: {
         Args: { p_crm_product_id: string; p_origin: string }
         Returns: Json
+      }
+      record_marketing_touchpoint: {
+        Args: { p_payload: Json; p_session_id: string }
+        Returns: string
       }
       remove_product_internal: {
         Args: { p_origin: string; p_product_id: string }
@@ -11009,11 +11616,39 @@ export type Database = {
         Returns: Json
       }
       rotulo_status_pedido: { Args: { p_status: string }; Returns: string }
+      set_marketing_attribution_settings: {
+        Args: { p_primary_model: string; p_window_days: number }
+        Returns: Json
+      }
+      set_marketing_signal_settings: {
+        Args: {
+          p_enabled: boolean
+          p_graph_api_version?: string
+          p_mode: string
+          p_pixel_id: string
+          p_test_event_code?: string
+        }
+        Returns: Json
+      }
       slugify: { Args: { value: string }; Returns: string }
       text_array_to_string: { Args: { value: string[] }; Returns: string }
       unpublish_crm_product: {
         Args: { p_crm_product_id: string; p_reason: string }
         Returns: Json
+      }
+      upsert_conversion_event: {
+        Args: {
+          p_company: string
+          p_event_id: string
+          p_event_time: string
+          p_name: string
+          p_order: string
+          p_payload: Json
+          p_quote: string
+          p_session: string
+          p_skip_reason: string
+        }
+        Returns: undefined
       }
       withdraw_crm_product: {
         Args: { p_crm_product_id: string; p_mode: string; p_reason: string }

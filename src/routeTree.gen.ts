@@ -36,6 +36,7 @@ import { Route as AppConfiguracoesRouteImport } from './routes/_app/configuracoe
 import { Route as AppClientesRouteImport } from './routes/_app/clientes'
 import { Route as AppArquivosRouteImport } from './routes/_app/arquivos'
 import { Route as ApiSocialNewProductRouteImport } from './routes/api.social.new-product'
+import { Route as ApiMarketingConversionsRouteImport } from './routes/api.marketing.conversions'
 import { Route as AppProdutosImportarRouteImport } from './routes/_app/produtos_.importar'
 
 const SignupRoute = SignupRouteImport.update({
@@ -172,6 +173,11 @@ const ApiSocialNewProductRoute = ApiSocialNewProductRouteImport.update({
   path: '/api/social/new-product',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMarketingConversionsRoute = ApiMarketingConversionsRouteImport.update({
+  id: '/api/marketing/conversions',
+  path: '/api/marketing/conversions',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppProdutosImportarRoute = AppProdutosImportarRouteImport.update({
   id: '/produtos_/importar',
   path: '/produtos/importar',
@@ -205,6 +211,7 @@ export interface FileRoutesByFullPath {
   '/relatorios': typeof AppRelatoriosRoute
   '/print-op/$itemId': typeof PrintOpItemIdRoute
   '/produtos/importar': typeof AppProdutosImportarRoute
+  '/api/marketing/conversions': typeof ApiMarketingConversionsRoute
   '/api/social/new-product': typeof ApiSocialNewProductRoute
 }
 export interface FileRoutesByTo {
@@ -234,6 +241,7 @@ export interface FileRoutesByTo {
   '/relatorios': typeof AppRelatoriosRoute
   '/print-op/$itemId': typeof PrintOpItemIdRoute
   '/produtos/importar': typeof AppProdutosImportarRoute
+  '/api/marketing/conversions': typeof ApiMarketingConversionsRoute
   '/api/social/new-product': typeof ApiSocialNewProductRoute
 }
 export interface FileRoutesById {
@@ -265,6 +273,7 @@ export interface FileRoutesById {
   '/_app/relatorios': typeof AppRelatoriosRoute
   '/print-op/$itemId': typeof PrintOpItemIdRoute
   '/_app/produtos_/importar': typeof AppProdutosImportarRoute
+  '/api/marketing/conversions': typeof ApiMarketingConversionsRoute
   '/api/social/new-product': typeof ApiSocialNewProductRoute
 }
 export interface FileRouteTypes {
@@ -296,6 +305,7 @@ export interface FileRouteTypes {
     | '/relatorios'
     | '/print-op/$itemId'
     | '/produtos/importar'
+    | '/api/marketing/conversions'
     | '/api/social/new-product'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -325,6 +335,7 @@ export interface FileRouteTypes {
     | '/relatorios'
     | '/print-op/$itemId'
     | '/produtos/importar'
+    | '/api/marketing/conversions'
     | '/api/social/new-product'
   id:
     | '__root__'
@@ -355,6 +366,7 @@ export interface FileRouteTypes {
     | '/_app/relatorios'
     | '/print-op/$itemId'
     | '/_app/produtos_/importar'
+    | '/api/marketing/conversions'
     | '/api/social/new-product'
   fileRoutesById: FileRoutesById
 }
@@ -366,6 +378,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
   PrintOpItemIdRoute: typeof PrintOpItemIdRoute
+  ApiMarketingConversionsRoute: typeof ApiMarketingConversionsRoute
   ApiSocialNewProductRoute: typeof ApiSocialNewProductRoute
 }
 
@@ -560,6 +573,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSocialNewProductRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/marketing/conversions': {
+      id: '/api/marketing/conversions'
+      path: '/api/marketing/conversions'
+      fullPath: '/api/marketing/conversions'
+      preLoaderRoute: typeof ApiMarketingConversionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/produtos_/importar': {
       id: '/_app/produtos_/importar'
       path: '/produtos/importar'
@@ -626,6 +646,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
   PrintOpItemIdRoute: PrintOpItemIdRoute,
+  ApiMarketingConversionsRoute: ApiMarketingConversionsRoute,
   ApiSocialNewProductRoute: ApiSocialNewProductRoute,
 }
 export const routeTree = rootRouteImport

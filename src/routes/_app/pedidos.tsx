@@ -49,6 +49,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { civilDateFromToday, formatCivilDate } from "@/lib/date";
+import { summarizeOrderOrigin } from "@/lib/marketing-attribution";
 
 export const Route = createFileRoute("/_app/pedidos")({ component: PedidosPage });
 
@@ -173,7 +174,8 @@ function PedidosPage() {
           `
           id, number, total, payment_status, status, estimated_delivery, priority,
           customer:customers(name),
-          items:order_items(product_name)
+          items:order_items(product_name),
+          attribution:order_attributions(channel, utm_source, utm_campaign, status, is_primary, source)
         `,
         )
         .order("created_at", { ascending: false });
@@ -189,6 +191,7 @@ function PedidosPage() {
         priority: order.priority,
         product_desc: order.items?.map((item) => item.product_name).join(", ") || "—",
         clients: order.customer,
+        origin: summarizeOrderOrigin(order.attribution),
       }));
     },
     enabled: !!profile,
@@ -509,19 +512,20 @@ function PedidosPage() {
               <TableHead>Financeiro</TableHead>
               <TableHead>Produção</TableHead>
               <TableHead className="hidden md:table-cell">Prazo</TableHead>
+              <TableHead className="hidden lg:table-cell">Origem</TableHead>
               <TableHead className="w-12"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-6">
+                <TableCell colSpan={9} className="text-center py-6">
                   <Loader2 className="mx-auto animate-spin" />
                 </TableCell>
               </TableRow>
             ) : filteredData?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-6 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-6 text-muted-foreground">
                   Nenhum pedido encontrado.
                 </TableCell>
               </TableRow>
@@ -552,6 +556,30 @@ function PedidosPage() {
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-sm">
                     {p.deadline ? formatCivilDate(p.deadline) : "-"}
+                  </TableCell>
+                  <TableCell
+                    className="hidden lg:table-cell text-sm"
+                    title={
+                      p.origin ? undefined : "A origem é atribuída quando o pagamento é confirmado."
+                    }
+                  >
+                    {p.origin ? (
+                      <div
+                        className={
+                          p.origin.reversed ? "line-through text-muted-foreground" : undefined
+                        }
+                      >
+                        <div>
+                          {p.origin.label}
+                          {p.origin.manual ? " (corrigida)" : ""}
+                        </div>
+                        {p.origin.detail ? (
+                          <div className="text-xs text-muted-foreground">{p.origin.detail}</div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>

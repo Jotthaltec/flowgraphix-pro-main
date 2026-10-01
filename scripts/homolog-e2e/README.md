@@ -10,7 +10,11 @@ npx supabase start                                    # na pasta Printiflow
 bash scripts/homolog-local.sh refresh <dump com privilégios>
 npm run dev                                           # CRM em :8080
 (cd ../Nexus-Printi && npm run dev)                   # site em :3000 (ou :3001 se ocupada)
-cd scripts/homolog-e2e && npm i playwright@1.63.0
+# Playwright FORA do projeto: esta pasta não tem package.json, então "npm i" aqui
+# sobe até o Printiflow e reinstala as dependências do CRM sem o lockfile
+# (aconteceu em 30/09/2026: TanStack atualizado e CRM quebrado em dev).
+mkdir -p ~/e2e-deps && cd ~/e2e-deps && echo '{"private":true}' > package.json && npm i playwright@1.63.0
+export NODE_PATH=~/e2e-deps/node_modules   # os scripts acham o playwright por aqui
 ```
 
 Os scripts usam o site em `http://localhost:3001`; ajuste `SITE` se ele subir na 3000.
@@ -20,6 +24,7 @@ Login local do dono (só existe no banco local): `dono@homolog.local` / `Homolog
 
 ```bash
 node jornada.cjs      # 10 etapas; sai com código 1 se alguma falhar (~3 min)
+node atribuicao.cjs   # 7 etapas: anúncio → consentimento → pedido → pagamento → atribuição e Conversions API
 ```
 
 Importar → publicar → preço pela fila → site → cadastro → pedido (e envio duplo)

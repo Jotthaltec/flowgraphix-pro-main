@@ -1,17 +1,12 @@
-import { timingSafeEqual } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
+import { hasBearerSecret } from "@/lib/bearer-auth.server";
 import {
   processNewProductCampaign,
   socialWebhookSchema,
 } from "@/services/social-campaign/campaign.server";
 
 function authorized(request: Request) {
-  const expected = process.env.SOCIAL_WEBHOOK_SECRET;
-  const received = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!expected || !received) return false;
-  const a = Buffer.from(expected);
-  const b = Buffer.from(received);
-  return a.length === b.length && timingSafeEqual(a, b);
+  return hasBearerSecret(request, process.env.SOCIAL_WEBHOOK_SECRET);
 }
 
 export const Route = createFileRoute("/api/social/new-product")({

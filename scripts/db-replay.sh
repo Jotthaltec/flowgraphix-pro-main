@@ -54,7 +54,9 @@ if [[ "${1:-}" != "--tests" ]]; then
   echo "== aplicando migrações =="
   for f in "$ROOT"/supabase/replay/*.sql "$ROOT"/supabase/migrations/*.sql; do
     nome="$(basename "$f")"
-    if psql_c < "$f" > /tmp/replay_out.txt 2>&1; then
+    # Shims *.superuser.sql mexem em schemas de serviço (storage) que postgres não controla.
+    usuario=postgres; [[ "$nome" == *.superuser.sql ]] && usuario=supabase_admin
+    if docker exec -i "$CONTAINER" psql -U "$usuario" -d postgres -v ON_ERROR_STOP=1 -q < "$f" > /tmp/replay_out.txt 2>&1; then
       echo "  [ok] $nome"
     else
       echo "  [!!] $nome"; cat /tmp/replay_out.txt; exit 1

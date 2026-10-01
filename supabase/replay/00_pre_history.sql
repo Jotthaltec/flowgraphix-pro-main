@@ -33,3 +33,31 @@ as $$
     where p.user_id = (select auth.uid()) and p.company_id = target_company_id
   );
 $$;
+
+-- Tabelas de fornecedor criadas fora do histórico (herança Lovable). Forma
+-- anterior a 20260705010000, que acrescenta as colunas de integração com
+-- "add column if not exists". Conferidas em information_schema da produção
+-- em 2026-09-30.
+create table if not exists public.suppliers (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null,
+  name text not null,
+  domain text,
+  website_url text,
+  contact_email text,
+  contact_phone text,
+  notes text,
+  default_margin numeric default 50,
+  status text not null default 'Ativo',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.supplier_page_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null,
+  url text not null,
+  html_content text not null,
+  created_at timestamptz not null default now()
+);
+
