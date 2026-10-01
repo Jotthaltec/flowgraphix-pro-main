@@ -11529,6 +11529,27 @@ export type Database = {
         }
         Returns: boolean
       }
+      marketing_attributed_orders: {
+        Args: { p_from: string; p_limit?: number; p_to: string }
+        Returns: {
+          attributed_at: string
+          channel: string
+          meta_ad_id: string
+          meta_campaign_id: string
+          order_id: string
+          order_number: string
+          order_status: string
+          payment_status: string
+          revenue: number
+          reversal_reason: string
+          source: string
+          status: string
+          touch_at: string
+          utm_campaign: string
+          utm_content: string
+          utm_source: string
+        }[]
+      }
       marketing_channel: {
         Args: {
           p_fbclid: string
@@ -11543,6 +11564,23 @@ export type Database = {
         Args: { p_lower?: boolean; p_value: string }
         Returns: string
       }
+      marketing_correction_options: {
+        Args: { p_order_id: string }
+        Returns: {
+          channel: string
+          meta_ad_id: string
+          occurred_at: string
+          touchpoint_id: string
+          utm_campaign: string
+          utm_content: string
+          utm_source: string
+        }[]
+      }
+      marketing_overview: {
+        Args: { p_from: string; p_to: string }
+        Returns: Json
+      }
+      marketing_signal_status: { Args: never; Returns: Json }
       meta_capi_config: { Args: never; Returns: Json }
       meta_hash: { Args: { p_value: string }; Returns: string }
       meta_phone: { Args: { p_value: string }; Returns: string }
@@ -11579,6 +11617,16 @@ export type Database = {
       publish_crm_product_internal: {
         Args: { p_crm_product_id: string; p_origin: string }
         Returns: Json
+      }
+      record_marketing_consent: {
+        Args: {
+          p_ads_consent: boolean
+          p_fbc?: string
+          p_fbp?: string
+          p_session_id: string
+          p_user_agent?: string
+        }
+        Returns: boolean
       }
       record_marketing_touchpoint: {
         Args: { p_payload: Json; p_session_id: string }

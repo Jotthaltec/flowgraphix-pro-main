@@ -35,6 +35,7 @@ import { Route as AppContratosRouteImport } from './routes/_app/contratos'
 import { Route as AppConfiguracoesRouteImport } from './routes/_app/configuracoes'
 import { Route as AppClientesRouteImport } from './routes/_app/clientes'
 import { Route as AppArquivosRouteImport } from './routes/_app/arquivos'
+import { Route as AppAnunciosRouteImport } from './routes/_app/anuncios'
 import { Route as ApiSocialNewProductRouteImport } from './routes/api.social.new-product'
 import { Route as ApiMarketingConversionsRouteImport } from './routes/api.marketing.conversions'
 import { Route as AppProdutosImportarRouteImport } from './routes/_app/produtos_.importar'
@@ -168,6 +169,11 @@ const AppArquivosRoute = AppArquivosRouteImport.update({
   path: '/arquivos',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAnunciosRoute = AppAnunciosRouteImport.update({
+  id: '/anuncios',
+  path: '/anuncios',
+  getParentRoute: () => AppRoute,
+} as any)
 const ApiSocialNewProductRoute = ApiSocialNewProductRouteImport.update({
   id: '/api/social/new-product',
   path: '/api/social/new-product',
@@ -190,6 +196,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/anuncios': typeof AppAnunciosRoute
   '/arquivos': typeof AppArquivosRoute
   '/clientes': typeof AppClientesRoute
   '/configuracoes': typeof AppConfiguracoesRoute
@@ -220,6 +227,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/anuncios': typeof AppAnunciosRoute
   '/arquivos': typeof AppArquivosRoute
   '/clientes': typeof AppClientesRoute
   '/configuracoes': typeof AppConfiguracoesRoute
@@ -252,6 +260,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
+  '/_app/anuncios': typeof AppAnunciosRoute
   '/_app/arquivos': typeof AppArquivosRoute
   '/_app/clientes': typeof AppClientesRoute
   '/_app/configuracoes': typeof AppConfiguracoesRoute
@@ -284,6 +293,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/signup'
+    | '/anuncios'
     | '/arquivos'
     | '/clientes'
     | '/configuracoes'
@@ -314,6 +324,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/signup'
+    | '/anuncios'
     | '/arquivos'
     | '/clientes'
     | '/configuracoes'
@@ -345,6 +356,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/reset-password'
     | '/signup'
+    | '/_app/anuncios'
     | '/_app/arquivos'
     | '/_app/clientes'
     | '/_app/configuracoes'
@@ -566,6 +578,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppArquivosRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/anuncios': {
+      id: '/_app/anuncios'
+      path: '/anuncios'
+      fullPath: '/anuncios'
+      preLoaderRoute: typeof AppAnunciosRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/api/social/new-product': {
       id: '/api/social/new-product'
       path: '/api/social/new-product'
@@ -591,6 +610,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppRouteChildren {
+  AppAnunciosRoute: typeof AppAnunciosRoute
   AppArquivosRoute: typeof AppArquivosRoute
   AppClientesRoute: typeof AppClientesRoute
   AppConfiguracoesRoute: typeof AppConfiguracoesRoute
@@ -614,6 +634,7 @@ interface AppRouteChildren {
 }
 
 const AppRouteChildren: AppRouteChildren = {
+  AppAnunciosRoute: AppAnunciosRoute,
   AppArquivosRoute: AppArquivosRoute,
   AppClientesRoute: AppClientesRoute,
   AppConfiguracoesRoute: AppConfiguracoesRoute,

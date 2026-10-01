@@ -19,6 +19,7 @@ import {
   ShoppingCart,
   Store,
   Activity,
+  Megaphone,
 } from "lucide-react";
 import {
   Sidebar,
@@ -49,6 +50,7 @@ const items = [
   { title: "Produtos & Serviços", url: "/produtos", icon: Package },
   { title: "Catálogo do site", url: "/produtos-site", icon: Store },
   { title: "Integração Nexus", url: "/integracao-nexus", icon: Activity },
+  { title: "Anúncios e Crescimento", url: "/anuncios", icon: Megaphone },
   { title: "Hub de Fornecedores", url: "/hub-fornecedores", icon: Globe },
   { title: "Custos & Lucro", url: "/custos", icon: Calculator },
   { title: "Financeiro", url: "/financeiro", icon: Wallet },

@@ -51,6 +51,9 @@ begin
     v_company := public.crm_default_company();
   end if;
   select owner_id into v_owner from public.companies where id = v_company;
+  -- Pré-condição própria: o estado "nunca configurado" (a homologação pode
+  -- estar com os sinais ligados; a transação é desfeita no fim).
+  delete from store.marketing_signal_settings where company_id = v_company;
   insert into store.profiles (id, role, full_name, email, active)
   values (v_cliente, 'cliente', 'QA sinais', 'qa.sinais@homolog.local', true)
   on conflict (id) do update set role = 'cliente', active = true;
