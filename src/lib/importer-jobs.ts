@@ -10,12 +10,13 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import type { TablesUpdate } from "@/integrations/supabase/types";
 import type { ImportItemStatus, ImportedProduct } from "@/types/importedProduct";
 import { FAILED_STATUSES, SUCCESS_STATUSES } from "@/lib/importer-publication";
 
 // As tabelas product_import_jobs/items ainda não estão refletidas no types.ts
 // gerado (criadas via migration nova). Acesso por handle sem tipagem estrita.
-const db = supabase as any;
+const db = supabase;
 
 export interface ImportJobRow {
   id: string;
@@ -169,7 +170,7 @@ export async function updateImportItem(
   try {
     await db
       .from("product_import_items")
-      .update(patch as any)
+      .update(patch as TablesUpdate<"product_import_items">)
       .eq("id", itemId);
   } catch {
     /* tolerante a falha */
@@ -184,7 +185,7 @@ export async function updateImportJob(
   try {
     await db
       .from("product_import_jobs")
-      .update(patch as any)
+      .update(patch as TablesUpdate<"product_import_jobs">)
       .eq("id", jobId);
   } catch {
     /* tolerante a falha */

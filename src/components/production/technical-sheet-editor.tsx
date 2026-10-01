@@ -57,12 +57,11 @@ export function TechnicalSheetEditor({
   onSaved,
 }: TechnicalSheetEditorProps) {
   const queryClient = useQueryClient();
-  // Cast necessário: tipos do Supabase não regenerados após migration de produção.
-  const db = supabase as any;
+  const db = supabase;
   const [activeTab, setActiveTab] = useState("specs");
 
   // States da Ficha Técnica
-  const [formData, setFormData] = useState<Record<string, any>>({});
+  const [formData, setFormData] = useState<Record<string, string>>({});
 
   // States de Materiais
   const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false);
@@ -151,10 +150,10 @@ export function TechnicalSheetEditor({
 
   useEffect(() => {
     if (savedAttributes && savedAttributes.length > 0 && motorData?.attributes) {
-      const initialData: Record<string, any> = {};
-      savedAttributes.forEach((sa: { attribute_id: string; attribute_value: string | null }) => {
+      const initialData: Record<string, string> = {};
+      savedAttributes.forEach((sa) => {
         const attr = motorData.attributes.find((a) => a.id === sa.attribute_id);
-        if (attr) initialData[attr.code] = sa.attribute_value;
+        if (attr && sa.value != null) initialData[attr.code] = sa.value;
       });
       setFormData(initialData);
     }
@@ -169,7 +168,7 @@ export function TechnicalSheetEditor({
         .map((attr) => ({
           production_order_item_id: productionOrderItemId,
           attribute_id: attr.id,
-          attribute_value: formData[attr.code],
+          value: formData[attr.code],
         }));
       const { error: delErr } = await db
         .from("production_item_attributes")
@@ -268,7 +267,7 @@ export function TechnicalSheetEditor({
     },
   });
 
-  const handleChange = (code: string, value: any) =>
+  const handleChange = (code: string, value: string) =>
     setFormData((prev) => ({ ...prev, [code]: value }));
 
   if (loadingMotor || loadingSaved || loadingSteps) {
@@ -281,12 +280,12 @@ export function TechnicalSheetEditor({
 
   const groups = motorData?.groups || [];
   const attributes = motorData?.attributes || [];
-  const groupedAttrs = groups
-    .map((g) => ({ ...g, items: attributes.filter((a) => a.group_id === g.id) }))
+  const groupedAttrs: { id: string; name: string; items: typeof attributes }[] = groups
+    .map((g) => ({ id: g.id, name: g.name, items: attributes.filter((a) => a.group_id === g.id) }))
     .filter((g) => g.items.length > 0);
   const orphans = attributes.filter((a) => !a.group_id || a.group_id === "none");
   if (orphans.length > 0)
-    groupedAttrs.push({ id: "orphan", name: "Outras Especificações", items: orphans } as any);
+    groupedAttrs.push({ id: "orphan", name: "Outras Especificações", items: orphans });
 
   return (
     <div className="space-y-4">
@@ -349,7 +348,7 @@ export function TechnicalSheetEditor({
                     </h4>
                   </div>
                   <CardContent className="p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
-                    {group.items.map((attr: any) => (
+                    {group.items.map((attr) => (
                       <div key={attr.id} className="space-y-1.5">
                         <Label className="text-xs font-semibold text-foreground/80 flex items-center justify-between">
                           {attr.name}{" "}
@@ -474,16 +473,16 @@ export function TechnicalSheetEditor({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  materials?.map((mat: any) => (
+                  materials?.map((mat) => (
                     <TableRow key={mat.id}>
                       <TableCell className="font-semibold">{mat.material_name}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {mat.production_steps?.step_name}
                       </TableCell>
                       <TableCell>{mat.actual_qty}</TableCell>
-                      <TableCell>{fmt.format(mat.unit_cost)}</TableCell>
+                      <TableCell>{fmt.format(mat.unit_cost ?? 0)}</TableCell>
                       <TableCell className="font-bold text-destructive">
-                        {fmt.format(mat.actual_qty * mat.unit_cost)}
+                        {fmt.format((mat.actual_qty ?? 0) * (mat.unit_cost ?? 0))}
                       </TableCell>
                       <TableCell>
                         <Button
@@ -551,10 +550,10 @@ export function TechnicalSheetEditor({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  reworks?.map((r: any) => (
+                  reworks?.map((r) => (
                     <TableRow key={r.id}>
                       <TableCell className="text-xs text-muted-foreground">
-                        {new Date(r.created_at).toLocaleDateString()}
+                        {new Date(r.created_at ?? "").toLocaleDateString()}
                       </TableCell>
                       <TableCell className="font-semibold text-destructive">{r.reason}</TableCell>
                       <TableCell className="text-sm">
@@ -562,7 +561,7 @@ export function TechnicalSheetEditor({
                       </TableCell>
                       <TableCell>
                         <StatusBadge variant={r.status === "pendente" ? "warning" : "success"}>
-                          {r.status.toUpperCase()}
+                          {(r.status ?? "").toUpperCase()}
                         </StatusBadge>
                       </TableCell>
                       <TableCell>
@@ -605,7 +604,7 @@ export function TechnicalSheetEditor({
                   <SelectValue placeholder="Selecione a etapa" />
                 </SelectTrigger>
                 <SelectContent>
-                  {steps?.map((s: any) => (
+                  {steps?.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
                       {s.step_name}
                     </SelectItem>

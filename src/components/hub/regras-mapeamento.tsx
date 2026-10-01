@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -48,7 +49,7 @@ export function RegrasMapeamento() {
 
   // Mutação para alternar status ativo/inativo
   const toggleMutation = useMutation({
-    mutationFn: async (rule: any) => {
+    mutationFn: async (rule: Pick<Tables<"supplier_mapping_rules">, "id" | "active">) => {
       const { error } = await supabase
         .from("supplier_mapping_rules")
         .update({
@@ -62,7 +63,7 @@ export function RegrasMapeamento() {
       toast.success("Status da regra atualizado com sucesso!");
       queryClient.invalidateQueries({ queryKey: ["mapping-rules"] });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(`Erro ao atualizar regra: ${err.message}`);
     },
   });
@@ -77,7 +78,7 @@ export function RegrasMapeamento() {
       toast.success("Regra de mapeamento excluída!");
       queryClient.invalidateQueries({ queryKey: ["mapping-rules"] });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(`Erro ao deletar: ${err.message}`);
     },
   });

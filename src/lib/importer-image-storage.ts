@@ -11,6 +11,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { fetchImageBytes } from "@/integrations/supabase/importer-actions";
 import type { ImportedImage } from "@/types/importedProduct";
+import { errorMessage } from "@/lib/utils";
 
 const BUCKET = "imported-products";
 
@@ -71,8 +72,8 @@ export async function copyImagesToStorage(
       const publicUrl = supabase.storage.from(BUCKET).getPublicUrl(path).data.publicUrl;
       result.push({ ...img, url: publicUrl });
       copied++;
-    } catch (e: any) {
-      warnings.push(`imagem ${i + 1}: ${e?.message || e}`);
+    } catch (e) {
+      warnings.push(`imagem ${i + 1}: ${errorMessage(e)}`);
       result.push(img);
     }
   }

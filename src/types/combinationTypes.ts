@@ -593,7 +593,7 @@ export interface CalculationLog {
   passed: boolean;
   diff_amount: number | null;
   diff_percent: number | null;
-  details: Record<string, any>;
+  details: Record<string, unknown>;
   error_message: string | null;
   action_taken: CalcTestAction;
   executed_at: string;

@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/table";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/use-auth";
 import { useState } from "react";
 import {
@@ -72,7 +73,7 @@ function LeadsPage() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingLead, setEditingLead] = useState<any>(null);
+  const [editingLead, setEditingLead] = useState<Tables<"leads"> | null>(null);
 
   const [formData, setFormData] = useState({
     company_name: "",
@@ -151,7 +152,7 @@ function LeadsPage() {
   });
 
   const convertToClientMutation = useMutation({
-    mutationFn: async (lead: any) => {
+    mutationFn: async (lead: Tables<"leads">) => {
       const { data: profileData } = await supabase
         .from("profiles")
         .select("company_id")
@@ -201,7 +202,7 @@ function LeadsPage() {
     });
   }
 
-  function handleEdit(lead: any) {
+  function handleEdit(lead: Tables<"leads">) {
     setEditingLead(lead);
     setFormData({
       company_name: lead.company_name,
@@ -210,7 +211,7 @@ function LeadsPage() {
       phone: lead.phone || "",
       rating: lead.rating || 0,
       status: lead.status || "novo",
-      source: lead.source || "manual",
+      source: "manual", // leads não tem coluna source; o campo é só do formulário
     });
     setIsModalOpen(true);
   }
@@ -361,7 +362,7 @@ function LeadsPage() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <StatusBadge variant={getStatusVariant(l.status || "") as any}>
+                    <StatusBadge variant={getStatusVariant(l.status || "")}>
                       {(l.status || "").replace("_", " ")}
                     </StatusBadge>
                   </TableCell>

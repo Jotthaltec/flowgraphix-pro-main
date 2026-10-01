@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -135,7 +136,7 @@ export function CatalogoFornecedores() {
       setOpenModal(false);
       resetForm();
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(`Erro ao salvar: ${err.message}`);
     },
   });
@@ -150,7 +151,7 @@ export function CatalogoFornecedores() {
       toast.success("Fornecedor removido com sucesso!");
       queryClient.invalidateQueries({ queryKey: ["suppliers"] });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(`Erro ao deletar: ${err.message}`);
     },
   });
@@ -167,7 +168,7 @@ export function CatalogoFornecedores() {
     setSupplierStatus("Ativo");
   };
 
-  const handleEdit = (s: any) => {
+  const handleEdit = (s: Tables<"suppliers">) => {
     setEditingId(s.id);
     setSupplierName(s.name);
     setSupplierDomain(s.domain || "");

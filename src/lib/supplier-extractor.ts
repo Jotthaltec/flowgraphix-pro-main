@@ -3,6 +3,8 @@
  * Implementa métodos robustos para parsing de HTML de e-commerce gráfico.
  */
 
+import type { Tables } from "@/integrations/supabase/types";
+
 export interface ExtractedProductData {
   product_name: string;
   supplier_sku: string;
@@ -66,7 +68,22 @@ export function parsePrice(priceStr: string): number {
   return isNaN(val) ? 0 : val;
 }
 
-export function extractProductFromHtml(html: string, rules: any[] = []): ExtractedProductData {
+/** Regra de mapeamento cadastrada para o domínio (supplier_mapping_rules). */
+export type ExtractionRule = Pick<
+  Tables<"supplier_mapping_rules">,
+  | "active"
+  | "field_key"
+  | "extraction_method"
+  | "selector"
+  | "regex_pattern"
+  | "label_anchor"
+  | "attribute_name"
+>;
+
+export function extractProductFromHtml(
+  html: string,
+  rules: ExtractionRule[] = [],
+): ExtractedProductData {
   const result: ExtractedProductData = {
     product_name: "",
     supplier_sku: "",
@@ -180,8 +197,9 @@ export function extractProductFromHtml(html: string, rules: any[] = []): Extract
                 typeof images[0] === "string" ? images[0] : images[0]?.url || "";
             }
             // Galeria com todas as imagens do JSON-LD
-            images.forEach((img: any) => {
-              const imgUrl = typeof img === "string" ? img : img?.url || "";
+            images.forEach((img: unknown) => {
+              const imgUrl =
+                typeof img === "string" ? img : (img as { url?: string } | null)?.url || "";
               if (imgUrl && !result.gallery_images.includes(imgUrl)) {
                 result.gallery_images.push(imgUrl);
               }
@@ -700,7 +718,11 @@ export function extractProductFromHtml(html: string, rules: any[] = []): Extract
   return result;
 }
 
-function applyExtractionRule(html: string, rule: any, doc?: Document | null): string | null {
+function applyExtractionRule(
+  html: string,
+  rule: ExtractionRule,
+  doc?: Document | null,
+): string | null {
   try {
     const { extraction_method, selector, regex_pattern, label_anchor, attribute_name } = rule;
 
@@ -788,7 +810,7 @@ function mapFieldToResult(
   result: ExtractedProductData,
   fieldKey: string,
   value: string,
-  rule: any,
+  rule: ExtractionRule,
 ) {
   switch (fieldKey) {
     case "product_name":

@@ -13,6 +13,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { Wallet, Clock, CheckCircle2, AlertCircle, CreditCard, Loader2, Edit } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/use-auth";
 import { useState } from "react";
 import {
@@ -35,11 +36,24 @@ import { toast } from "sonner";
 
 export const Route = createFileRoute("/_app/financeiro")({ component: FinanceiroPage });
 
+/** Pedido do CRM como a tela financeira o lista. */
+type PaymentRow = Pick<
+  Tables<"orders">,
+  | "id"
+  | "order_number"
+  | "product_desc"
+  | "total_value"
+  | "payment_status"
+  | "production_status"
+  | "deadline"
+  | "created_at"
+> & { clients: { name: string } | null };
+
 function FinanceiroPage() {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedPayment, setSelectedPayment] = useState<any>(null);
+  const [selectedPayment, setSelectedPayment] = useState<PaymentRow | null>(null);
 
   const [formData, setFormData] = useState({
     payment_status: "",
@@ -95,7 +109,7 @@ function FinanceiroPage() {
     },
   });
 
-  const handleEdit = (p: any) => {
+  const handleEdit = (p: PaymentRow) => {
     setSelectedPayment(p);
     setFormData({
       payment_status: p.payment_status || "nao_pago",
@@ -226,7 +240,7 @@ function FinanceiroPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <StatusBadge variant={getFinVariant(r.payment_status || "") as any}>
+                    <StatusBadge variant={getFinVariant(r.payment_status || "")}>
                       {(r.payment_status || "").replace("_", " ")}
                     </StatusBadge>
                   </TableCell>

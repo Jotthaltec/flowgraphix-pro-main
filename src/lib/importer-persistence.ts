@@ -12,6 +12,7 @@ import { persistStructured } from "@/lib/importer-structured-persistence";
 import { copyImagesToStorage } from "@/lib/importer-image-storage";
 import { resolveSupplierByUrl } from "@/lib/supplier-link";
 import type { ProductStatusRule } from "@/lib/importer-publication";
+import { errorMessage } from "@/lib/utils";
 
 export interface PersistOptions extends Omit<BuildProductRowOptions, "companyId"> {
   companyId: string;
@@ -102,9 +103,7 @@ export async function findExistingProduct(
       .select("id, name, source_url")
       .eq("company_id", companyId)
       .not("source_url", "is", null);
-    const hit = (candidates || []).find(
-      (c: any) => normalizeUrlForMatch(c.source_url) === targetUrl,
-    );
+    const hit = (candidates || []).find((c) => normalizeUrlForMatch(c.source_url) === targetUrl);
     if (hit?.id) return { id: hit.id, name: hit.name ?? null, matched_by: "source_url" };
   }
 
@@ -129,7 +128,7 @@ export async function findExistingProduct(
       .eq("company_id", companyId)
       .eq("origin", "supplier_import")
       .ilike("supplier_name", product.supplier);
-    const hit = (byName || []).find((c: any) => normalizeName(c.name) === targetName);
+    const hit = (byName || []).find((c) => normalizeName(c.name) === targetName);
     if (hit?.id) return { id: hit.id, name: hit.name ?? null, matched_by: "name_supplier" };
   }
 
@@ -193,8 +192,7 @@ export async function persistImportedProduct(
   if (existingId) {
     const { error } = await supabase
       .from("products")
-      // colunas novas (subcategory/review_required/...) ainda não refletidas em types.ts
-      .update({ ...row, updated_at: new Date().toISOString() } as any)
+      .update({ ...row, updated_at: new Date().toISOString() })
       .eq("id", existingId);
     if (error) throw error;
     productId = existingId;
@@ -202,7 +200,7 @@ export async function persistImportedProduct(
   } else {
     const { data, error } = await supabase
       .from("products")
-      .insert({ ...row, created_at: new Date().toISOString() } as any)
+      .insert({ ...row, created_at: new Date().toISOString() })
       .select("id")
       .single();
     if (error) throw error;
@@ -231,13 +229,13 @@ export async function persistImportedProduct(
           image_url: main,
           main_image_url: main,
           gallery_images: res.images.map((i) => i.url),
-        } as any)
+        })
         .eq("id", productId);
-    } catch (e: any) {
+    } catch (e) {
       imageCopy = {
         copied: 0,
         total: product.images.length,
-        errors: [`cópia de imagens: ${e?.message || e}`],
+        errors: [`cópia de imagens: ${errorMessage(e)}`],
       };
     }
   }

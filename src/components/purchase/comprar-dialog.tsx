@@ -11,6 +11,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import type { DeliverySnapshot } from "@/lib/purchase-orders";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -45,7 +46,7 @@ export interface BuyablePO {
   supplier_id: string | null;
   total_cost: number;
   receiving_mode: string | null;
-  delivery_snapshot: Record<string, any> | null;
+  delivery_snapshot: DeliverySnapshot | null;
   suppliers: { name: string; website_url: string | null } | null;
   purchase_order_items: {
     id: string;
@@ -185,7 +186,7 @@ export function ComprarDialog({
       toast.success("Compra registrada. Pedido de compra marcado como comprado.");
       onOpenChange(false);
     },
-    onError: (err: any) => toast.error("Erro ao registrar: " + err.message),
+    onError: (err: Error) => toast.error("Erro ao registrar: " + err.message),
   });
 
   if (!po) return null;

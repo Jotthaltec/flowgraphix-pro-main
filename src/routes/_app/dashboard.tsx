@@ -366,7 +366,7 @@ function DashboardPage() {
                     outerRadius={80}
                     paddingAngle={3}
                   >
-                    {pieData.map((d: any) => (
+                    {pieData.map((d) => (
                       <Cell key={d.name} fill={d.color} />
                     ))}
                   </Pie>
@@ -430,14 +430,14 @@ function DashboardPage() {
           <CardContent>
             <div className="divide-y -mx-2">
               {activities.length > 0 ? (
-                activities.map((a: any, i: number) => (
+                activities.map((a, i) => (
                   <div key={i} className="flex items-center justify-between gap-4 px-2 py-3">
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{a.client}</p>
                       <p className="text-xs text-muted-foreground truncate">{a.action}</p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
-                      <StatusBadge variant={a.v as any}>{a.status}</StatusBadge>
+                      <StatusBadge variant={a.v}>{a.status}</StatusBadge>
                       <span className="text-xs text-muted-foreground hidden sm:inline">
                         {a.date}
                       </span>

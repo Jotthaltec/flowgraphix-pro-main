@@ -10889,6 +10889,10 @@ export type Database = {
       }
       auth_role: { Args: never; Returns: string }
       can_access_customer: { Args: { target: string }; Returns: boolean }
+      cancel_order: {
+        Args: { p_order_id: string; p_reason: string }
+        Returns: Json
+      }
       close_cash_session: {
         Args: { p_closing_amount: number; p_notes?: string }
         Returns: Json
@@ -10909,6 +10913,10 @@ export type Database = {
       }
       create_quote: {
         Args: { p_idempotency_key: string; p_items: Json; p_quote: Json }
+        Returns: Json
+      }
+      crm_move_order: {
+        Args: { p_column: string; p_order_id: string }
         Returns: Json
       }
       crm_slug: { Args: { value: string }; Returns: string }
@@ -10937,6 +10945,7 @@ export type Database = {
         Returns: number
       }
       open_cash_session: { Args: { p_opening_amount?: number }; Returns: Json }
+      order_status_rank: { Args: { p_status: string }; Returns: number }
       process_product_sync_queue: { Args: { p_limit?: number }; Returns: Json }
       product_commercial_refs: {
         Args: { p_product_id: string }

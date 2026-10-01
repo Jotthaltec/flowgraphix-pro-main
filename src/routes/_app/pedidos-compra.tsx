@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { DeliverySnapshot as DeliverySnapshotData } from "@/lib/purchase-orders";
 import { useAuth } from "@/hooks/use-auth";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -76,7 +77,7 @@ type PurchaseOrder = {
   receiving_mode: string | null;
   total_cost: number;
   created_at: string;
-  delivery_snapshot: Record<string, any> | null;
+  delivery_snapshot: DeliverySnapshotData | null;
   suppliers: { name: string; website_url: string | null } | null;
   orders: { order_number: string } | null;
   purchase_order_items: POItem[];
@@ -126,7 +127,7 @@ function PedidosCompraPage() {
       queryClient.invalidateQueries({ queryKey: ["purchase_orders"] });
       toast.success("Status do pedido de compra atualizado.");
     },
-    onError: (err: any) => toast.error("Erro ao atualizar: " + err.message),
+    onError: (err: Error) => toast.error("Erro ao atualizar: " + err.message),
   });
 
   const filtered = pos?.filter((po) => {
@@ -362,7 +363,7 @@ function DeliverySnapshot({
   snapshot,
   mode,
 }: {
-  snapshot: Record<string, any> | null;
+  snapshot: DeliverySnapshotData | null;
   mode: string | null;
 }) {
   if (!snapshot) return <p className="text-muted-foreground">Sem detalhes de destino.</p>;

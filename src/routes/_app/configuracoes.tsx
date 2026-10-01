@@ -211,7 +211,7 @@ function ConfigPage() {
       if (error) throw error;
     },
     onSuccess: () => toast.success("Dados da gráfica atualizados!"),
-    onError: (err: any) => toast.error("Erro ao atualizar: " + err.message),
+    onError: (err: Error) => toast.error("Erro ao atualizar: " + err.message),
   });
 
   const saveContractTerms = () => {

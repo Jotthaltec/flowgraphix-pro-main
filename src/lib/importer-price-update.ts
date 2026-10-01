@@ -23,7 +23,7 @@ import {
 import { persistStructured } from "@/lib/importer-structured-persistence";
 import type { ImportedProduct } from "@/types/importedProduct";
 
-const db = supabase as any;
+const db = supabase;
 
 export interface ImportedProductRow {
   id: string;
@@ -33,7 +33,14 @@ export interface ImportedProductRow {
   cost_price: number | null;
   sale_price: number | null;
   margin_percent: number | null;
-  quantity_price_table: any[] | null;
+  quantity_price_table: StoredTier[] | null;
+}
+
+/** Linha da tabela de tiragens gravada em products.quantity_price_table. */
+export interface StoredTier {
+  quantity?: number | string | null;
+  price?: number | null;
+  sellPrice?: number | null;
 }
 
 export interface PriceCheckResult {
@@ -55,12 +62,17 @@ export async function loadImportedProducts(companyId: string): Promise<ImportedP
     .not("source_url", "is", null)
     .order("name", { ascending: true });
   if (error) throw error;
-  return (data || []) as ImportedProductRow[];
+  return (data || []).map((row) => ({
+    ...row,
+    quantity_price_table: Array.isArray(row.quantity_price_table)
+      ? (row.quantity_price_table as StoredTier[])
+      : null,
+  }));
 }
 
 function currentTiers(row: ImportedProductRow): CurrentTier[] {
   return (row.quantity_price_table || [])
-    .map((t: any) => ({ quantity: Number(t.quantity), cost: Number(t.price) }))
+    .map((t) => ({ quantity: Number(t.quantity), cost: Number(t.price) }))
     .filter((t: CurrentTier) => t.quantity > 0);
 }
 
@@ -137,7 +149,7 @@ export async function applyCostUpdate(result: PriceCheckResult, companyId: strin
   db.from("supplier_imports")
     .insert({
       company_id: companyId,
-      source_url: row.source_url,
+      source_url: row.source_url ?? fresh.source_url,
       supplier_domain: fresh.supplier_domain,
       extraction_status: "price_updated",
       product_name: row.name,

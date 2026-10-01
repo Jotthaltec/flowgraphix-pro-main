@@ -45,14 +45,16 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+type MarketplaceDraft = ReturnType<typeof mapChannelListingToDraft>;
+
 export function RascunhosMarketplace() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [activePlatform, setActivePlatform] = useState("mercado_livre");
 
   // Estado para modal de visualização / mockup
-  const [viewingDraft, setViewingDraft] = useState<any | null>(null);
-  const [editingDraft, setEditingDraft] = useState<any | null>(null);
+  const [viewingDraft, setViewingDraft] = useState<MarketplaceDraft | null>(null);
+  const [editingDraft, setEditingDraft] = useState<MarketplaceDraft | null>(null);
 
   // Estados para edição
   const [editTitle, setEditTitle] = useState("");
@@ -115,7 +117,7 @@ export function RascunhosMarketplace() {
       toast.success("Rascunho excluído!");
       queryClient.invalidateQueries({ queryKey: ["marketplace_drafts"] });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(`Erro ao deletar: ${err.message}`);
     },
   });
@@ -140,7 +142,7 @@ export function RascunhosMarketplace() {
       queryClient.invalidateQueries({ queryKey: ["marketplace_drafts"] });
       setEditingDraft(null);
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(`Erro ao atualizar: ${err.message}`);
     },
   });
@@ -187,7 +189,7 @@ export function RascunhosMarketplace() {
       queryClient.invalidateQueries({ queryKey: ["marketplace_drafts"] });
       setViewingDraft(null);
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(`Erro ao publicar anúncio: ${err.message}`);
     },
   });
@@ -207,7 +209,7 @@ export function RascunhosMarketplace() {
     }
   };
 
-  const handleStartEdit = (draft: any) => {
+  const handleStartEdit = (draft: MarketplaceDraft) => {
     setEditingDraft(draft);
     setEditTitle(draft.title);
     setEditPrice(draft.price);

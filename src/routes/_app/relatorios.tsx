@@ -6,6 +6,7 @@ import { ArrowRight, Loader2, Download } from "lucide-react";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { errorMessage } from "@/lib/utils";
 
 export const Route = createFileRoute("/_app/relatorios")({ component: RelatoriosPage });
 
@@ -26,7 +27,7 @@ function RelatoriosPage() {
   const exportCSV = async (id: string, fileName: string) => {
     setLoadingReport(id);
     try {
-      let data: any[] = [];
+      let data: unknown[][] = [];
       let headers: string[] = [];
 
       if (id === "vendas") {
@@ -35,7 +36,6 @@ function RelatoriosPage() {
           .select(
             "id, order_number, total_value, payment_status, production_status, created_at, clients(name)",
           );
-        data = d || [];
         headers = [
           "ID",
           "Pedido",
@@ -45,7 +45,7 @@ function RelatoriosPage() {
           "Status Produção",
           "Data de Criação",
         ];
-        data = data.map((r: any) => [
+        data = (d || []).map((r) => [
           r.id,
           r.order_number,
           r.clients?.name,
@@ -60,9 +60,8 @@ function RelatoriosPage() {
           .select(
             "order_number, product_desc, total_value, production_status, deadline, clients(name)",
           );
-        data = d || [];
         headers = ["Pedido", "Cliente", "Produto", "Valor Total", "Status Produção", "Prazo"];
-        data = data.map((r: any) => [
+        data = (d || []).map((r) => [
           r.order_number,
           r.clients?.name,
           r.product_desc,
@@ -72,20 +71,27 @@ function RelatoriosPage() {
         ]);
       } else if (id === "clientes") {
         const { data: d } = await supabase.from("clients").select("*");
-        data = d || [];
+        // Totais vêm de store.customers (mesmo id); public.clients não os guarda.
+        const ids = (d || []).map((c) => c.id);
+        const { data: totals } = ids.length
+          ? await supabase.schema("store").from("customers").select("id, total_spent").in("id", ids)
+          : { data: [] };
+        const spentById = new Map((totals || []).map((t) => [t.id, Number(t.total_spent) || 0]));
         headers = ["Nome", "Empresa", "Documento", "WhatsApp", "Email", "Status", "Total Gasto"];
-        data = data.map((r) => [
-          r.name,
-          r.company_name,
-          r.document,
-          r.whatsapp,
-          r.email,
-          r.status,
-          r.total_spent,
-        ]);
+        data = (d || []).map((r) => {
+          const spent = spentById.get(r.id) ?? 0;
+          return [
+            r.name,
+            r.company_name,
+            r.document,
+            r.whatsapp,
+            r.email,
+            spent >= 1000 ? "vip" : spent > 0 ? "recorrente" : "novo",
+            spent,
+          ];
+        });
       } else if (id === "orcamentos") {
         const { data: d } = await supabase.from("quotes").select("*, clients(name)");
-        data = d || [];
         headers = [
           "Orçamento",
           "Cliente",
@@ -98,7 +104,7 @@ function RelatoriosPage() {
           "Margem %",
           "Status",
         ];
-        data = data.map((r: any) => [
+        data = (d || []).map((r) => [
           r.quote_number,
           r.clients?.name,
           r.service_desc,
@@ -120,9 +126,7 @@ function RelatoriosPage() {
 
       const csvContent = [
         headers.join(";"),
-        ...data.map((row) =>
-          row.map((v: any) => `"${String(v || "").replace(/"/g, '""')}"`).join(";"),
-        ),
+        ...data.map((row) => row.map((v) => `"${String(v || "").replace(/"/g, '""')}"`).join(";")),
       ].join("\n");
 
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -136,8 +140,8 @@ function RelatoriosPage() {
       document.body.removeChild(link);
 
       toast.success("Relatório gerado com sucesso!");
-    } catch (error: any) {
-      toast.error("Erro ao gerar relatório: " + error.message);
+    } catch (error) {
+      toast.error("Erro ao gerar relatório: " + errorMessage(error));
     } finally {
       setLoadingReport(null);
     }

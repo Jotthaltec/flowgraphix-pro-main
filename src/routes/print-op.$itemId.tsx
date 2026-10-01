@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Printer, Loader2, Factory, Package, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const db = supabase as any;
+const db = supabase;
 
 export const Route = createFileRoute("/print-op/$itemId")({
   component: PrintOpPage,
@@ -26,7 +26,7 @@ function PrintOpPage() {
           products (name, internal_sku),
           production_orders (
             order_number, expected_delivery, notes,
-            clients (name, phone, email)
+            clients (name, whatsapp, email)
           )
         `,
         )
@@ -73,13 +73,14 @@ function PrintOpPage() {
   const op = item.production_orders;
 
   // Agrupar atributos para exibição organizada
-  const groupedAttributes: Record<string, any[]> = {};
-  attributes?.forEach((a: any) => {
+  const groupedAttributes: Record<string, { name: string | undefined; value: string | null }[]> =
+    {};
+  attributes?.forEach((a) => {
     const gName = a.technical_attributes?.technical_attribute_groups?.name || "Geral";
     if (!groupedAttributes[gName]) groupedAttributes[gName] = [];
     groupedAttributes[gName].push({
       name: a.technical_attributes?.name,
-      value: a.attribute_value,
+      value: a.value,
     });
   });
 
@@ -126,7 +127,9 @@ function PrintOpPage() {
             <p className="text-base font-bold text-neutral-900">
               {client?.name || "Não informado"}
             </p>
-            {client?.phone && <p className="text-sm text-neutral-600">Tel: {client.phone}</p>}
+            {client?.whatsapp && (
+              <p className="text-sm text-neutral-600">WhatsApp: {client.whatsapp}</p>
+            )}
           </div>
           <div>
             <p className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-1 flex items-center gap-1">
@@ -182,7 +185,7 @@ function PrintOpPage() {
                     {groupName}
                   </h3>
                   <div className="grid grid-cols-2 gap-y-3 gap-x-6 px-3">
-                    {groupedAttributes[groupName].map((attr: any, i: number) => (
+                    {groupedAttributes[groupName].map((attr, i) => (
                       <div key={i} className="flex flex-col border-b border-neutral-100 pb-1">
                         <span className="text-[10px] font-bold text-neutral-500 uppercase">
                           {attr.name}

@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
+import type { TablesInsert } from "@/integrations/supabase/types";
 
-const db = supabase as any;
+const db = supabase;
 
 export async function generateProductionOrderFromQuote(
   quoteId: string,
@@ -42,6 +43,7 @@ export async function generateProductionOrderFromQuote(
     .insert([
       {
         company_id: companyId,
+        order_number: "", // preenchido pelo trigger (OP-AAAA-NNNNNN)
         quote_id: quoteId,
         client_id: quote.client_id,
         status: "aprovado",
@@ -72,8 +74,8 @@ export async function generateProductionOrderFromQuote(
     throw new Error("Falha ao criar itens da OP: " + itemsErr?.message);
 
   // 5. Para cada item, gerar etapas padrão
-  const stepsData: any[] = [];
-  insertedItems.forEach((pItem: any) => {
+  const stepsData: TablesInsert<"production_steps">[] = [];
+  insertedItems.forEach((pItem) => {
     const defaultSteps = [
       { step_name: "Arte e Aprovação", order_index: 1 },
       { step_name: "Pré-impressão", order_index: 2 },
@@ -100,17 +102,17 @@ export async function generateProductionOrderFromQuote(
   const { data: techAttrs } = await db.from("technical_attributes").select("id, code");
 
   const attrCodeToId: Record<string, string> = {};
-  (techAttrs || []).forEach((a: any) => {
+  (techAttrs || []).forEach((a) => {
     attrCodeToId[a.code] = a.id;
   });
 
-  const attrInserts: any[] = [];
-  quoteItems.forEach((qItem: any, idx: number) => {
+  const attrInserts: TablesInsert<"production_item_attributes">[] = [];
+  quoteItems.forEach((qItem, idx) => {
     const pItem = insertedItems[idx];
     if (!pItem) return;
 
     // Ler item_attributes JSONB do quote_item
-    const itemAttrs = qItem.item_attributes;
+    const itemAttrs = qItem.item_attributes as { values?: Record<string, unknown> } | null;
     if (itemAttrs && itemAttrs.values && typeof itemAttrs.values === "object") {
       Object.entries(itemAttrs.values).forEach(([code, value]) => {
         const attrId = attrCodeToId[code];

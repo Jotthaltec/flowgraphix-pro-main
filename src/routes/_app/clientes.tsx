@@ -74,14 +74,29 @@ function ClientesPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
-        .select("id, name, company_name, whatsapp, email, total_spent, last_purchase_at")
+        .select("id, name, company_name, whatsapp, email")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
 
-      return (data || []).map((c: any) => {
+      // public.clients não guarda totais: o gasto e a última compra vêm de
+      // store.customers (mesmo id, mantidos pelas automações de pedido).
+      // Cliente só do CRM, sem cadastro na loja, fica com zero.
+      const ids = (data || []).map((c) => c.id);
+      const { data: totals, error: totalsError } = ids.length
+        ? await supabase
+            .schema("store")
+            .from("customers")
+            .select("id, total_spent, last_order_at")
+            .in("id", ids)
+        : { data: [], error: null };
+      if (totalsError) throw totalsError;
+      const totalsById = new Map((totals || []).map((t) => [t.id, t]));
+
+      return (data || []).map((c) => {
+        const total = totalsById.get(c.id);
         let computedStatus = "novo";
-        const spent = Number(c.total_spent) || 0;
+        const spent = Number(total?.total_spent) || 0;
         if (spent >= 1000) {
           computedStatus = "vip";
         } else if (spent > 0) {
@@ -90,8 +105,10 @@ function ClientesPage() {
         return {
           ...c,
           status: computedStatus,
+          total_spent: spent,
+          last_purchase_at: total?.last_order_at ?? null,
         };
-      }) as Client[];
+      });
     },
     enabled: !!profile,
   });
@@ -261,9 +278,7 @@ function ClientesPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <StatusBadge variant={getStatusVariant(c.status) as any}>
-                      {c.status}
-                    </StatusBadge>
+                    <StatusBadge variant={getStatusVariant(c.status)}>{c.status}</StatusBadge>
                   </TableCell>
                   <TableCell>
                     <DropdownMenu>

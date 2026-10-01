@@ -45,6 +45,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { errorMessage } from "@/lib/utils";
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────
 
@@ -362,8 +363,8 @@ export function PerfisForncedores() {
       setForm(emptyForm);
       setEditingAccountId(null);
       if (openSiteAfter) openSupplierSite(supplierToOpen);
-    } catch (err: any) {
-      toast.error(`Erro ao salvar: ${err.message}`);
+    } catch (err) {
+      toast.error(`Erro ao salvar: ${errorMessage(err)}`);
     } finally {
       setSaving(false);
     }

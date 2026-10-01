@@ -60,13 +60,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (data) {
-      const pData = data as any;
-      const companies = pData.companies;
       setProfile({
-        id: pData.id,
-        full_name: pData.full_name,
-        company_name: companies?.name ?? null,
-        company_id: pData.company_id ?? null,
+        id: data.id,
+        full_name: data.full_name,
+        company_name: data.companies?.name ?? null,
+        company_id: data.company_id ?? null,
         role: null,
       });
     }

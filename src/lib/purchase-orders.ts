@@ -14,7 +14,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
-import type { Json } from "@/integrations/supabase/types";
+import type { Json, Tables } from "@/integrations/supabase/types";
 
 export interface DeliverySnapshot {
   receiving_mode: string | null;
@@ -32,8 +32,8 @@ export interface DeliverySnapshot {
 
 /** Resolve o modo de recebimento e o endereço/retirada para um fornecedor. */
 function buildDeliverySnapshot(
-  company: Record<string, any> | null,
-  account: Record<string, any> | null,
+  company: Tables<"companies"> | null,
+  account: Tables<"supplier_accounts_safe"> | null,
 ): { receiving_mode: string; snapshot: DeliverySnapshot } {
   const receiving_mode = account?.receiving_mode || company?.default_receiving_mode || "delivery";
 
@@ -135,7 +135,10 @@ export async function createPurchaseOrdersForOrder(params: {
   const productIds = [
     ...new Set(supplierItems.map((it) => it.product_service_id).filter(Boolean)),
   ] as string[];
-  const productsById: Record<string, any> = {};
+  const productsById: Record<
+    string,
+    Pick<Tables<"products">, "id" | "source_url" | "supplier_sku" | "name">
+  > = {};
   if (productIds.length) {
     const { data: prods } = await supabase
       .from("products")
@@ -191,7 +194,7 @@ export async function createPurchaseOrdersForOrder(params: {
       .insert({
         company_id: companyId,
         supplier_id: supplierId,
-        supplier_account_id: (account as any)?.id ?? null,
+        supplier_account_id: account?.id ?? null,
         order_id: orderId,
         quote_id: quoteId,
         po_number: poNumber,

@@ -22,8 +22,9 @@ import {
   buildTemplateRows,
   buildVariantRow,
 } from "@/services/structuredMappers";
+import { errorMessage } from "@/lib/utils";
 
-const db = supabase as any;
+const db = supabase;
 
 export interface StructuredResult {
   ok: boolean;
@@ -40,17 +41,20 @@ export interface StructuredResult {
 
 /** Busca o id de uma linha por igualdade; cria se não existir. Retorna o id ou null. */
 async function ensureRow(
-  table: string,
-  match: Record<string, any>,
-  insert: Record<string, any>,
+  table: "product_categories" | "product_segments",
+  match: { company_id: string; name: string; parent_id?: string | null },
+  insert: { slug: string | null },
 ): Promise<string | null> {
+  // As duas tabelas compartilham company_id/name/slug; parent_id só é passado
+  // para categorias. O cliente tipado não aceita uma união de tabelas, então a
+  // consulta é montada com o tipo de product_categories.
+  const from = () => db.from(table as "product_categories");
   try {
-    let q = db.from(table).select("id");
+    let q = from().select("id");
     for (const [k, v] of Object.entries(match)) q = v === null ? q.is(k, null) : q.eq(k, v);
     const { data: found } = await q.maybeSingle();
     if (found?.id) return found.id;
-    const { data: created, error } = await db
-      .from(table)
+    const { data: created, error } = await from()
       .insert({ ...match, ...insert })
       .select("id")
       .single();
@@ -71,8 +75,8 @@ export async function persistStructured(
   const guard = async (label: string, fn: () => Promise<void>) => {
     try {
       await fn();
-    } catch (e: any) {
-      warnings.push(`${label}: ${e?.message || e}`);
+    } catch (e) {
+      warnings.push(`${label}: ${errorMessage(e)}`);
     }
   };
 

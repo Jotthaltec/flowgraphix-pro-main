@@ -111,7 +111,7 @@ function PedidosPage() {
     queryFn: async () => {
       const { data: authData } = await supabase.auth.getUser();
       if (!authData.user?.id) return null;
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .schema("store")
         .from("cash_sessions")
         .select("id, opening_amount, opened_at")
@@ -129,7 +129,7 @@ function PedidosPage() {
       const amount = Number(openingAmount);
       if (!Number.isFinite(amount) || amount < 0)
         throw new Error("Informe um saldo inicial válido.");
-      const { error } = await (supabase as any).schema("store").rpc("open_cash_session", {
+      const { error } = await supabase.schema("store").rpc("open_cash_session", {
         p_opening_amount: amount,
       });
       if (error) throw error;
@@ -146,9 +146,9 @@ function PedidosPage() {
       const amount = Number(closingAmount);
       if (!Number.isFinite(amount) || amount < 0)
         throw new Error("Informe o valor contado no fechamento.");
-      const { data, error } = await (supabase as any).schema("store").rpc("close_cash_session", {
+      // p_notes tem default null no banco.
+      const { data, error } = await supabase.schema("store").rpc("close_cash_session", {
         p_closing_amount: amount,
-        p_notes: null,
       });
       if (error) throw error;
       return data as { expected_amount: number; difference_amount: number };
@@ -541,12 +541,12 @@ function PedidosPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <StatusBadge variant={getFinVariant(p.payment_status || "") as any}>
+                    <StatusBadge variant={getFinVariant(p.payment_status || "")}>
                       {(p.payment_status || "").replace("_", " ")}
                     </StatusBadge>
                   </TableCell>
                   <TableCell>
-                    <StatusBadge variant={getProdVariant(p.production_status || "") as any}>
+                    <StatusBadge variant={getProdVariant(p.production_status || "")}>
                       {(p.production_status || "").replace("_", " ")}
                     </StatusBadge>
                   </TableCell>

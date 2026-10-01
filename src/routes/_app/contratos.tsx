@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/use-auth";
 import { useState, useRef } from "react";
 import {
@@ -43,13 +44,23 @@ import {
 
 export const Route = createFileRoute("/_app/contratos")({ component: ContratosPage });
 
+/** Contrato com os dados do cliente usados na impressão e no envio. */
+type ContractRow = Tables<"contracts"> & {
+  clients: {
+    name: string;
+    document: string | null;
+    address: string | null;
+    whatsapp: string | null;
+  } | null;
+};
+
 function ContratosPage() {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedContract, setSelectedContract] = useState<any>(null);
+  const [selectedContract, setSelectedContract] = useState<ContractRow | null>(null);
 
   const [formData, setFormData] = useState({
     client_id: "",
@@ -186,7 +197,7 @@ function ContratosPage() {
     }
   }
 
-  const handlePrint = (contract: any) => {
+  const handlePrint = (contract: ContractRow) => {
     setSelectedContract(contract);
     setTimeout(() => {
       window.print();
@@ -195,7 +206,7 @@ function ContratosPage() {
 
   // Marca o contrato como enviado ao disparar a mensagem (apenas se ainda em rascunho).
   const sendMutation = useMutation({
-    mutationFn: async (contract: any) => {
+    mutationFn: async (contract: ContractRow) => {
       if (contract.status && contract.status !== "rascunho") return;
       const { error } = await supabase
         .from("contracts")
@@ -204,10 +215,10 @@ function ContratosPage() {
       if (error) throw error;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["contracts"] }),
-    onError: (err: any) => toast.error("Não foi possível atualizar o status: " + err.message),
+    onError: (err: Error) => toast.error("Não foi possível atualizar o status: " + err.message),
   });
 
-  const handleSendContract = (contract: any) => {
+  const handleSendContract = (contract: ContractRow) => {
     if (!contract) return;
     const valor = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
       contract.total_value || 0,
@@ -339,7 +350,7 @@ function ContratosPage() {
                         {c.delivery_date}
                       </TableCell>
                       <TableCell>
-                        <StatusBadge variant={getStatusVariant(c.status || "") as any}>
+                        <StatusBadge variant={getStatusVariant(c.status || "")}>
                           {(c.status || "").replace("_", " ")}
                         </StatusBadge>
                       </TableCell>
@@ -422,7 +433,7 @@ function ContratosPage() {
                 size="sm"
                 className="flex-1"
                 disabled={!selectedContract}
-                onClick={() => handlePrint(selectedContract)}
+                onClick={() => selectedContract && handlePrint(selectedContract)}
               >
                 <Download className="h-3.5 w-3.5 mr-1" /> Imprimir / PDF
               </Button>
@@ -430,7 +441,7 @@ function ContratosPage() {
                 size="sm"
                 className="flex-1"
                 disabled={!selectedContract || sendMutation.isPending}
-                onClick={() => handleSendContract(selectedContract)}
+                onClick={() => selectedContract && handleSendContract(selectedContract)}
               >
                 {sendMutation.isPending ? (
                   <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />

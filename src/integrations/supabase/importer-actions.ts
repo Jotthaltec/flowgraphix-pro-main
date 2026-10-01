@@ -20,6 +20,7 @@ import {
   type LivePriceResult,
 } from "@/services/futuraImLivePrice";
 import type { ImportedProduct } from "@/types/importedProduct";
+import { errorMessage } from "@/lib/utils";
 
 /**
  * Backend seguro do IMPORTADOR DE PRODUTOS POR LINK (seção 4 da spec).
@@ -39,6 +40,11 @@ import type { ImportedProduct } from "@/types/importedProduct";
 
 const FETCH_TIMEOUT_MS = 15000;
 const MAX_BYTES = 4 * 1024 * 1024; // 4 MB
+
+/** Timeout do AbortController (DOMException nem sempre é instância de Error). */
+function isAbortError(err: unknown): boolean {
+  return !!err && typeof err === "object" && "name" in err && err.name === "AbortError";
+}
 
 /**
  * Busca o HTML de uma página de fornecedor de forma segura (server-side).
@@ -93,11 +99,11 @@ export const fetchSupplierPage = createServerFn({ method: "POST" })
         domain: validation.domain,
         fetched_at: new Date().toISOString(),
       };
-    } catch (err: any) {
-      if (err?.name === "AbortError") {
+    } catch (err) {
+      if (isAbortError(err)) {
         return { success: false, error: "Tempo limite excedido ao acessar a página." };
       }
-      return { success: false, error: err?.message || "Erro ao buscar a página." };
+      return { success: false, error: errorMessage(err, "Erro ao buscar a página.") };
     } finally {
       clearTimeout(timeout);
     }
@@ -129,8 +135,8 @@ export const analyzeSupplierLink = createServerFn({ method: "POST" })
       try {
         const product = parseFuturaImProduct(page.html, validation.url);
         return { success: true, product };
-      } catch (err: any) {
-        return { success: false, error: `Erro ao interpretar a página: ${err?.message || err}` };
+      } catch (err) {
+        return { success: false, error: `Erro ao interpretar a página: ${errorMessage(err)}` };
       }
     },
   );
@@ -181,10 +187,9 @@ export const fetchImageBytes = createServerFn({ method: "POST" })
         for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
         const base64 = btoa(binary);
         return { success: true, base64, contentType };
-      } catch (err: any) {
-        if (err?.name === "AbortError")
-          return { success: false, error: "Timeout ao baixar imagem." };
-        return { success: false, error: err?.message || "Erro ao baixar imagem." };
+      } catch (err) {
+        if (isAbortError(err)) return { success: false, error: "Timeout ao baixar imagem." };
+        return { success: false, error: errorMessage(err, "Erro ao baixar imagem.") };
       } finally {
         clearTimeout(timeout);
       }
@@ -328,8 +333,8 @@ export const getSupplierFreight = createServerFn({ method: "POST" })
 
         // `getSetCookie` preserva múltiplos Set-Cookie; fallback para o header simples.
         const rawCookies: string[] =
-          typeof (pageRes.headers as any).getSetCookie === "function"
-            ? (pageRes.headers as any).getSetCookie()
+          typeof pageRes.headers.getSetCookie === "function"
+            ? pageRes.headers.getSetCookie()
             : [pageRes.headers.get("set-cookie") || ""].filter(Boolean);
         const cookieHeader = rawCookies
           .map((c) => c.split(";")[0])
@@ -382,11 +387,11 @@ export const getSupplierFreight = createServerFn({ method: "POST" })
           cep: data.cep.replace(/\D/g, ""),
           quoted_at: new Date().toISOString(),
         };
-      } catch (err: any) {
-        if (err?.name === "AbortError") {
+      } catch (err) {
+        if (isAbortError(err)) {
           return { success: false, error: "Tempo limite excedido ao cotar o frete." };
         }
-        return { success: false, error: err?.message || "Erro ao cotar o frete." };
+        return { success: false, error: errorMessage(err, "Erro ao cotar o frete.") };
       } finally {
         clearTimeout(timeout);
       }
@@ -548,8 +553,8 @@ export const resolveLivePrice = createServerFn({ method: "POST" })
         }
 
         const rawCookies: string[] =
-          typeof (pageRes.headers as any).getSetCookie === "function"
-            ? (pageRes.headers as any).getSetCookie()
+          typeof pageRes.headers.getSetCookie === "function"
+            ? pageRes.headers.getSetCookie()
             : [pageRes.headers.get("set-cookie") || ""].filter(Boolean);
         const cookieHeader = rawCookies
           .map((c) => c.split(";")[0])
@@ -619,11 +624,11 @@ export const resolveLivePrice = createServerFn({ method: "POST" })
           supports_custom_size: custom,
           quoted_at: new Date().toISOString(),
         };
-      } catch (err: any) {
-        if (err?.name === "AbortError") {
+      } catch (err) {
+        if (isAbortError(err)) {
           return { success: false, error: "Tempo limite excedido ao consultar o preço." };
         }
-        return { success: false, error: err?.message || "Erro ao consultar o preço." };
+        return { success: false, error: errorMessage(err, "Erro ao consultar o preço.") };
       } finally {
         clearTimeout(timeout);
       }

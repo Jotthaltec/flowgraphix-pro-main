@@ -15,47 +15,61 @@ function normalizeStatus(rawStatus?: string | null, fallback = "pending") {
   return status;
 }
 
-export function mapSalesChannelToCredentialRow(row: any) {
-  const config =
-    row?.config && typeof row.config === "object" && !Array.isArray(row.config) ? row.config : {};
+/** Linha vinda do banco lida de forma tolerante (formatos antigos e novos). */
+type LooseRow = Record<string, unknown>;
+
+const asRecord = (value: unknown): LooseRow =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as LooseRow) : {};
+const text = (value: unknown, fallback = ""): string => (value == null ? fallback : String(value));
+const textOrNull = (value: unknown): string | null => (value == null ? null : String(value));
+
+export function mapSalesChannelToCredentialRow(row: unknown) {
+  const r = asRecord(row);
+  const config = asRecord(r.config);
 
   return {
-    id: row?.id ?? "",
-    company_id: row?.company_id ?? "",
-    platform: row?.provider ?? row?.platform ?? "mercado_livre",
-    credential_key: String(config?.api_key ?? config?.client_id ?? config?.key ?? ""),
-    credential_secret: String(config?.secret ?? config?.client_secret ?? config?.token ?? ""),
+    id: text(r.id),
+    company_id: text(r.company_id),
+    platform: text(r.provider ?? r.platform, "mercado_livre"),
+    credential_key: text(config.api_key ?? config.client_id ?? config.key),
+    credential_secret: text(config.secret ?? config.client_secret ?? config.token),
     extra_config: Object.fromEntries(
-      Object.entries(config ?? {}).filter(
-        ([key]) =>
-          !["api_key", "client_id", "key", "secret", "client_secret", "token"].includes(key),
-      ),
+      Object.entries(config)
+        .filter(
+          ([key]) =>
+            !["api_key", "client_id", "key", "secret", "client_secret", "token"].includes(key),
+        )
+        .map(([key, value]) => [key, text(value)]),
     ),
-    status: normalizeStatus(row?.status, "disconnected"),
-    last_verified_at: row?.last_sync_at ?? null,
-    error_message: row?.error_message ?? null,
+    status: normalizeStatus(textOrNull(r.status), "disconnected"),
+    last_verified_at: textOrNull(r.last_sync_at),
+    error_message: textOrNull(r.error_message),
   };
 }
 
-export function mapChannelListingToDraft(row: any) {
-  const channel = row?.sales_channels ?? row?.channel ?? {};
-  const product = row?.products ?? row?.product ?? {};
+export function mapChannelListingToDraft(row: unknown) {
+  const r = asRecord(row);
+  const channel = asRecord(r.sales_channels ?? r.channel);
+  const product = asRecord(r.products ?? r.product);
 
   return {
-    id: row?.id ?? "",
-    company_id: row?.company_id ?? "",
-    product_id: row?.product_id ?? null,
-    marketplace: channel?.provider ?? row?.provider ?? "mercado_livre",
-    title: row?.title ?? "",
-    description: row?.description ?? "",
-    price: Number(row?.price ?? 0),
-    category: row?.category_externa ?? row?.category ?? "",
-    keywords: Array.isArray(row?.keywords) ? row?.keywords : [],
-    status: normalizeStatus(row?.status, "draft"),
-    external_id: row?.external_id ?? null,
-    error_message: row?.last_error ?? null,
-    created_at: row?.created_at ?? null,
-    updated_at: row?.updated_at ?? null,
-    products: product,
+    id: text(r.id),
+    company_id: text(r.company_id),
+    product_id: textOrNull(r.product_id),
+    marketplace: text(channel.provider ?? r.provider, "mercado_livre"),
+    title: text(r.title),
+    description: text(r.description),
+    price: Number(r.price ?? 0),
+    category: text(r.category_externa ?? r.category),
+    keywords: Array.isArray(r.keywords) ? r.keywords.map((k) => String(k)) : [],
+    status: normalizeStatus(textOrNull(r.status), "draft"),
+    external_id: textOrNull(r.external_id),
+    error_message: textOrNull(r.last_error),
+    created_at: textOrNull(r.created_at),
+    updated_at: textOrNull(r.updated_at),
+    products: {
+      name: textOrNull(product.name),
+      main_image_url: textOrNull(product.main_image_url),
+    },
   };
 }

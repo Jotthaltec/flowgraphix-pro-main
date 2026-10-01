@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables, TablesInsert } from "@/integrations/supabase/types";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
@@ -46,7 +47,7 @@ import {
 interface MarketplaceVariationsModalProps {
   open: boolean;
   onClose: () => void;
-  product: any;
+  product: Tables<"products"> | null;
   onNavigateToDrafts: () => void;
   /** Chamado após importar as variações para o catálogo (Produtos & Serviços). Opcional: quando já se está na página de produtos, basta atualizar a lista. */
   onNavigateToProducts?: () => void;
@@ -67,10 +68,20 @@ const PLATFORMS = [
   },
 ];
 
+/** Especificações do produto (objeto JSON "chave: valor"). */
+function productSpecs(product: Tables<"products"> | null): Record<string, string> {
+  const specs = product?.specifications;
+  return specs && typeof specs === "object" && !Array.isArray(specs)
+    ? (specs as Record<string, string>)
+    : {};
+}
+
 /** Decodifica variações salvas no produto (JSON do banco) */
-function getProductVariations(product: any): Record<string, string[]> {
+function getProductVariations(product: Tables<"products"> | null): Record<string, string[]> {
   const variations: Record<string, string[]> = {};
-  const rawVariations = Array.isArray(product?.variations) ? product.variations : [];
+  const rawVariations = Array.isArray(product?.variations)
+    ? (product.variations as { name?: string; values?: string[] }[])
+    : [];
   for (const v of rawVariations) {
     if (v.name && Array.isArray(v.values) && v.values.length > 0) {
       variations[v.name] = v.values;
@@ -80,11 +91,13 @@ function getProductVariations(product: any): Record<string, string[]> {
 }
 
 /** Pega as tiragens do produto */
-function getProductQuantityPrices(
-  product: any,
-): Array<{ quantity: number; price: number; sellPrice?: number; unitPrice?: number }> {
-  const raw = Array.isArray(product?.quantity_prices) ? product.quantity_prices : [];
-  return raw.filter((qp: any) => qp.quantity > 0 && qp.price > 0);
+type QuantityPrice = { quantity: number; price: number; sellPrice?: number; unitPrice?: number };
+
+function getProductQuantityPrices(product: Tables<"products"> | null): QuantityPrice[] {
+  const raw = Array.isArray(product?.quantity_prices)
+    ? (product.quantity_prices as QuantityPrice[])
+    : [];
+  return raw.filter((qp) => qp.quantity > 0 && qp.price > 0);
 }
 
 export function MarketplaceVariationsModal({
@@ -239,7 +252,7 @@ export function MarketplaceVariationsModal({
       if (channelError) throw channelError;
 
       const channelMap = new Map(
-        (salesChannels || []).map((channel: any) => [channel.provider, channel]),
+        (salesChannels || []).map((channel) => [channel.provider, channel]),
       );
       const insertedDrafts = [];
 
@@ -257,21 +270,20 @@ export function MarketplaceVariationsModal({
             product.name || "",
             combo.price,
             margin,
-            product.specifications || {},
+            productSpecs(product),
             product.avg_production_time || "5 dias úteis",
             combo,
           );
 
-          const listingPayload: any = {
+          const listingPayload: TablesInsert<"channel_listings"> = {
             company_id: profile.company_id,
             channel_id: channel.id,
             product_id: product.id,
-            sku: product.internal_sku || product.supplier_sku || product.sku || product.id,
+            sku: product.internal_sku || product.supplier_sku || product.id,
             title: copy.title,
             description: copy.description,
             price: copy.price,
-            category_externa:
-              (product.specifications || {})["Categoria"] || "Produtos Personalizados",
+            category_externa: productSpecs(product)["Categoria"] || "Produtos Personalizados",
             status: "rascunho",
             payload: { keywords: copy.keywords, source: "flow-product-variation" },
           };
@@ -295,7 +307,7 @@ export function MarketplaceVariationsModal({
       onClose();
       onNavigateToDrafts();
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(`Erro ao gerar rascunhos: ${err.message}`);
     },
   });
@@ -324,7 +336,7 @@ export function MarketplaceVariationsModal({
       const insertedProducts = [];
 
       for (const combo of combosToPublish) {
-        const payload: any = {
+        const payload: TablesInsert<"products"> = {
           company_id: profile.company_id,
           name: `${product.name} - ${combo.label}`,
           commercial_name: `${product.name} - ${combo.label}`,
@@ -334,7 +346,7 @@ export function MarketplaceVariationsModal({
           supplier_name: product.supplier_name,
           supplier_sku: product.supplier_sku,
           internal_sku: `HUB-${Math.random().toString(36).substring(2, 8).toUpperCase()}`,
-          category: (product.specifications || {})["Categoria"] || product.category || "Geral",
+          category: productSpecs(product)["Categoria"] || product.category || "Geral",
           unit_measure: "Unidade",
           base_cost: combo.price,
           cost_price: combo.price,
@@ -367,7 +379,7 @@ export function MarketplaceVariationsModal({
       onClose();
       onNavigateToProducts?.();
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(`Erro ao gerar produtos: ${err.message}`);
     },
   });
@@ -608,7 +620,7 @@ export function MarketplaceVariationsModal({
                     product.name || "",
                     combo.price,
                     margin,
-                    product.specifications || {},
+                    productSpecs(product),
                     product.avg_production_time || "5 dias úteis",
                     combo,
                   );

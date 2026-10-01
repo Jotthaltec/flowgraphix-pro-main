@@ -186,7 +186,7 @@ export function ConfiguracoesHub() {
         [platform]: { ...prev[platform], dirty: false },
       }));
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(`Erro ao salvar credencial: ${err.message}`);
     },
   });
@@ -208,7 +208,7 @@ export function ConfiguracoesHub() {
         [platform]: { key: "", secret: "", extraConfig: {}, dirty: false },
       }));
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast.error(`Erro ao desconectar: ${err.message}`);
     },
   });

@@ -26,7 +26,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { TechnicalSheetEditor } from "@/components/production/technical-sheet-editor";
 import { STORE_STAGES, STORE_STAGE_LABEL } from "@/lib/store-production";
 
-const db = supabase as any;
+const db = supabase;
 
 export const Route = createFileRoute("/_app/producao")({ component: ProducaoPage });
 
@@ -107,7 +107,7 @@ function ProducaoPage() {
         )
         .order("due_date", { ascending: true, nullsFirst: false });
       if (error) throw error;
-      return (data || []) as any[];
+      return data || [];
     },
     enabled: !!profile,
   });
@@ -347,7 +347,7 @@ function ProducaoPage() {
                       </div>
 
                       <div className="space-y-2 flex-1 overflow-y-auto pr-1 pb-4">
-                        {colItems.map((item: any) => (
+                        {colItems.map((item) => (
                           <Card
                             key={item.id}
                             draggable

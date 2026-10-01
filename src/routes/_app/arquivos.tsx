@@ -149,7 +149,7 @@ function ArquivosPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              files?.map((f: any) => (
+              files?.map((f) => (
                 <TableRow key={f.name}>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -160,10 +160,10 @@ function ArquivosPage() {
                     </div>
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                    {(f.metadata?.size / 1024).toFixed(1)} KB
+                    {(Number(f.metadata?.size ?? 0) / 1024).toFixed(1)} KB
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                    {new Date(f.created_at).toLocaleDateString("pt-BR")}
+                    {f.created_at ? new Date(f.created_at).toLocaleDateString("pt-BR") : "—"}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">

@@ -208,24 +208,20 @@ function OrcamentosPage() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return (data ?? []).map((quote: any) => ({
+      return (data ?? []).map((quote) => ({
         ...quote,
         quote_number: quote.number,
         client_id: quote.customer_id,
         service_desc:
           quote.title ||
-          quote.quote_items?.map((item: any) => item.description).join(", ") ||
+          quote.quote_items?.map((item) => item.description).join(", ") ||
           "Orçamento",
         quantity:
-          quote.quote_items?.reduce(
-            (sum: number, item: any) => sum + Number(item.quantity || 0),
-            0,
-          ) || 0,
+          quote.quote_items?.reduce((sum, item) => sum + Number(item.quantity || 0), 0) || 0,
         final_value: Number(quote.total || 0),
         cost_value:
           quote.quote_items?.reduce(
-            (sum: number, item: any) =>
-              sum + Number(item.internal_cost || 0) * Number(item.quantity || 0),
+            (sum, item) => sum + Number(item.internal_cost || 0) * Number(item.quantity || 0),
             0,
           ) || 0,
         status: quote.status === "convertido" ? "convertido_pedido" : quote.status,
@@ -332,7 +328,7 @@ function OrcamentosPage() {
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
       if (!data.client_id) throw new Error("Selecione o cliente.");
-      const { error } = await (supabase as any).schema("store").rpc("create_quote", {
+      const { error } = await supabase.schema("store").rpc("create_quote", {
         p_quote: {
           customer_id: data.client_id,
           title: data.service_desc,
@@ -377,19 +373,20 @@ function OrcamentosPage() {
   const statusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
       if (status === "convertido_pedido") {
-        const { data, error } = await (supabase as any)
+        const { data, error } = await supabase
           .schema("store")
           .rpc("convert_quote_to_order", { p_quote_id: id });
         if (error) throw error;
+        const converted = data as { reused?: boolean; number?: string } | null;
         return {
           converted: true as const,
-          reused: Boolean(data?.reused),
-          number: data?.number as string,
+          reused: Boolean(converted?.reused),
+          number: converted?.number ?? "",
         };
       }
 
       const canonicalStatus = status === "aguardando_cliente" ? "enviado" : status;
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .schema("store")
         .from("quotes")
         .update({ status: canonicalStatus })
@@ -546,7 +543,7 @@ function OrcamentosPage() {
                     {fmt.format((q.final_value || 0) - (q.cost_value || 0))}
                   </TableCell>
                   <TableCell>
-                    <StatusBadge variant={getStatusVariant(q.status || "") as any}>
+                    <StatusBadge variant={getStatusVariant(q.status || "")}>
                       {(q.status || "").replace("_", " ")}
                     </StatusBadge>
                   </TableCell>

@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/page-header";
@@ -131,7 +132,7 @@ function NovoOrcamentoPage() {
           },
         },
       }));
-      const { data, error } = await (supabase as any).schema("store").rpc("create_quote", {
+      const { data, error } = await supabase.schema("store").rpc("create_quote", {
         p_quote: {
           customer_id: clientId,
           title: items.map((item) => item.product_name).join(", "),
@@ -141,11 +142,13 @@ function NovoOrcamentoPage() {
           notes: notes || null,
           source: "flow",
         },
-        p_items: itemsPayload,
+        // Serializa como o PostgREST faria (descarta undefined) e tipa como Json.
+        p_items: JSON.parse(JSON.stringify(itemsPayload)) as Json,
         p_idempotency_key: idempotencyKey.current,
       });
       if (error) throw error;
-      return { quoteNumber: data.number as string };
+      const created = data as { number?: string } | null;
+      return { quoteNumber: created?.number ?? "" };
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["quotes"] });

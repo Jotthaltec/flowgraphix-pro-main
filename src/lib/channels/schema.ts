@@ -10,8 +10,6 @@
  * chegar, ele valida este contrato — não o substitui.
  */
 
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
-
 export type CanalProvider = "manual" | "mercado_livre" | "shopee";
 
 export type CanalStatus = "desconectado" | "conectado" | "expirado" | "erro";
@@ -82,23 +80,4 @@ export interface LinhaJob {
   tentativas: number;
   proxima_tentativa: string;
   erro: string | null;
-}
-
-/**
- * Cliente do banco para as tabelas deste módulo.
- *
- * O cast existe porque `supabaseAdmin` é tipado pelo `Database` gerado, que
- * ainda não conhece estas tabelas. É UM ponto de escape, concentrado aqui, em
- * vez de um `as any` espalhado por cada consulta — quando `types.ts` for
- * regerado, some só esta função.
- *
- * Usa a chave de serviço, então IGNORA RLS: toda função que chama daqui é
- * responsável por filtrar por `company_id` explicitamente.
- */
-export function canaisDb() {
-  return supabaseAdmin as unknown as {
-    from: (tabela: string) => any;
-    rpc: (nome: string, args?: Record<string, unknown>) => any;
-    schema: (nome: string) => { from: (tabela: string) => any };
-  };
 }

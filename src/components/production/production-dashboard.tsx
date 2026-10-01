@@ -19,7 +19,7 @@ const fmt = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" 
 
 export function ProductionDashboard() {
   // Cast necessário: tipos do Supabase não foram regenerados após a migration de produção.
-  const db = supabase as any;
+  const db = supabase;
 
   // 1. Todas as OPs
   const { data: orders, isLoading: loadingOrders } = useQuery({
@@ -29,7 +29,7 @@ export function ProductionDashboard() {
         .from("production_orders")
         .select("id, order_number, status, priority, expected_delivery, created_at");
       if (error) throw error;
-      return (data || []) as any[];
+      return data || [];
     },
   });
 
@@ -41,7 +41,7 @@ export function ProductionDashboard() {
         .from("production_order_items")
         .select("id, status, quantity, production_order_id, created_at");
       if (error) throw error;
-      return (data || []) as any[];
+      return data || [];
     },
   });
 
@@ -53,7 +53,7 @@ export function ProductionDashboard() {
         .from("production_materials_consumption")
         .select("actual_qty, unit_cost");
       if (error) throw error;
-      return (data || []) as any[];
+      return data || [];
     },
   });
 
@@ -65,7 +65,7 @@ export function ProductionDashboard() {
         .from("production_reworks")
         .select("id, status, reason, created_at");
       if (error) throw error;
-      return (data || []) as any[];
+      return data || [];
     },
   });
 
