@@ -39,6 +39,18 @@ async function assertBuilt() {
   }
 }
 
+async function copyRuntimePackage(packageName) {
+  const source = path.join(ROOT, "node_modules", ...packageName.split("/"));
+  const destination = path.join(FUNCTION_DIR, "node_modules", ...packageName.split("/"));
+  try {
+    await fs.stat(source);
+  } catch {
+    throw new Error(`Dependência de runtime ausente: ${packageName}`);
+  }
+  await fs.mkdir(path.dirname(destination), { recursive: true });
+  await fs.cp(source, destination, { recursive: true });
+}
+
 async function main() {
   await assertBuilt();
 
@@ -58,6 +70,9 @@ async function main() {
     minify: true,
     // A function sobe sozinha, sem node_modules ao lado: tudo entra no bundle.
     packages: "bundle",
+    // Sharp carrega um binário específico da plataforma em runtime. Ele não
+    // pode ser achatado dentro do bundle JS pelo esbuild.
+    external: ["sharp"],
     // O `"sideEffects": false` do package.json descreve o código-fonte, mas o
     // esbuild o aplicaria também a dist/server/*, descartando os `import "./chunk.js"`
     // que o Rollup emite justamente para preservar ordem de inicialização.
@@ -72,6 +87,10 @@ async function main() {
     },
     logLevel: "warning",
   });
+
+  // A Vercel executa em Linux. No build remoto o npm instala somente os
+  // binários @img compatíveis; copiamos exatamente esse conjunto para a função.
+  await Promise.all(["sharp", "@img", "detect-libc", "semver"].map(copyRuntimePackage));
 
   await fs.writeFile(
     path.join(FUNCTION_DIR, ".vc-config.json"),
