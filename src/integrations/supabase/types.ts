@@ -11688,6 +11688,10 @@ export type Database = {
         Args: { p_crm_product_id: string; p_reason: string }
         Returns: Json
       }
+      update_order_status: {
+        Args: { p_note?: string; p_order_id: string; p_status: string }
+        Returns: undefined
+      }
       upsert_conversion_event: {
         Args: {
           p_company: string

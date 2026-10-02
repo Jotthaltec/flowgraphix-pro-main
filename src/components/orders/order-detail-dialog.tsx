@@ -20,6 +20,18 @@ import {
 } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCivilDate } from "@/lib/date";
+import {
+  ART_STATUS_META,
+  PAYMENT_METHOD_META,
+  SHIPPING_METHOD_META,
+  orderProgress,
+  type ArtStatus,
+  type OrderStatus,
+  type PaymentMethod,
+  type ShippingMethod,
+} from "@/lib/store-domain";
+import { orderStatusMeta, paymentStatusMeta, toneVariant } from "@/lib/store-domain-ui";
+import { OrderActions } from "./order-actions";
 
 const brl = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -36,13 +48,11 @@ const SOURCE_LABELS: Record<string, string> = {
   balcao: "Balcão",
 };
 
-const SHIPPING_LABELS: Record<string, string> = {
-  retirada: "Retirada no balcão",
-  entrega_local: "Entrega local",
-  correios_pac: "Correios PAC",
-  correios_sedex: "Correios SEDEX",
-  transportadora: "Transportadora",
-};
+const shippingLabel = (m: string | null) =>
+  SHIPPING_METHOD_META[m as ShippingMethod]?.label ?? humanize(m) ?? "—";
+const paymentMethodLabel = (m: string | null) =>
+  PAYMENT_METHOD_META[m as PaymentMethod]?.label ?? humanize(m);
+const artLabel = (s: string | null) => ART_STATUS_META[s as ArtStatus]?.label ?? humanize(s);
 
 type Address = {
   recipient?: string;
@@ -147,15 +157,40 @@ export function OrderDetailDialog({ orderId, onClose }: { orderId: string; onClo
         ) : (
           <div className="space-y-5 text-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge>{humanize(o.status)}</StatusBadge>
-              <StatusBadge>Pagamento: {humanize(o.payment_status)}</StatusBadge>
-              {o.is_rush ? <StatusBadge>Urgente</StatusBadge> : null}
+              <StatusBadge variant={toneVariant(orderStatusMeta(o.status).tone)}>
+                {orderStatusMeta(o.status).label}
+              </StatusBadge>
+              <StatusBadge variant={toneVariant(paymentStatusMeta(o.payment_status).tone)}>
+                Pagamento: {paymentStatusMeta(o.payment_status).label}
+              </StatusBadge>
+              {o.is_rush ? <StatusBadge variant="destructive">Urgente</StatusBadge> : null}
               {o.estimated_delivery ? (
                 <span className="text-muted-foreground">
                   Previsão: {formatCivilDate(o.estimated_delivery)}
                 </span>
               ) : null}
             </div>
+
+            {o.status !== "cancelado" ? (
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full bg-primary"
+                  style={{ width: `${orderProgress(o.status as OrderStatus)}%` }}
+                />
+              </div>
+            ) : null}
+
+            <OrderActions
+              key={`${o.status}:${o.payment_status}:${o.tracking_code ?? ""}`}
+              order={{
+                id: o.id,
+                status: o.status,
+                payment_status: o.payment_status,
+                shipping_method: o.shipping_method,
+                shipping_cost: Number(o.shipping_cost),
+                tracking_code: o.tracking_code,
+              }}
+            />
 
             <div className="grid gap-4 sm:grid-cols-2">
               <section className="space-y-1">
@@ -194,9 +229,7 @@ export function OrderDetailDialog({ orderId, onClose }: { orderId: string; onClo
 
               <section className="space-y-1">
                 <h3 className="font-semibold">Entrega</h3>
-                <p>
-                  {SHIPPING_LABELS[o.shipping_method ?? ""] ?? humanize(o.shipping_method) ?? "—"}
-                </p>
+                <p>{shippingLabel(o.shipping_method)}</p>
                 {address?.street ? (
                   <p className="text-muted-foreground">
                     {address.recipient ? `${address.recipient} · ` : ""}
@@ -249,7 +282,7 @@ export function OrderDetailDialog({ orderId, onClose }: { orderId: string; onClo
                           </span>
                         ))}
                         {i.art_status ? (
-                          <span className="block text-xs">Arte: {humanize(i.art_status)}</span>
+                          <span className="block text-xs">Arte: {artLabel(i.art_status)}</span>
                         ) : null}
                         {i.notes ? <span className="block text-xs">Obs.: {i.notes}</span> : null}
                       </TableCell>
@@ -306,7 +339,7 @@ export function OrderDetailDialog({ orderId, onClose }: { orderId: string; onClo
                     <div>
                       <p className="font-medium">{a.file_name}</p>
                       <p className="text-xs text-muted-foreground">
-                        v{a.version} · {humanize(a.status)}
+                        v{a.version} · {artLabel(a.status)}
                         {a.is_current ? " · atual" : ""} · {dateTime(a.created_at)}
                       </p>
                     </div>
@@ -326,13 +359,13 @@ export function OrderDetailDialog({ orderId, onClose }: { orderId: string; onClo
               <h3 className="font-semibold">Pagamentos</h3>
               {(o.payments ?? []).length === 0 ? (
                 <p className="text-muted-foreground">
-                  Nenhum pagamento registrado ({humanize(o.payment_method)}).
+                  Nenhum pagamento registrado ({paymentMethodLabel(o.payment_method)}).
                 </p>
               ) : (
                 (o.payments ?? []).map((p) => (
                   <p key={p.id} className="flex justify-between">
                     <span>
-                      {humanize(p.method)} · {humanize(p.status)}
+                      {paymentMethodLabel(p.method)} · {paymentStatusMeta(p.status).label}
                       {p.paid_at ? ` em ${dateTime(p.paid_at)}` : ""}
                     </span>
                     <span className="tabular-nums">{brl(Number(p.amount))}</span>
@@ -347,8 +380,8 @@ export function OrderDetailDialog({ orderId, onClose }: { orderId: string; onClo
                 {history.map((h) => (
                   <p key={h.id} className="text-xs text-muted-foreground">
                     {dateTime(h.created_at)} —{" "}
-                    {h.from_status ? `${humanize(h.from_status)} → ` : ""}
-                    {humanize(h.to_status)}
+                    {h.from_status ? `${orderStatusMeta(h.from_status).label} → ` : ""}
+                    {orderStatusMeta(h.to_status).label}
                     {h.note ? ` (${h.note})` : ""}
                   </p>
                 ))}

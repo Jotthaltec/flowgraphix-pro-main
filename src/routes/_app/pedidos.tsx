@@ -50,7 +50,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { civilDateFromToday, formatCivilDate } from "@/lib/date";
+import { civilDateFromToday, formatCivilDate, isCivilDatePast } from "@/lib/date";
+import { OPEN_ORDER_STATUSES, type OrderStatus } from "@/lib/store-domain";
+import {
+  ORDER_FILTERS,
+  orderStatusMeta,
+  paymentStatusMeta,
+  toneVariant,
+} from "@/lib/store-domain-ui";
 import { summarizeOrderOrigin } from "@/lib/marketing-attribution";
 
 export const Route = createFileRoute("/_app/pedidos")({ component: PedidosPage });
@@ -61,7 +68,7 @@ function PedidosPage() {
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
   const [viewingOrderId, setViewingOrderId] = useState<string | null>(null);
-  const [prodFilter, setProdFilter] = useState("all");
+  const [orderFilter, setOrderFilter] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const posIdempotencyKey = useRef(`pos:${crypto.randomUUID()}`);
   const [openingAmount, setOpeningAmount] = useState("0");
@@ -204,9 +211,23 @@ function PedidosPage() {
     const matchesSearch =
       item.order_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.clients?.name?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesProd = prodFilter === "all" ? true : item.production_status === prodFilter;
-    return matchesSearch && matchesProd;
+    // Mesmos grupos do painel da loja (store-domain-ui / ORDER_FILTERS).
+    const group = ORDER_FILTERS.find((f) => f.value === orderFilter);
+    const matchesGroup =
+      orderFilter === "atrasados"
+        ? OPEN_ORDER_STATUSES.includes(item.production_status as OrderStatus) &&
+          !!item.deadline &&
+          isCivilDatePast(item.deadline)
+        : !group?.statuses || group.statuses.includes(item.production_status || "");
+    return matchesSearch && matchesGroup;
   });
+
+  const listedValue = (filteredData ?? [])
+    .filter((o) => o.production_status !== "cancelado")
+    .reduce((acc, o) => acc + Number(o.total_value || 0), 0);
+  const pendingPayment = (filteredData ?? []).filter(
+    (o) => o.payment_status === "pendente" && o.production_status !== "cancelado",
+  ).length;
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof formData) => {
@@ -289,37 +310,6 @@ function PedidosPage() {
       payment_reference: "",
       notes: "",
     });
-  }
-
-  function getFinVariant(status: string) {
-    switch (status) {
-      case "pago":
-        return "success";
-      case "entrada_paga":
-        return "warning";
-      case "atrasado":
-      case "cancelado":
-        return "destructive";
-      default:
-        return "default";
-    }
-  }
-
-  function getProdVariant(status: string) {
-    switch (status) {
-      case "entregue":
-      case "finalizado":
-        return "muted";
-      case "pronto":
-        return "success";
-      case "arte_em_criacao":
-      case "em_producao":
-        return "accent";
-      case "em_acabamento":
-        return "warning";
-      default:
-        return "default";
-    }
   }
 
   async function printReceipt(orderId: string) {
@@ -477,6 +467,29 @@ function PedidosPage() {
           </div>
         )}
       </Card>
+      <div className="mb-4 grid gap-3 sm:grid-cols-3">
+        <Card className="p-4">
+          <p className="text-xs text-muted-foreground">Pedidos listados</p>
+          <p className="text-2xl font-bold">{filteredData?.length ?? 0}</p>
+          <p className="text-xs text-muted-foreground">{orders?.length ?? 0} no total</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-muted-foreground">Valor listado</p>
+          <p className="text-2xl font-bold text-primary">
+            {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
+              listedValue,
+            )}
+          </p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-muted-foreground">Aguardando pagamento</p>
+          <p
+            className={`text-2xl font-bold ${pendingPayment > 0 ? "text-warning-foreground" : "text-success"}`}
+          >
+            {pendingPayment}
+          </p>
+        </Card>
+      </div>
       <Card className="p-4 mb-4">
         <div className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
@@ -488,19 +501,22 @@ function PedidosPage() {
               className="pl-9"
             />
           </div>
-          <Select value={prodFilter} onValueChange={setProdFilter}>
-            <SelectTrigger className="w-full md:w-44">
-              <SelectValue placeholder="Status produção" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos status</SelectItem>
-              <SelectItem value="pedido_criado">Pedido Criado</SelectItem>
-              <SelectItem value="arte_pendente">Arte Pendente</SelectItem>
-              <SelectItem value="em_producao">Em Produção</SelectItem>
-              <SelectItem value="pronto">Pronto</SelectItem>
-              <SelectItem value="entregue">Entregue</SelectItem>
-            </SelectContent>
-          </Select>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {ORDER_FILTERS.map((f) => (
+            <button
+              key={f.value || "todos"}
+              type="button"
+              onClick={() => setOrderFilter(f.value)}
+              className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                orderFilter === f.value
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border hover:border-primary"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
       </Card>
 
@@ -512,8 +528,8 @@ function PedidosPage() {
               <TableHead>Cliente</TableHead>
               <TableHead className="hidden md:table-cell">Produto/Serviço</TableHead>
               <TableHead>Valor</TableHead>
-              <TableHead>Financeiro</TableHead>
-              <TableHead>Produção</TableHead>
+              <TableHead>Pagamento</TableHead>
+              <TableHead>Situação</TableHead>
               <TableHead className="hidden md:table-cell">Prazo</TableHead>
               <TableHead className="hidden lg:table-cell">Origem</TableHead>
               <TableHead className="w-12"></TableHead>
@@ -555,13 +571,17 @@ function PedidosPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <StatusBadge variant={getFinVariant(p.payment_status || "")}>
-                      {(p.payment_status || "").replace("_", " ")}
+                    <StatusBadge
+                      variant={toneVariant(paymentStatusMeta(p.payment_status || "").tone)}
+                    >
+                      {paymentStatusMeta(p.payment_status || "").label}
                     </StatusBadge>
                   </TableCell>
                   <TableCell>
-                    <StatusBadge variant={getProdVariant(p.production_status || "")}>
-                      {(p.production_status || "").replace("_", " ")}
+                    <StatusBadge
+                      variant={toneVariant(orderStatusMeta(p.production_status || "").tone)}
+                    >
+                      {orderStatusMeta(p.production_status || "").label}
                     </StatusBadge>
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-sm">
