@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import {
@@ -52,6 +53,33 @@ export function AtualizarPrecos() {
     queryKey: ["imported-products-price", profile?.company_id],
     enabled: !!profile?.company_id,
     queryFn: () => loadImportedProducts(profile!.company_id!),
+  });
+
+  // Alertas gravados pela coleta diária (routes/api.precos.fornecedor.ts).
+  const { data: alerts = [] } = useQuery({
+    queryKey: ["supplier-alerts", profile?.company_id],
+    enabled: !!profile?.company_id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("supplier_alerts")
+        .select("id, alert_type, severity, title, message, created_at")
+        .eq("status", "open")
+        .order("created_at", { ascending: false })
+        .limit(30);
+      if (error) throw error;
+      return data;
+    },
+  });
+  const resolveAlert = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("supplier_alerts")
+        .update({ status: "resolved", resolved_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["supplier-alerts"] }),
+    onError: (err: Error) => toast.error(err.message),
   });
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -151,11 +179,51 @@ export function AtualizarPrecos() {
       <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
         <ShieldCheck className="h-4 w-4 text-primary shrink-0 mt-0.5" />
         <span>
-          Atualiza apenas o <b>custo do fornecedor</b>. O seu preço de venda e a margem são
-          preservados — faixas novas recebem apenas uma sugestão de venda, que você pode revisar.
-          Nada é gravado sem confirmação.
+          Mudança normal do fornecedor atualiza só o <b>custo</b>: o seu preço de venda não muda. Se
+          o fornecedor entrar em <b>promoção</b> (preço &quot;de/por&quot;), a loja mostra a
+          promoção com o mesmo percentual de desconto; quando ela acaba, volta o preço normal. A
+          coleta roda sozinha todo dia às 6h; aqui você pode conferir na hora.
         </span>
       </div>
+
+      {alerts.length > 0 && (
+        <Card>
+          <CardContent className="p-4 space-y-2">
+            <p className="text-sm font-semibold">Alertas do fornecedor</p>
+            {alerts.map((a) => (
+              <div
+                key={a.id}
+                className="flex items-start justify-between gap-3 rounded-md border p-2 text-xs"
+              >
+                <div className="flex items-start gap-2">
+                  {a.severity === "info" ? (
+                    <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertTriangle
+                      className={`h-4 w-4 shrink-0 mt-0.5 ${a.severity === "critical" ? "text-destructive" : "text-amber-500"}`}
+                    />
+                  )}
+                  <div>
+                    <p className="font-medium text-foreground">{a.title}</p>
+                    {a.message && <p className="text-muted-foreground">{a.message}</p>}
+                    <p className="text-muted-foreground">
+                      {new Date(a.created_at).toLocaleString("pt-BR")}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={resolveAlert.isPending}
+                  onClick={() => resolveAlert.mutate(a.id)}
+                >
+                  Resolvido
+                </Button>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent className="p-4 flex flex-wrap items-center gap-3">
