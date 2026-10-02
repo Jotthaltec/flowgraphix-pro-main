@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+import { MetaConnectionCheck } from "@/components/marketing/meta-connection-check";
 import {
   EVENT_STATUS_LABELS,
   SKIP_REASON_LABELS,
@@ -388,6 +389,7 @@ export function SignalsPanel() {
             : ""}
         </div>
       </Card>
+      <MetaConnectionCheck />
       <SignalSettingsForm key={status.settings?.version ?? 0} status={status} />
       <EventQueue />
       <AttributionSettings />

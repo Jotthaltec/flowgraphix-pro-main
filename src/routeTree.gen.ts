@@ -38,6 +38,7 @@ import { Route as AppRelatoriosRouteImport } from './routes/_app/relatorios'
 import { Route as PrintOpItemIdRouteImport } from './routes/print-op.$itemId'
 import { Route as AppProdutosImportarRouteImport } from './routes/_app/produtos_.importar'
 import { Route as ApiMarketingConversionsRouteImport } from './routes/api.marketing.conversions'
+import { Route as ApiMarketingVerifyMetaRouteImport } from './routes/api.marketing.verify-meta'
 import { Route as ApiSocialNewProductRouteImport } from './routes/api.social.new-product'
 
 const IndexRoute = IndexRouteImport.update({
@@ -184,6 +185,11 @@ const ApiMarketingConversionsRoute = ApiMarketingConversionsRouteImport.update({
   path: '/api/marketing/conversions',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMarketingVerifyMetaRoute = ApiMarketingVerifyMetaRouteImport.update({
+  id: '/api/marketing/verify-meta',
+  path: '/api/marketing/verify-meta',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSocialNewProductRoute = ApiSocialNewProductRouteImport.update({
   id: '/api/social/new-product',
   path: '/api/social/new-product',
@@ -219,6 +225,7 @@ export interface FileRoutesByFullPath {
   '/print-op/$itemId': typeof PrintOpItemIdRoute
   '/produtos/importar': typeof AppProdutosImportarRoute
   '/api/marketing/conversions': typeof ApiMarketingConversionsRoute
+  '/api/marketing/verify-meta': typeof ApiMarketingVerifyMetaRoute
   '/api/social/new-product': typeof ApiSocialNewProductRoute
 }
 export interface FileRoutesByTo {
@@ -250,6 +257,7 @@ export interface FileRoutesByTo {
   '/print-op/$itemId': typeof PrintOpItemIdRoute
   '/produtos/importar': typeof AppProdutosImportarRoute
   '/api/marketing/conversions': typeof ApiMarketingConversionsRoute
+  '/api/marketing/verify-meta': typeof ApiMarketingVerifyMetaRoute
   '/api/social/new-product': typeof ApiSocialNewProductRoute
 }
 export interface FileRoutesById {
@@ -283,6 +291,7 @@ export interface FileRoutesById {
   '/print-op/$itemId': typeof PrintOpItemIdRoute
   '/_app/produtos_/importar': typeof AppProdutosImportarRoute
   '/api/marketing/conversions': typeof ApiMarketingConversionsRoute
+  '/api/marketing/verify-meta': typeof ApiMarketingVerifyMetaRoute
   '/api/social/new-product': typeof ApiSocialNewProductRoute
 }
 export interface FileRouteTypes {
@@ -316,6 +325,7 @@ export interface FileRouteTypes {
     | '/print-op/$itemId'
     | '/produtos/importar'
     | '/api/marketing/conversions'
+    | '/api/marketing/verify-meta'
     | '/api/social/new-product'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -347,6 +357,7 @@ export interface FileRouteTypes {
     | '/print-op/$itemId'
     | '/produtos/importar'
     | '/api/marketing/conversions'
+    | '/api/marketing/verify-meta'
     | '/api/social/new-product'
   id:
     | '__root__'
@@ -379,6 +390,7 @@ export interface FileRouteTypes {
     | '/print-op/$itemId'
     | '/_app/produtos_/importar'
     | '/api/marketing/conversions'
+    | '/api/marketing/verify-meta'
     | '/api/social/new-product'
   fileRoutesById: FileRoutesById
 }
@@ -391,6 +403,7 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   PrintOpItemIdRoute: typeof PrintOpItemIdRoute
   ApiMarketingConversionsRoute: typeof ApiMarketingConversionsRoute
+  ApiMarketingVerifyMetaRoute: typeof ApiMarketingVerifyMetaRoute
   ApiSocialNewProductRoute: typeof ApiSocialNewProductRoute
 }
 
@@ -599,6 +612,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMarketingConversionsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/marketing/verify-meta': {
+      id: '/api/marketing/verify-meta'
+      path: '/api/marketing/verify-meta'
+      fullPath: '/api/marketing/verify-meta'
+      preLoaderRoute: typeof ApiMarketingVerifyMetaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/social/new-product': {
       id: '/api/social/new-product'
       path: '/api/social/new-product'
@@ -668,6 +688,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   PrintOpItemIdRoute: PrintOpItemIdRoute,
   ApiMarketingConversionsRoute: ApiMarketingConversionsRoute,
+  ApiMarketingVerifyMetaRoute: ApiMarketingVerifyMetaRoute,
   ApiSocialNewProductRoute: ApiSocialNewProductRoute,
 }
 export const routeTree = rootRouteImport
