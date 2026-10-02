@@ -48,6 +48,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
+import { QUOTE_FILTERS, quoteStatusMeta, toneVariant } from "@/lib/store-domain-ui";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -108,7 +109,7 @@ function OrcamentosPage() {
   const selectProductId = search.selectProductId;
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const autoOpenedRef = useRef(false);
   const modalQuoteKey = useRef(`flow-quick-quote:${crypto.randomUUID()}`);
@@ -227,7 +228,7 @@ function OrcamentosPage() {
             (sum, item) => sum + Number(item.internal_cost || 0) * Number(item.quantity || 0),
             0,
           ) || 0,
-        status: quote.status === "convertido" ? "convertido_pedido" : quote.status,
+        status: quote.status,
       }));
     },
     enabled: !!profile,
@@ -294,9 +295,16 @@ function OrcamentosPage() {
       item.quote_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.clients?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.service_desc?.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "all" ? true : item.status === statusFilter;
+    const matchesStatus = !statusFilter || item.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  // Indicadores do painel da loja (Nexus-Printi/src/app/admin/orcamentos/page.tsx).
+  const awaitingReply = (filteredData ?? []).filter((q) =>
+    ["enviado", "visualizado", "em_negociacao"].includes(q.status || ""),
+  ).length;
+  const convertedCount = (filteredData ?? []).filter((q) => q.status === "convertido").length;
+  const listedValue = (filteredData ?? []).reduce((acc, q) => acc + Number(q.final_value || 0), 0);
 
   // Selecionar produto do catálogo e auto-preencher
   function handleSelectProduct(product: CatalogProduct) {
@@ -375,7 +383,7 @@ function OrcamentosPage() {
 
   const statusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      if (status === "convertido_pedido") {
+      if (status === "convertido") {
         const { data, error } = await supabase
           .schema("store")
           .rpc("convert_quote_to_order", { p_quote_id: id });
@@ -388,14 +396,13 @@ function OrcamentosPage() {
         };
       }
 
-      const canonicalStatus = status === "aguardando_cliente" ? "enviado" : status;
       const { error } = await supabase
         .schema("store")
         .from("quotes")
-        .update({ status: canonicalStatus })
+        .update({ status })
         .eq("id", id);
       if (error) throw error;
-      return { converted: false as const, status: canonicalStatus };
+      return { converted: false as const, status };
     },
     onSuccess: (result, variables) => {
       queryClient.invalidateQueries({ queryKey: ["quotes"] });
@@ -408,7 +415,7 @@ function OrcamentosPage() {
         );
         navigate({ to: "/pedidos" });
       } else {
-        toast.success(`Orçamento marcado como ${variables.status.replace("_", " ")}`);
+        toast.success(`Orçamento marcado como ${quoteStatusMeta(variables.status).label}.`);
       }
     },
     onError: (err) => toast.error("Erro ao alterar: " + err.message),
@@ -433,23 +440,6 @@ function OrcamentosPage() {
     });
   }
 
-  function getStatusVariant(status: string) {
-    switch (status) {
-      case "aprovado":
-        return "success";
-      case "convertido_pedido":
-        return "info";
-      case "aguardando_cliente":
-      case "enviado":
-        return "warning";
-      case "recusado":
-      case "vencido":
-        return "destructive";
-      default:
-        return "default";
-    }
-  }
-
   function getQuoteOriginBadge(quoteId: string) {
     const items = quoteItemsMap?.[quoteId];
     if (!items || items.length === 0) return null;
@@ -467,6 +457,28 @@ function OrcamentosPage() {
         onAction={() => navigate({ to: "/novo-orcamento" })}
       />
 
+      <div className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Card className="p-4">
+          <p className="text-xs text-muted-foreground">Orçamentos listados</p>
+          <p className="text-2xl font-bold">{filteredData?.length ?? 0}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-muted-foreground">Aguardando resposta</p>
+          <p className="text-2xl font-bold text-warning-foreground">{awaitingReply}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-muted-foreground">Convertidos em pedido</p>
+          <p className="text-2xl font-bold text-success">{convertedCount}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-xs text-muted-foreground">Valor listado</p>
+          <p className="text-2xl font-bold text-primary">
+            {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
+              listedValue,
+            )}
+          </p>
+        </Card>
+      </div>
       <Card className="p-4 mb-4">
         <div className="flex flex-col md:flex-row gap-3">
           <div className="relative flex-1">
@@ -478,20 +490,22 @@ function OrcamentosPage() {
               className="pl-9"
             />
           </div>
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-full md:w-44">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todos os status</SelectItem>
-              <SelectItem value="rascunho">Rascunho</SelectItem>
-              <SelectItem value="enviado">Enviado</SelectItem>
-              <SelectItem value="aguardando_cliente">Aguardando cliente</SelectItem>
-              <SelectItem value="aprovado">Aprovado</SelectItem>
-              <SelectItem value="recusado">Recusado</SelectItem>
-              <SelectItem value="convertido_pedido">Convertido</SelectItem>
-            </SelectContent>
-          </Select>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {QUOTE_FILTERS.map((f) => (
+            <button
+              key={f.value || "todos"}
+              type="button"
+              onClick={() => setStatusFilter(f.value)}
+              className={`rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+                statusFilter === f.value
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border hover:border-primary"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
       </Card>
 
@@ -554,8 +568,8 @@ function OrcamentosPage() {
                     {fmt.format((q.final_value || 0) - (q.cost_value || 0))}
                   </TableCell>
                   <TableCell>
-                    <StatusBadge variant={getStatusVariant(q.status || "")}>
-                      {(q.status || "").replace("_", " ")}
+                    <StatusBadge variant={toneVariant(quoteStatusMeta(q.status || "").tone)}>
+                      {quoteStatusMeta(q.status || "").label}
                     </StatusBadge>
                   </TableCell>
                   <TableCell>
@@ -581,9 +595,7 @@ function OrcamentosPage() {
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={q.status !== "aprovado" || !quoteItemsMap?.[q.id]?.length}
-                          onClick={() =>
-                            statusMutation.mutate({ id: q.id, status: "convertido_pedido" })
-                          }
+                          onClick={() => statusMutation.mutate({ id: q.id, status: "convertido" })}
                         >
                           <FilePlus2 className="h-4 w-4 mr-2" /> Converter p/ Pedido
                         </DropdownMenuItem>

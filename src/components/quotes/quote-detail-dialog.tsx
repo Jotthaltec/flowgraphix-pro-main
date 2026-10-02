@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import { formatCivilDate } from "@/lib/date";
+import { quoteStatusMeta, toneVariant } from "@/lib/store-domain-ui";
 
 const brl = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -78,7 +79,9 @@ export function QuoteDetailDialog({ quoteId, onClose }: { quoteId: string; onClo
         ) : (
           <div className="space-y-5 text-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge>{q.status.replace("_", " ")}</StatusBadge>
+              <StatusBadge variant={toneVariant(quoteStatusMeta(q.status).tone)}>
+                {quoteStatusMeta(q.status).label}
+              </StatusBadge>
               {q.valid_until ? (
                 <span className="text-muted-foreground">
                   Válido até {formatCivilDate(q.valid_until)}
