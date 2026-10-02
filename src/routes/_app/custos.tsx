@@ -1,12 +1,19 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Calculator, Loader2 } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -32,6 +39,22 @@ function CustosPage() {
   const [qty, setQty] = useState(100);
   const [venda, setVenda] = useState(38);
   const [vals, setVals] = useState<Record<string, number>>({});
+  const [customerId, setCustomerId] = useState("");
+  const quoteKey = useRef(`flow-custos:${crypto.randomUUID()}`);
+
+  const { data: customers } = useQuery({
+    queryKey: ["clients_list"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .schema("store")
+        .from("customers")
+        .select("id, name")
+        .eq("active", true)
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
 
   const total = useMemo(() => Object.values(vals).reduce((a, b) => a + (b || 0), 0), [vals]);
   const unit = total / Math.max(qty, 1);
@@ -76,57 +99,37 @@ function CustosPage() {
 
   const saveQuoteMutation = useMutation({
     mutationFn: async () => {
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("company_id")
-        .eq("user_id", (await supabase.auth.getUser()).data.user?.id || "")
-        .single();
-      if (!profileData?.company_id) throw new Error("Empresa não identificada.");
-
-      const { count } = await supabase.from("quotes").select("*", { count: "exact", head: true });
-      const qNum = `ORC-${String((count || 0) + 1).padStart(6, "0")}`;
+      if (!customerId) throw new Error("Selecione o cliente do orçamento.");
       const desc = productName || "Simulação de custo";
-      const totalSale = venda * qty;
-
-      const { data: quote, error } = await supabase
-        .from("quotes")
-        .insert([
-          {
-            company_id: profileData.company_id,
-            client_id: null,
-            quote_number: qNum,
-            service_desc: desc,
-            quantity: qty,
-            cost_value: total,
-            sale_price: totalSale,
-            margin_percentage: parseFloat(margem.toFixed(2)),
-            discount: 0,
-            final_value: totalSale,
-            notes: "Gerado pela calculadora de Custos & Lucro.",
-            status: "rascunho",
-          },
-        ])
-        .select("id")
-        .single();
-      if (error) throw error;
-
-      // Snapshot do item (custo/venda unitários) para o orçamento.
-      await supabase.from("quote_items").insert([
-        {
-          quote_id: quote.id,
-          item_name: desc,
-          quantity: qty,
-          unit_price: venda,
-          total_price: totalSale,
-          cost_price: unit,
-          margin_percent: parseFloat(margem.toFixed(2)),
-          source_origin: "custos",
+      // Orçamentos vivem na loja (store.quotes), a mesma fonte da tela Orçamentos.
+      const { error } = await supabase.schema("store").rpc("create_quote", {
+        p_quote: {
+          customer_id: customerId,
+          title: desc,
+          notes: "Gerado pela calculadora de Custos & Lucro.",
+          source: "flow",
         },
-      ]);
+        p_items: [
+          {
+            product_id: null,
+            description: desc,
+            quantity: qty,
+            unit_price: venda,
+            base_price: venda,
+            internal_cost: unit,
+            source_origin: "custos",
+            position: 0,
+            options: {},
+          },
+        ],
+        p_idempotency_key: quoteKey.current,
+      });
+      if (error) throw error;
+      quoteKey.current = `flow-custos:${crypto.randomUUID()}`;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["quotes"] });
-      toast.success("Orçamento rascunho criado! Defina o cliente na aba Orçamentos.");
+      toast.success("Orçamento criado!");
       navigate({ to: "/orcamentos", search: { selectProductId: undefined } });
     },
     onError: (err) => toast.error("Erro ao criar orçamento: " + err.message),
@@ -192,6 +195,21 @@ function CustosPage() {
                 />
               </div>
             </div>
+            <div className="mt-4">
+              <Label className="text-xs font-semibold">Cliente (para salvar como orçamento)</Label>
+              <Select value={customerId} onValueChange={setCustomerId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o cliente" />
+                </SelectTrigger>
+                <SelectContent>
+                  {customers?.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex gap-2 mt-4">
               <Button
                 variant="outline"
@@ -204,7 +222,7 @@ function CustosPage() {
               </Button>
               <Button
                 className="flex-1"
-                disabled={saveQuoteMutation.isPending}
+                disabled={saveQuoteMutation.isPending || !customerId}
                 onClick={() => saveQuoteMutation.mutate()}
               >
                 {saveQuoteMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

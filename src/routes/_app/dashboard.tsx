@@ -61,7 +61,8 @@ function DashboardPage() {
             "id, created_at, product_desc, total_value, payment_status, production_status, deadline, clients(name)",
           )
           .order("created_at", { ascending: false }),
-        supabase.from("quotes").select("status"),
+        // Orçamentos vivem na loja (store.quotes); public.quotes é legado.
+        supabase.schema("store").from("quotes").select("status").eq("is_demo", false),
         supabase
           .from("clients")
           .select("id", { count: "exact", head: true })
@@ -101,7 +102,7 @@ function DashboardPage() {
 
       const orcamentosAbertos =
         quotes?.filter(
-          (q) => !["aprovado", "recusado", "convertido_pedido"].includes(q.status || ""),
+          (q) => !["aprovado", "recusado", "convertido", "expirado"].includes(q.status || ""),
         ).length || 0;
       const pedidosProducao =
         orders?.filter((o) => !["entregue", "cancelado"].includes(o.production_status || ""))

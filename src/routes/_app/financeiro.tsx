@@ -89,12 +89,11 @@ function FinanceiroPage() {
     mutationFn: async (data: typeof formData) => {
       if (!selectedPayment) return;
 
-      const { error } = await supabase
-        .from("orders")
-        .update({
-          payment_status: data.payment_status,
-        })
-        .eq("id", selectedPayment.id);
+      // public.orders é espelho da loja: o pagamento é gravado em store.orders.
+      const { error } = await supabase.schema("store").rpc("crm_set_order_payment", {
+        p_order_id: selectedPayment.id,
+        p_crm_status: data.payment_status,
+      });
 
       if (error) throw error;
     },

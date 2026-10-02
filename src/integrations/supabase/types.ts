@@ -11486,6 +11486,10 @@ export type Database = {
         Args: { p_column: string; p_order_id: string }
         Returns: Json
       }
+      crm_set_order_payment: {
+        Args: { p_crm_status: string; p_order_id: string }
+        Returns: undefined
+      }
       crm_slug: { Args: { value: string }; Returns: string }
       crm_strip_supplier_ref: {
         Args: { p_supplier_sku: string; p_text: string }

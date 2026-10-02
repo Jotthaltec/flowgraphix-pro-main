@@ -91,7 +91,15 @@ function RelatoriosPage() {
           ];
         });
       } else if (id === "orcamentos") {
-        const { data: d } = await supabase.from("quotes").select("*, clients(name)");
+        // Orçamentos vivem na loja (store.quotes); public.quotes é legado.
+        const { data: d } = await supabase
+          .schema("store")
+          .from("quotes")
+          .select(
+            "number, title, contact_name, discount_total, subtotal, total, status, customer:customers(name), items:quote_items(quantity, internal_cost)",
+          )
+          .eq("is_demo", false)
+          .order("created_at", { ascending: false });
         headers = [
           "Orçamento",
           "Cliente",
@@ -104,18 +112,25 @@ function RelatoriosPage() {
           "Margem %",
           "Status",
         ];
-        data = (d || []).map((r) => [
-          r.quote_number,
-          r.clients?.name,
-          r.service_desc,
-          r.cost_value,
-          r.sale_price,
-          r.discount,
-          r.final_value,
-          (r.final_value || 0) - (r.cost_value || 0),
-          r.margin_percentage,
-          r.status,
-        ]);
+        data = (d || []).map((r) => {
+          const cost = (r.items || []).reduce(
+            (sum, item) => sum + Number(item.internal_cost || 0) * Number(item.quantity || 0),
+            0,
+          );
+          const final = Number(r.total || 0);
+          return [
+            r.number,
+            r.customer?.name ?? r.contact_name,
+            r.title,
+            cost,
+            r.subtotal,
+            r.discount_total,
+            final,
+            final - cost,
+            final > 0 ? Number((((final - cost) / final) * 100).toFixed(2)) : 0,
+            r.status,
+          ];
+        });
       }
 
       if (data.length === 0) {
