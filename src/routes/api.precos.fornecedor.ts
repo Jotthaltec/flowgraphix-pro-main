@@ -127,6 +127,23 @@ async function run() {
         });
       }
       for (const a of pricing.alerts) {
+        if (a.kind === "promocao_longa") {
+          alerts.push({
+            ...base,
+            alert_type: a.kind,
+            severity: "warning",
+            title: `Promoção há ${a.days} dias: ${row.name} (${a.quantity} un)`,
+            message:
+              "O custo do fornecedor segue abaixo do normal. Se for o novo preço, ajuste o preço de venda no Flow para encerrar a promoção.",
+            data: {
+              product_id: row.id,
+              name: row.name,
+              quantity: a.quantity,
+              days: a.days ?? null,
+            },
+          });
+          continue;
+        }
         alerts.push({
           ...base,
           alert_type: a.kind,

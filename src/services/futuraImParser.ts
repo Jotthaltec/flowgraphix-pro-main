@@ -29,7 +29,6 @@ import { resolveVariantAttributes } from "@/services/variantAttributes";
 import {
   COLOR_CODE_RE,
   cleanText,
-  discountPercent,
   normalizeKey,
   parseColorCode,
   parseDimensions,
@@ -575,18 +574,10 @@ export function parseFuturaImProduct(html: string, sourceUrl: string): ImportedP
 
   const page_type: ImportPageType = /\/produto\//i.test(sourceUrl) ? "product" : "unknown";
 
-  // old price / desconto se houver preço "de"
-  if (price_tiers.length) {
-    const oldM = html.match(/de\s*R\$\s*([\d.,]+)\s*por/i);
-    if (oldM) {
-      const old = parsePriceBR(oldM[1]);
-      const t = price_tiers[0];
-      if (old > t.total_price) {
-        t.old_price = old;
-        t.discount_percent = discountPercent(old, t.total_price);
-      }
-    }
-  }
+  // O "De: R$ X por" da FuturaIM não é lido: é preço âncora fixo na maioria
+  // dos produtos e a busca genérica casava com "valor de R$ 18,99 por
+  // alteração" (criação de arte). Promoção é detectada pela queda do custo
+  // (services/supplierPricing.ts).
 
   return {
     page_type,

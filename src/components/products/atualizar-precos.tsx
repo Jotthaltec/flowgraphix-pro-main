@@ -179,10 +179,10 @@ export function AtualizarPrecos() {
       <div className="flex items-start gap-2 rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs text-muted-foreground">
         <ShieldCheck className="h-4 w-4 text-primary shrink-0 mt-0.5" />
         <span>
-          Mudança normal do fornecedor atualiza só o <b>custo</b>: o seu preço de venda não muda. Se
-          o fornecedor entrar em <b>promoção</b> (preço &quot;de/por&quot;), a loja mostra a
-          promoção com o mesmo percentual de desconto; quando ela acaba, volta o preço normal. A
-          coleta roda sozinha todo dia às 6h; aqui você pode conferir na hora.
+          Se o custo do fornecedor <b>subir</b>, só o custo é atualizado: o seu preço de venda não
+          muda. Se o custo <b>cair</b>, a loja mostra uma <b>promoção</b> com o mesmo percentual de
+          queda (sua margem % é mantida); quando o custo volta, volta o preço normal. A coleta roda
+          sozinha todo dia às 6h; aqui você pode conferir na hora.
         </span>
       </div>
 
