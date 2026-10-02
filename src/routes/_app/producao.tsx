@@ -25,21 +25,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TechnicalSheetEditor } from "@/components/production/technical-sheet-editor";
 import { STORE_STAGES, STORE_STAGE_LABEL } from "@/lib/store-production";
+import { ORDER_BOARD_COLUMNS, orderStatusMeta, toneVariant } from "@/lib/store-domain-ui";
+import { OrderDetailDialog } from "@/components/orders/order-detail-dialog";
+import { formatCivilDate } from "@/lib/date";
 
 const db = supabase;
 
 export const Route = createFileRoute("/_app/producao")({ component: ProducaoPage });
-
-const COLUMNS_ORDERS = [
-  { id: "pedido_criado", title: "Novo Pedido", color: "var(--muted-foreground)" },
-  { id: "arte_pendente", title: "Arte pendente", color: "var(--muted-foreground)" },
-  { id: "arte_em_criacao", title: "Arte em criação", color: "var(--accent)" },
-  { id: "arte_aprovada", title: "Arte aprovada", color: "var(--info)" },
-  { id: "em_producao", title: "Em produção", color: "var(--primary)" },
-  { id: "em_acabamento", title: "Em acabamento", color: "var(--warning)" },
-  { id: "pronto", title: "Pronto", color: "var(--success)" },
-  { id: "entregue", title: "Entregue", color: "var(--muted-foreground)" },
-];
 
 const COLUMNS_FACTORY = [
   { id: "aguardando", title: "Aguardando", color: "var(--muted-foreground)" },
@@ -54,6 +46,7 @@ function ProducaoPage() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("dashboard");
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [viewingOrderId, setViewingOrderId] = useState<string | null>(null);
 
   // States para Ficha Técnica
   const [selectedProductionItemId, setSelectedProductionItemId] = useState<string | null>(null);
@@ -62,13 +55,15 @@ function ProducaoPage() {
   const { data: orders, isLoading: loadingOrders } = useQuery({
     queryKey: ["orders_production"],
     queryFn: async () => {
+      // Pedidos da loja (a fonte), não o espelho public.orders.
       const { data, error } = await supabase
+        .schema("store")
         .from("orders")
         .select(
-          `id, order_number, product_desc, machine_section, deadline, priority, production_status, clients(name)`,
+          "id, number, status, estimated_delivery, priority, customer:customers(name), items:order_items(product_name)",
         )
-        .order("priority", { ascending: false })
-        .order("deadline", { ascending: true });
+        .neq("status", "cancelado")
+        .order("estimated_delivery", { ascending: true });
       if (error) throw error;
       return data;
     },
@@ -134,13 +129,16 @@ function ProducaoPage() {
   // pedido antigo, só do CRM, continua sendo movido aqui mesmo.
   const updateOrderStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await db
-        .schema("store")
-        .rpc("crm_move_order", { p_order_id: id, p_column: status });
+      const { error } = await db.schema("store").rpc("update_order_status", {
+        p_order_id: id,
+        p_status: status,
+        p_note: "Movido no quadro de produção do CRM.",
+      });
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orders_production"] });
+      queryClient.invalidateQueries({ queryKey: ["orders"] });
       queryClient.invalidateQueries({ queryKey: ["store_production_orders"] });
     },
     onError: (err) => toast.error(err.message),
@@ -187,7 +185,11 @@ function ProducaoPage() {
   const handleDropOrder = (e: React.DragEvent, colId: string) => {
     e.preventDefault();
     const id = e.dataTransfer.getData("itemId");
-    if (id && draggingId === id) updateOrderStatus.mutate({ id, status: colId });
+    const column = ORDER_BOARD_COLUMNS.find((c) => c.id === colId);
+    const order = orders?.find((o) => o.id === id);
+    if (id && draggingId === id && column && order && !column.statuses.includes(order.status)) {
+      updateOrderStatus.mutate({ id, status: column.enter });
+    }
     setDraggingId(null);
   };
 
@@ -421,8 +423,8 @@ function ProducaoPage() {
           ) : (
             <div className="overflow-x-auto pb-4">
               <div className="flex gap-3 min-w-max">
-                {COLUMNS_ORDERS.map((col) => {
-                  const colOrders = orders?.filter((o) => o.production_status === col.id) || [];
+                {ORDER_BOARD_COLUMNS.map((col) => {
+                  const colOrders = orders?.filter((o) => col.statuses.includes(o.status)) || [];
                   return (
                     <div
                       key={col.id}
@@ -432,10 +434,6 @@ function ProducaoPage() {
                     >
                       <div className="flex items-center justify-between mb-3 px-1">
                         <div className="flex items-center gap-2">
-                          <span
-                            className="h-2 w-2 rounded-full"
-                            style={{ background: col.color }}
-                          />
                           <h3 className="text-sm font-semibold">{col.title}</h3>
                         </div>
                         <span className="text-xs font-bold text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">
@@ -448,19 +446,30 @@ function ProducaoPage() {
                             key={order.id}
                             draggable
                             onDragStart={(e) => handleDragStart(e, order.id)}
+                            onClick={() => setViewingOrderId(order.id)}
                             className="p-3 hover:shadow-md cursor-grab active:cursor-grabbing transition-shadow"
                           >
-                            <div className="flex justify-between items-start mb-2">
+                            <div className="flex justify-between items-start gap-2 mb-2">
                               <span className="font-mono text-xs font-bold text-primary">
-                                {order.order_number}
+                                {order.number}
                               </span>
+                              <StatusBadge
+                                variant={toneVariant(orderStatusMeta(order.status).tone)}
+                              >
+                                {orderStatusMeta(order.status).label}
+                              </StatusBadge>
                             </div>
                             <p className="font-semibold text-sm leading-tight">
-                              {order.clients?.name}
+                              {order.customer?.name ?? "Sem cliente"}
                             </p>
                             <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                              {order.product_desc}
+                              {(order.items ?? []).map((i) => i.product_name).join(", ")}
                             </p>
+                            {order.estimated_delivery ? (
+                              <p className="text-[11px] text-muted-foreground mt-1">
+                                Previsão: {formatCivilDate(order.estimated_delivery)}
+                              </p>
+                            ) : null}
                           </Card>
                         ))}
                       </div>
@@ -472,6 +481,10 @@ function ProducaoPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {viewingOrderId ? (
+        <OrderDetailDialog orderId={viewingOrderId} onClose={() => setViewingOrderId(null)} />
+      ) : null}
 
       <Dialog
         open={!!selectedProductionItemId}

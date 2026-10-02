@@ -5,41 +5,20 @@
  * equivalência com as faixas do painel do CRM.
  */
 
-export const STORE_STAGES = [
-  "fila_entrada",
-  "conferencia",
-  "pre_impressao",
-  "impressao",
-  "recorte",
-  "acabamento",
-  "montagem",
-  "controle_qualidade",
-  "embalagem",
-  "finalizado",
-] as const;
+import {
+  PRODUCTION_STAGES,
+  PRODUCTION_STAGE_LABEL,
+  type ProductionStage,
+} from "@/lib/store-domain";
 
-export type StoreStage = (typeof STORE_STAGES)[number];
-
-export const STORE_STAGE_LABEL: Record<StoreStage, string> = {
-  fila_entrada: "Fila de entrada",
-  conferencia: "Conferência",
-  pre_impressao: "Pré-impressão",
-  impressao: "Impressão",
-  recorte: "Recorte",
-  acabamento: "Acabamento",
-  montagem: "Montagem",
-  controle_qualidade: "Controle de qualidade",
-  embalagem: "Embalagem",
-  finalizado: "Finalizado",
-};
+// Etapas e rótulos vêm do domínio do site (uma fonte só).
+export const STORE_STAGES = PRODUCTION_STAGES;
+export type StoreStage = ProductionStage;
+export const STORE_STAGE_LABEL: Record<StoreStage, string> = PRODUCTION_STAGE_LABEL;
 
 /** Faixas do painel do CRM (as mesmas do PCP interno). */
 export type DashboardBucket =
-  | "aguardando"
-  | "pre_impressao"
-  | "impressao"
-  | "acabamento"
-  | "finalizado";
+  "aguardando" | "pre_impressao" | "impressao" | "acabamento" | "finalizado";
 
 export function stageBucket(stage: string): DashboardBucket {
   switch (stage) {

@@ -91,3 +91,47 @@ export const QUOTE_FILTERS: { value: string; label: string }[] = [
 export function quoteStatusMeta(status: string) {
   return QUOTE_STATUS_META[status as QuoteStatus] ?? { label: status, tone: "neutral" as Tone };
 }
+
+/**
+ * Colunas do quadro de pedidos (Produção → Visão de Pedidos): os grupos de
+ * ORDER_STATUS_META do site. Soltar um pedido na coluna leva à situação de
+ * entrada dela; a situação exata se ajusta abrindo o pedido.
+ */
+export const ORDER_BOARD_COLUMNS: {
+  id: string;
+  title: string;
+  statuses: readonly string[];
+  enter: OrderStatus;
+}[] = [
+  {
+    id: "pagamento",
+    title: "Pagamento",
+    statuses: ["pedido_recebido", "aguardando_pagamento", "pagamento_analise", "pago"],
+    enter: "aguardando_pagamento",
+  },
+  {
+    id: "arte",
+    title: "Arte",
+    statuses: [
+      "aguardando_arquivos",
+      "arte_analise",
+      "arte_criacao",
+      "aguardando_aprovacao",
+      "alteracao_solicitada",
+    ],
+    enter: "aguardando_arquivos",
+  },
+  {
+    id: "producao",
+    title: "Produção",
+    statuses: ["aprovado_producao", "em_producao", "acabamento", "controle_qualidade", "embalagem"],
+    enter: "aprovado_producao",
+  },
+  {
+    id: "entrega",
+    title: "Entrega",
+    statuses: ["pronto_retirada", "enviado"],
+    enter: "pronto_retirada",
+  },
+  { id: "concluidos", title: "Concluídos", statuses: ["entregue", "concluido"], enter: "entregue" },
+];
