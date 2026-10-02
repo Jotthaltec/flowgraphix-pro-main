@@ -35,7 +35,9 @@ begin
 
   perform pg_temp.act_as(v_staff);
   perform store.update_order_status(v_order, 'aguardando_arquivos', 'Cliente vai mandar a arte amanhã');
-  select * into r from store.order_status_history where order_id = v_order order by created_at desc, id desc limit 1;
+  -- Criação e mudança caem na mesma transação (mesmo created_at): busca pela situação.
+  select * into r from store.order_status_history
+  where order_id = v_order and to_status = 'aguardando_arquivos';
   assert r.to_status = 'aguardando_arquivos' and r.note = 'Cliente vai mandar a arte amanhã',
     'histórico com a observação, veio ' || coalesce(r.note, 'nulo');
 
