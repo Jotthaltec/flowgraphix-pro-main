@@ -11,7 +11,9 @@ import {
   Tag,
   ChevronDown,
   X,
+  Eye,
 } from "lucide-react";
+import { QuoteDetailDialog } from "@/components/quotes/quote-detail-dialog";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -113,6 +115,7 @@ function OrcamentosPage() {
 
   // Estado do formulário
   const [selectedProduct, setSelectedProduct] = useState<CatalogProduct | null>(null);
+  const [viewingQuoteId, setViewingQuoteId] = useState<string | null>(null);
   const [productSearch, setProductSearch] = useState("");
   const [productFilterOrigin, setProductFilterOrigin] = useState("all");
   const [showProductList, setShowProductList] = useState(false);
@@ -524,15 +527,23 @@ function OrcamentosPage() {
               filteredData?.map((q) => (
                 <TableRow key={q.id}>
                   <TableCell className="font-mono font-semibold text-primary">
-                    {q.quote_number}
+                    <button
+                      type="button"
+                      className="hover:underline"
+                      onClick={() => setViewingQuoteId(q.id)}
+                    >
+                      {q.quote_number}
+                    </button>
                   </TableCell>
-                  <TableCell className="font-medium">{q.clients?.name || "—"}</TableCell>
+                  <TableCell className="font-medium">
+                    {q.clients?.name || q.contact_name || "—"}
+                  </TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground text-sm">
                     {q.service_desc}
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-secondary">
-                      {quoteItemsMap?.[q.id]?.length || 1} item(ns)
+                      {quoteItemsMap?.[q.id]?.length ?? 0} item(ns)
                     </span>
                   </TableCell>
                   <TableCell className="hidden md:table-cell">
@@ -555,6 +566,9 @@ function OrcamentosPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setViewingQuoteId(q.id)}>
+                          <Eye className="h-4 w-4 mr-2" /> Ver detalhes
+                        </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => statusMutation.mutate({ id: q.id, status: "aprovado" })}
                         >
@@ -566,7 +580,7 @@ function OrcamentosPage() {
                           <XCircle className="h-4 w-4 mr-2 text-destructive" /> Recusar
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          disabled={q.status !== "aprovado"}
+                          disabled={q.status !== "aprovado" || !quoteItemsMap?.[q.id]?.length}
                           onClick={() =>
                             statusMutation.mutate({ id: q.id, status: "convertido_pedido" })
                           }
@@ -582,6 +596,10 @@ function OrcamentosPage() {
           </TableBody>
         </Table>
       </Card>
+
+      {viewingQuoteId ? (
+        <QuoteDetailDialog quoteId={viewingQuoteId} onClose={() => setViewingQuoteId(null)} />
+      ) : null}
 
       {/* Modal: Novo Orçamento */}
       <Dialog
