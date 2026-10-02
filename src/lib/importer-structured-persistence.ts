@@ -13,6 +13,8 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/integrations/supabase/types";
 import type { ImportedProduct } from "@/types/importedProduct";
 import {
   buildAttributeRows,
@@ -24,7 +26,8 @@ import {
 } from "@/services/structuredMappers";
 import { errorMessage } from "@/lib/utils";
 
-const db = supabase;
+type Db = SupabaseClient<Database>;
+const defaultDb: Db = supabase;
 
 export interface StructuredResult {
   ok: boolean;
@@ -44,6 +47,7 @@ async function ensureRow(
   table: "product_categories" | "product_segments",
   match: { company_id: string; name: string; parent_id?: string | null },
   insert: { slug: string | null },
+  db: Db = defaultDb,
 ): Promise<string | null> {
   // As duas tabelas compartilham company_id/name/slug; parent_id só é passado
   // para categorias. O cliente tipado não aceita uma união de tabelas, então a
@@ -69,6 +73,7 @@ export async function persistStructured(
   productId: string,
   product: ImportedProduct,
   companyId: string,
+  db: Db = defaultDb,
 ): Promise<StructuredResult> {
   const warnings: string[] = [];
   const counts = { variants: 0, tiers: 0, attributes: 0, images: 0, templates: 0, extras: 0 };
@@ -183,12 +188,14 @@ export async function persistStructured(
       "product_categories",
       { company_id: companyId, name: cls.category, parent_id: null },
       { slug: null },
+      db,
     );
     const subId = catId
       ? await ensureRow(
           "product_categories",
           { company_id: companyId, name: cls.subcategory, parent_id: catId },
           { slug: null },
+          db,
         )
       : null;
 
@@ -198,6 +205,7 @@ export async function persistStructured(
         "product_segments",
         { company_id: companyId, name: seg },
         { slug: null },
+        db,
       );
       if (id) segIds.push(id);
     }

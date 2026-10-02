@@ -22,6 +22,14 @@ import {
 } from "@/services/priceComparison";
 import { persistStructured } from "@/lib/importer-structured-persistence";
 import type { ImportedProduct } from "@/types/importedProduct";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database, Json } from "@/integrations/supabase/types";
+import {
+  buildPriceTable,
+  mergeDeadline,
+  type PriceTableResult,
+  type StoredPriceTier,
+} from "@/services/supplierPricing";
 
 const db = supabase;
 
@@ -34,14 +42,11 @@ export interface ImportedProductRow {
   sale_price: number | null;
   margin_percent: number | null;
   quantity_price_table: StoredTier[] | null;
+  production_deadline: string | null;
 }
 
 /** Linha da tabela de tiragens gravada em products.quantity_price_table. */
-export interface StoredTier {
-  quantity?: number | string | null;
-  price?: number | null;
-  sellPrice?: number | null;
-}
+export type StoredTier = Partial<StoredPriceTier>;
 
 export interface PriceCheckResult {
   product: ImportedProductRow;
@@ -55,7 +60,7 @@ export async function loadImportedProducts(companyId: string): Promise<ImportedP
   const { data, error } = await supabase
     .from("products")
     .select(
-      "id, name, source_url, supplier_sku, cost_price, sale_price, margin_percent, quantity_price_table",
+      "id, name, source_url, supplier_sku, cost_price, sale_price, margin_percent, quantity_price_table, production_deadline",
     )
     .eq("company_id", companyId)
     .eq("origin", "supplier_import")
@@ -92,61 +97,54 @@ export async function checkProductPrice(row: ImportedProductRow): Promise<PriceC
 }
 
 /**
- * Aplica o novo CUSTO do fornecedor ao produto. Não altera sale_price/margem.
- * - Faixas existentes: mantêm o preço de venda atual; atualizam custo.
- * - Faixas novas: preço de venda sugerido = custo * (1 + margem/100).
- * - Faixas removidas pelo fornecedor: saem da tabela de custo.
+ * Aplica a coleta do fornecedor ao produto (regra em services/supplierPricing):
+ * - mudança normal: atualiza o custo e PRESERVA o preço de venda;
+ * - promoção do fornecedor ("de/por"): grava o nosso "por" com o mesmo % de
+ *   desconto; quando a promoção acaba, o "por" sai e vale o preço normal;
+ * - prazo: mantém os "nossos dias" de produção somados ao do fornecedor.
+ * A gravação em products dispara a republicação na loja (fila de sincronização).
  */
-export async function applyCostUpdate(result: PriceCheckResult, companyId: string): Promise<void> {
+export async function applyCostUpdate(
+  result: PriceCheckResult,
+  companyId: string,
+  client: SupabaseClient<Database> = db,
+): Promise<PriceTableResult | undefined> {
   const { product: row, fresh } = result;
   if (!fresh) return;
 
   const margin = Number(row.margin_percent) || 50;
-  const factor = 1 + margin / 100;
   const freshTiers = fresh.variants[0]?.price_tiers || [];
-
-  // Mapa do preço de venda atual por quantidade (para preservar).
-  const oldSellByQty = new Map<number, number>();
-  for (const t of row.quantity_price_table || []) {
-    if (t?.quantity != null && t?.sellPrice != null)
-      oldSellByQty.set(Number(t.quantity), Number(t.sellPrice));
-  }
-
-  const newTable = freshTiers.map((t) => {
-    const existingSell = oldSellByQty.get(t.quantity);
-    const sellPrice = existingSell ?? parseFloat((t.total_price * factor).toFixed(2));
-    return {
-      quantity: t.quantity,
-      price: t.total_price, // custo do fornecedor
-      unitPrice: t.unit_price,
-      sellPrice, // preço de venda preservado (ou sugerido para faixas novas)
-      unitSellPrice: parseFloat((sellPrice / t.quantity).toFixed(4)),
-      external_id: t.external_id ?? null,
-      collected_at: t.collected_at,
-    };
-  });
+  const pricing = buildPriceTable(row.quantity_price_table, freshTiers, margin);
+  const newTable = pricing.table;
 
   const newBaseCost = freshTiers[0]?.total_price ?? row.cost_price ?? 0;
 
-  const { error } = await db
+  const { error } = await client
     .from("products")
     .update({
-      // SOMENTE custo — preço de venda/margem preservados.
+      // Custo e promoção — o preço de venda normal é preservado. — preço de venda/margem preservados.
       cost_price: newBaseCost,
       base_cost: newBaseCost,
-      quantity_price_table: newTable,
-      quantity_prices: newTable,
-      production_deadline: fresh.production_time?.original_production_time ?? undefined,
+      quantity_price_table: newTable as unknown as Json,
+      quantity_prices: newTable as unknown as Json,
+      production_deadline:
+        mergeDeadline(
+          row.production_deadline,
+          fresh.production_time?.original_production_time,
+          fresh.production_time?.production_days,
+          fresh.production_time?.freight_not_included,
+        ) ?? undefined,
       updated_at: new Date().toISOString(),
     })
     .eq("id", row.id);
   if (error) throw error;
 
   // Re-sincroniza o grafo estruturado com os novos custos (best-effort).
-  await persistStructured(row.id, fresh, companyId);
+  await persistStructured(row.id, fresh, companyId, client);
 
   // Histórico (best-effort).
-  db.from("supplier_imports")
+  client
+    .from("supplier_imports")
     .insert({
       company_id: companyId,
       source_url: row.source_url ?? fresh.source_url,
@@ -157,4 +155,6 @@ export async function applyCostUpdate(result: PriceCheckResult, companyId: strin
       current_price: newBaseCost,
     })
     .then(undefined, () => {});
+
+  return pricing;
 }
