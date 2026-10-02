@@ -4,11 +4,13 @@ import {
   MoreVertical,
   Loader2,
   Workflow,
+  Eye,
   Wallet,
   ReceiptText,
   LockKeyhole,
   UnlockKeyhole,
 } from "lucide-react";
+import { OrderDetailDialog } from "@/components/orders/order-detail-dialog";
 import { PageHeader } from "@/components/page-header";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -58,6 +60,7 @@ function PedidosPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchTerm, setSearchTerm] = useState("");
+  const [viewingOrderId, setViewingOrderId] = useState<string | null>(null);
   const [prodFilter, setProdFilter] = useState("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const posIdempotencyKey = useRef(`pos:${crypto.randomUUID()}`);
@@ -533,7 +536,14 @@ function PedidosPage() {
               filteredData?.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell className="font-mono font-semibold text-primary">
-                    {p.order_number}
+                    <button
+                      type="button"
+                      className="hover:underline"
+                      onClick={() => setViewingOrderId(p.id)}
+                      title="Ver pedido"
+                    >
+                      {p.order_number}
+                    </button>
                   </TableCell>
                   <TableCell className="font-medium">{p.clients?.name}</TableCell>
                   <TableCell className="hidden md:table-cell text-muted-foreground">
@@ -589,6 +599,9 @@ function PedidosPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => setViewingOrderId(p.id)}>
+                          <Eye className="h-4 w-4 mr-2" /> Ver pedido
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => navigate({ to: "/producao" })}>
                           <Workflow className="h-4 w-4 mr-2" /> Ver na fila de Produção
                         </DropdownMenuItem>
@@ -818,6 +831,9 @@ function PedidosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {viewingOrderId ? (
+        <OrderDetailDialog orderId={viewingOrderId} onClose={() => setViewingOrderId(null)} />
+      ) : null}
     </>
   );
 }
